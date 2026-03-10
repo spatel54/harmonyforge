@@ -143,23 +143,32 @@ export const TheoryInspectorPanel = React.forwardRef<
           borderLeft: "1px solid var(--hf-detail)",
         }}
         role="complementary"
-        aria-label="Theory Inspector"
+        aria-label="Theory Inspector — explains and suggests; you decide"
         {...props}
       >
         {/* ── Panel Header — Node 99E9J ──────────────────────
             fill:$sonata-surface (solid cherry red)
             gap:8  pad:[0,12]  h:52  jc:space_between  ai:center   */}
         <div
-          className="flex items-center gap-[8px] w-full h-[52px] px-[12px] shrink-0"
+          className="flex items-center gap-[8px] w-full min-h-[52px] py-[6px] px-[12px] shrink-0"
           style={{ backgroundColor: "var(--hf-surface)" }}
         >
-          {/* panelTitle — Instrument Serif fs:16 fill:$neutral-50 */}
-          <span
-            className="font-serif text-[16px] font-normal leading-none"
-            style={{ color: "var(--neutral-50)" }}
-          >
-            Theory Inspector
-          </span>
+          {/* Title block: Theory Inspector + subtitle (AI as explainer/suggestor) */}
+          <div className="flex flex-col justify-center gap-[1px] min-w-0">
+            <span
+              className="font-serif text-[16px] font-normal leading-none"
+              style={{ color: "var(--neutral-50)" }}
+            >
+              Theory Inspector
+            </span>
+            <span
+              className="font-body text-[10px] font-normal leading-tight truncate"
+              style={{ color: "var(--hf-text-secondary)" }}
+              title="AI explains and suggests; you have final say"
+            >
+              Explains and suggests — you decide
+            </span>
+          </div>
 
           {/* Spacer — fills remaining width */}
           <div className="flex-1" aria-hidden="true" />

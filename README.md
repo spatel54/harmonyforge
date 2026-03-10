@@ -8,12 +8,23 @@ HarmonyForge takes your melody (from MusicXML or MIDI), infers chords, and gener
 
 **Core principles:**
 - **Expressive sovereignty** — You remain the author; the system is a “jumping pad” for your ideas
-- **Copyright safety by design** — Axiomatic theory (Fux, Aldwell & Schachter, Caplin) instead of pattern mimicry on datasets like Lakh MIDI
-- **Pedagogical partner** — Theory Inspector uses the LLM as critic, not generator (Zhou et al.); "Red Line" validation and ante-hoc explainability (Liu et al.)
+- **Copyright safety by design** — Uses axiomatic music theory (Fux, Schenker, Aldwell & Schachter) instead of pattern mimicry from datasets
+- **Pedagogical partner** — The Theory Inspector explains and suggests; you decide
 
-**What it is (lit. anchors):** A CSP-based SATB engine (HarmonySolver lineage), global planning to avoid "aimless wandering" (SchenkComposer), a tactile sandbox with Edit-Authority (ComposerX Reviewer Agent pattern), and deterministic "Glass Box" logic over deep learning (MusicAIR). It opposes probabilistic "Black Box" models (DeepBach, Anticipatory Music Transformer, ReaLchords) that cause structural drift and Mechanical Toil.
+## What HarmonyForge Is (and Isn’t)
 
-**What it is not:** HarmonyForge is strictly about symbolic arrangement (MusicXML/MIDI) and workflow — not audio synthesis, diffusion models, recommendation systems, or generic music appreciation. It does not train on copyrighted corpora.
+**What it is:**
+- A **deterministic constraint-satisfaction engine** (CSP, HarmonySolver lineage) — no probabilistic guessing
+- A **Glass Box** system: ante-hoc transparency, "Red Line" validation, explainable logic
+- **Symbolic only**: MusicXML/MIDI and workflow — no audio synthesis, diffusion, or waveform generation
+- **Tactile sandbox** with Edit-Authority: direct manipulation; you override and refine
+- **AI as assistant, not creator**: The Theory Inspector uses LLMs as explainers and suggestors — it explains violations, suggests fixes, answers questions. It does not generate notes or fixes. **Agency stays with the human.**
+
+**What it is not:**
+- **Not a Black Box**: No DeepBach-style probabilistic harmonization, no Anticipatory Transformer–style pattern mimicry
+- **Not trained on copyrighted datasets**: Axiomatic theory (Fux, Aldwell & Schachter) replaces Lakh MIDI–style training
+- **Not audio/synthesis**: No diffusion, text-to-audio, or mixing — strictly symbolic arrangement
+- **Not full automation**: We reject "AI does everything." HarmonyForge shifts AI from generator to explainer/suggestor, giving agency back to the musician.
 
 ## Research Background
 
