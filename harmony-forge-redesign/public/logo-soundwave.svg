@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Dark Theme BG -->
+  <rect width="400" height="400" rx="40" fill="#3e2723" />
+  
+  <g transform="translate(10, 0)">
+    <!-- Soundwave / Stave Lines Base Structure -->
+    
+    <!-- Outer left (Text Primary) -->
+    <rect x="100" y="160" width="24" height="80" rx="12" fill="#f8f8f8" />
+    
+    <!-- Inner left (Cognac Surface) -->
+    <rect x="140" y="120" width="24" height="160" rx="12" fill="#a55b37" />
+    
+    <!-- Center Peak / Spark (Gold Accent) -->
+    <rect x="180" y="80" width="24" height="240" rx="12" fill="#ffb300" />
+    
+    <!-- Inner right (Cherry Wood Surface) -->
+    <rect x="220" y="140" width="24" height="120" rx="12" fill="#9e4b3e" />
+    
+    <!-- Outer right (Text Primary) -->
+    <rect x="260" y="180" width="24" height="40" rx="12" fill="#f8f8f8" />
+    
+    <!-- Crossbar for 'H' shape -->
+    <rect x="112" y="188" width="160" height="24" rx="12" fill="#f8f8f8" fill-opacity="0.9" />
+
+    <!-- Top arm for 'F' shape -->
+    <rect x="232" y="140" width="80" height="24" rx="12" fill="#f8f8f8" />
+  </g>
+</svg>

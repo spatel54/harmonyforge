@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HarmonyForge</title>
+    <style>
+      /* Fallback styles while React loads */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        background-color: #f8f3eb;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      /* Loading indicator */
+      #root:empty::before {
+        content: 'Loading HarmonyForge...';
+        display: block;
+        padding: 20px;
+        text-align: center;
+        color: #201315;
+      }
+      /* Error indicator */
+      #error-display {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #ff4444;
+        color: white;
+        padding: 20px;
+        z-index: 10000;
+        font-family: monospace;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="error-display"></div>
+    <div id="root"></div>
+    <script>
+      // Test if JavaScript is running
+      console.log('✅ HTML loaded, JavaScript is running');
+      
+      // Test if root element exists
+      const root = document.getElementById('root');
+      if (root) {
+        console.log('✅ Root element found');
+      } else {
+        console.error('❌ Root element NOT found!');
+      }
+      
+      // Error handler
+      window.addEventListener('error', (e) => {
+        console.error('❌ Global error:', e.error);
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+          errorDisplay.style.display = 'block';
+          errorDisplay.textContent = 'Error: ' + (e.error?.message || e.message || 'Unknown error');
+        }
+      });
+      
+      // Unhandled promise rejection handler
+      window.addEventListener('unhandledrejection', (e) => {
+        console.error('❌ Unhandled promise rejection:', e.reason);
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+          errorDisplay.style.display = 'block';
+          errorDisplay.textContent = 'Promise Error: ' + (e.reason?.message || String(e.reason) || 'Unknown error');
+        }
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,365 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=Instrument+Serif:ital,wght@0,400;1,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500&display=swap");
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   HarmonyForge Design Tokens — Tailwind v4 CSS-first config
+   Tokens follow design-system/MASTER.md §1 §2 §3 §5
+   ───────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Color tokens — resolved from runtime CSS vars for theme switching */
+  --color-hf-bg: var(--hf-bg);
+  --color-hf-surface: var(--hf-surface);
+  --color-hf-detail: var(--hf-detail);
+  --color-hf-accent: var(--hf-accent);
+  --color-hf-text: var(--hf-text-primary);
+  --color-hf-text-sub: var(--hf-text-secondary);
+
+  /* Semantic — fixed, cross-theme (MASTER.md §1) */
+  --color-hf-violation: #d32f2f;
+  --color-hf-warning: #1976d2;
+  --color-hf-override: #7b1fa2;
+
+  /* Typography — MASTER.md §2 */
+  --font-brand: "Instrument Serif", serif;
+  --font-body: "Inter", sans-serif;
+  --font-system: "Satoshi", "SF Pro", ui-monospace, monospace;
+
+  /* Spacing — 8-pt grid, MASTER.md §3 */
+  --spacing-minor: 2px;
+  --spacing-tight: 4px;
+  --spacing-base: 8px;
+  --spacing-global: 16px;
+  --spacing-macro: 32px;
+
+  /* Border radius — MASTER.md §3 */
+  --radius-sharp: 0px;
+  --radius-micro: 2px;
+  --radius-standard: 4px;
+
+  /* Shadows — MASTER.md §3 volumetric scale */
+  --shadow-sm: 0 1px 2px 0 rgba(var(--hf-detail-rgb), 0.08);
+  --shadow-md:
+    0 4px 6px -1px rgba(var(--hf-detail-rgb), 0.12),
+    0 2px 4px -1px rgba(var(--hf-detail-rgb), 0.07);
+  --shadow-lg:
+    0 10px 15px -3px rgba(var(--hf-detail-rgb), 0.12),
+    0 4px 6px -2px rgba(var(--hf-detail-rgb), 0.06);
+  --shadow-xl:
+    0 20px 25px -5px rgba(var(--hf-detail-rgb), 0.12),
+    0 10px 10px -5px rgba(var(--hf-detail-rgb), 0.05);
+  --shadow-inner: inset 0 2px 4px 0 rgba(var(--hf-detail-rgb), 0.08);
+
+  /* z-index scale — MASTER.md §4 */
+  --z-tooltip: 10;
+  --z-modal: 20;
+  --z-drawer: 30;
+  --z-critical: 50;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Sonata — Light Mode (default)
+   MASTER.md §1: Antique White bg, Cherry Wood surface
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --hf-bg: var(--sonata-bg, #fdf5e6);
+  --hf-surface: var(--sonata-surface, #9e4b3e);
+  --hf-detail: var(--sonata-detail, #d2b48c);
+  --hf-accent: var(--sonata-accent, #ffb300);
+  --hf-text-primary: #1a1a1a;
+  --hf-text-secondary: #6b5740;
+  /* Alias used by PlaybackBar / score meta text */
+  --hf-text-sub: #6b5740;
+  --hf-detail-rgb: 210, 180, 140;
+  --hf-surface-rgb: 158, 75, 62;
+
+  /* Playground gradient — Node 80t2V (Light) */
+  --hf-bg-grad-start: #fdf5e6;
+  --hf-bg-grad-end: #e8dcda;
+
+  /* Staff lines use detail color per design system */
+  --hf-staff-line: var(--sonata-detail, #d2b48c);
+  /* Canvas bg slightly off-white for score paper feel */
+  --hf-canvas-bg: #faf0dc;
+  /* Toolbar/dock surface */
+  --hf-toolbar-bg: rgba(253, 245, 230, 0.92);
+  --hf-toolbar-border: rgba(210, 180, 140, 0.4);
+  /* Panel alt bg — Ensemble Builder right panel */
+  --hf-panel-bg: var(--neutral-50);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Nocturne — Dark Mode
+   MASTER.md §1: Dark Walnut bg, Cognac surface
+   ───────────────────────────────────────────────────────────── */
+.dark {
+  --hf-bg: var(--nocturne-bg, #3e2723);
+  --hf-surface: var(--nocturne-surface, #a55b37);
+  /* Nocturne borders: surface at 40% — #A55B3766 */
+  --hf-detail: var(--nocturne-surface-40, #a55b3766);
+  --hf-accent: var(--nocturne-accent, #ffb300);
+  --hf-text-primary: #f8f8f8;
+  /* Nocturne secondary text: surface at 70% — #A55B37B3 (Node lXHYH) */
+  --hf-text-secondary: var(--nocturne-surface-70, #a55b37b3);
+  --hf-text-sub: var(--nocturne-surface-70, #a55b37b3);
+  --hf-detail-rgb: 0, 0, 0; /* shadows should be pure black in dark mode */
+  --hf-surface-rgb: 165, 91, 55;
+
+  /* Playground gradient — Node PnDXj (Dark) */
+  --hf-bg-grad-start: #3e2723;
+  --hf-bg-grad-end: #2d1817;
+
+  /* Staff lines: surface-40 per lXHYH design */
+  --hf-staff-line: var(--nocturne-surface-40, #a55b3766);
+  /* Score canvas bg — Node lXHYH: #1A1110 */
+  --hf-canvas-bg: #1a1110;
+  --hf-toolbar-bg: rgba(62, 39, 35, 0.92);
+  --hf-toolbar-border: rgba(165, 91, 55, 0.4);
+  /* Panel alt bg — Ensemble Builder right panel — Node lXHYH: #2D1817 */
+  --hf-panel-bg: #2d1817;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Font utility classes — match .pen fontFamily values exactly
+   Use className="font-brand" / "font-body" / "font-mono" etc.
+   ───────────────────────────────────────────────────────────── */
+.font-brand {
+  font-family: var(--font-fraunces), "Fraunces", serif;
+}
+.font-serif {
+  font-family: var(--font-instrument), "Instrument Serif", serif;
+}
+.font-body {
+  font-family: var(--font-inter), "Inter", sans-serif;
+}
+.font-mono {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", monospace;
+}
+.font-system {
+  font-family: "Satoshi", "SF Pro", ui-sans-serif, sans-serif;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Base resets & global rules
+   ───────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--hf-bg);
+  color: var(--hf-text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus rings — POUR, MASTER.md §7, WCAG §1.4.11 (3:1 non-text contrast) */
+/* Use text-primary for outline: dark in light mode, light in dark mode — ensures contrast with bg */
+:focus-visible {
+  outline: 2px solid var(--hf-text-primary);
+  outline-offset: 2px;
+}
+
+/* Skip-to-content — POUR, MASTER.md §7 */
+.skip-link {
+  position: absolute;
+  top: -9999px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--hf-accent);
+  color: #1a1a1a;
+  padding: 8px 16px;
+  border-radius: var(--radius-standard);
+  font-family: var(--font-body);
+  font-size: 0.833rem;
+  font-weight: 500;
+  z-index: var(--z-critical);
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+/* Reduced motion guard — MASTER.md §5 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   .pen File Token Aliases — exact names from HarmonyForge.pen
+   Maps $sonata-* / $nocturne-* design variables to CSS vars so
+   generated components can reference them verbatim as
+   var(--sonata-bg), var(--nocturne-detail), etc.
+   ───────────────────────────────────────────────────────────── */
+
+/* Sonata (Light) — active in default :root */
+:root {
+  --sonata-bg: #fdf5e6;
+  --sonata-surface: #9e4b3e;
+  --sonata-surface-10: #9e4b3e1a;
+  --sonata-surface-20: #9e4b3e33;
+  --sonata-surface-40: #9e4b3e66;
+  --sonata-surface-70: #9e4b3eb3;
+  --sonata-surface-90: #9e4b3ee6;
+  --sonata-detail: #d2b48c;
+  --sonata-accent: #ffb300;
+  --sonata-accent-10: #ffb3001a;
+  --sonata-accent-70: #ffb300b3;
+  --sonata-accent-90: #ffb300e6;
+
+  /* Nocturne vars zeroed in light mode to prevent leakage */
+  --nocturne-bg: transparent;
+  --nocturne-surface: transparent;
+  --nocturne-surface-10: transparent;
+  --nocturne-surface-20: transparent;
+  --nocturne-surface-40: transparent;
+  --nocturne-surface-70: transparent;
+  --nocturne-surface-90: transparent;
+  --nocturne-detail: transparent;
+  --nocturne-accent: transparent;
+  --nocturne-accent-10: transparent;
+  --nocturne-accent-70: transparent;
+  --nocturne-accent-90: transparent;
+
+  /* Text */
+  --text-on-light: #2d1817;
+  --text-on-dark: #f8f8f8;
+
+  /* Neutrals (cross-theme) */
+  --neutral-50: #f5f0ef;
+  --neutral-100: #e8dcda;
+  --neutral-200: #c8b8b6;
+  --neutral-500: #7a6b69;
+  --neutral-700: #4a3b39;
+  --neutral-900: #1a1110;
+
+  /* Semantic — fixed, cross-theme */
+  --semantic-violation: #d32f2f;
+  --semantic-violation-10: #d32f2f1a;
+  --semantic-violation-20: #d32f2f33;
+  --semantic-violation-70: #d32f2fb3;
+  --semantic-warning: #1976d2;
+  --semantic-warning-10: #1976d21a;
+  --semantic-warning-20: #1976d233;
+  --semantic-warning-70: #1976d2b3;
+  --semantic-override: #7b1fa2;
+  --semantic-override-10: #7b1fa21a;
+  --semantic-override-20: #7b1fa233;
+  --semantic-override-70: #7b1fa2b3;
+}
+
+/* Nocturne (Dark) — activated by .dark on <html> */
+.dark {
+  /* Sonata vars zeroed in dark mode */
+  --sonata-bg: transparent;
+  --sonata-surface: transparent;
+  --sonata-surface-10: transparent;
+  --sonata-surface-20: transparent;
+  --sonata-surface-40: transparent;
+  --sonata-surface-70: transparent;
+  --sonata-surface-90: transparent;
+  --sonata-detail: transparent;
+  --sonata-accent: transparent;
+  --sonata-accent-10: transparent;
+  --sonata-accent-70: transparent;
+  --sonata-accent-90: transparent;
+
+  --nocturne-bg: #3e2723;
+  --nocturne-surface: #a55b37;
+  --nocturne-surface-10: #a55b371a;
+  --nocturne-surface-20: #a55b3733;
+  --nocturne-surface-40: #a55b3766;
+  --nocturne-surface-70: #a55b37b3;
+  --nocturne-surface-90: #a55b37e6;
+  --nocturne-detail: #2d1817;
+  --nocturne-accent: #ffb300;
+  --nocturne-accent-10: #ffb3001a;
+  --nocturne-accent-70: #ffb300b3;
+  --nocturne-accent-90: #ffb300e6;
+
+  --text-on-light: #2d1817;
+  --text-on-dark: #f8f8f8;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Score canvas — sharp edges, no radius per MASTER.md §3 */
+.score-canvas-container {
+  border-radius: var(--radius-sharp);
+  background-color: var(--hf-canvas-bg);
+}
+
+/* VexFlow SVG inherits text color correctly */
+.score-canvas-container svg text {
+  fill: var(--hf-text-primary);
+}
+.score-canvas-container svg .vf-stavenote path,
+.score-canvas-container svg .vf-stave path {
+  stroke: var(--hf-text-primary);
+  fill: var(--hf-text-primary);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TransitionOverlay — branded loading animations
+   ───────────────────────────────────────────────────────────── */
+
+@keyframes hf-stave-line {
+  0% {
+    transform: scaleX(0.3);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleX(0.3);
+    opacity: 0.2;
+  }
+}
+
+@keyframes hf-note-bounce {
+  0% {
+    transform: translateY(0px);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-14px);
+    opacity: 1;
+  }
+}
+
+@keyframes hf-sphere-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hf-progress-bar {
+  0% {
+    width: 0%;
+    margin-left: 0%;
+  }
+  50% {
+    width: 60%;
+    margin-left: 20%;
+  }
+  100% {
+    width: 0%;
+    margin-left: 100%;
+  }
+}

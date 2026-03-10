@@ -1,0 +1,74 @@
+import React from "react";
+import { cn } from "@/lib/utils";
+
+export interface QuickReplyChipsProps extends React.HTMLAttributes<HTMLDivElement> {
+  chips?: string[];
+  onChipClick?: (chip: string) => void;
+}
+
+const DEFAULT_CHIPS = [
+  "Explain this chord",
+  "Why parallel 5th?",
+  "Suggest correction",
+  "Schenker analysis",
+];
+
+/**
+ * QuickReplyChips Molecule
+ * Pencil Node: chipsRow (seFUb) — 2×2 grid of suggestion chips.
+ *
+ * Spec:
+ *   chipsRow: layout:vertical gap:6 pad:[4,0]
+ *   sRow1/sRow2: gap:6
+ *   chip: fill_container  pad:[4,10]  ai:center
+ *         fill:$sonata-surface/10  stroke:$sonata-detail @1  r:12
+ *         text: IBM Plex Mono fs:10  fill:$text-on-light
+ */
+export const QuickReplyChips = React.forwardRef<
+  HTMLDivElement,
+  QuickReplyChipsProps
+>(({ chips = DEFAULT_CHIPS, onChipClick, className, ...props }, ref) => {
+  const rows: string[][] = [];
+  for (let i = 0; i < chips.length; i += 2) {
+    rows.push(chips.slice(i, i + 2));
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn("flex flex-col gap-[6px] w-full py-[4px]", className)}
+      role="group"
+      aria-label="Quick reply suggestions"
+      {...props}
+    >
+      {rows.map((row, ri) => (
+        <div key={ri} className="flex gap-[6px]">
+          {row.map((chip, ci) => (
+            <button
+              key={ci}
+              type="button"
+              onClick={() => onChipClick?.(chip)}
+              className={cn(
+                "flex-1 text-left px-[10px] py-[4px]",
+                "rounded-[12px]" /* r:12 — pill-shaped */,
+                "font-mono text-[10px] font-normal leading-tight",
+                "transition-opacity hover:opacity-80",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)",
+              )}
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
+                border: "1px solid var(--hf-detail)",
+                color: "var(--hf-text-primary)",
+              }}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+});
+
+QuickReplyChips.displayName = "QuickReplyChips";

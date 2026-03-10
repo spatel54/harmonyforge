@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Light Theme BG -->
+  <rect width="400" height="400" rx="40" fill="#fdf5e6" />
+  
+  <g transform="translate(-10, 0)">
+    <!-- Forge Constraints (Dark Connections) -->
+    <path d="M140 100 L140 300" stroke="#6b5740" stroke-width="12" stroke-linecap="round" />
+    <path d="M260 100 L260 300" stroke="#6b5740" stroke-width="12" stroke-linecap="round" />
+    <path d="M140 200 L260 200" stroke="#6b5740" stroke-width="12" stroke-linecap="round" />
+    
+    <!-- F extension -->
+    <path d="M260 100 L340 100" stroke="#6b5740" stroke-width="12" stroke-linecap="round" />
+    
+    <!-- Nodes (Musical Elements / Theory Logics) -->
+    <!-- Left column (H left leg) -->
+    <circle cx="140" cy="100" r="20" fill="#1976d2" /> <!-- Warning blue -->
+    <circle cx="140" cy="200" r="20" fill="#ffb300" /> <!-- Accent gold -->
+    <circle cx="140" cy="300" r="20" fill="#d32f2f" /> <!-- Violation red -->
+    
+    <!-- Right column (H right leg / F stem) -->
+    <circle cx="260" cy="100" r="20" fill="#7b1fa2" /> <!-- Override purple -->
+    <circle cx="260" cy="200" r="20" fill="#9e4b3e" /> <!-- Surface cherry -->
+    <circle cx="260" cy="300" r="20" fill="#1976d2" />
+    
+    <!-- F leaf -->
+    <circle cx="340" cy="100" r="16" fill="#ffb300" />
+  </g>
+</svg>

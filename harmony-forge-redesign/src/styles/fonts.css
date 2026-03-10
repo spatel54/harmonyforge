@@ -1,0 +1,19 @@
+/*
+ * HarmonyForge — Font Imports
+ *
+ * Role map:
+ *   Brand   → Instrument Serif (Google Fonts)
+ *   Body    → Inter (Google Fonts)
+ *   Labels  → Inter (same import, different weight/transform)
+ *   System  → Satoshi (Fontshare CDN) + SF Pro / -apple-system fallback
+ */
+
+/* Instrument Serif (400 + 600, roman + italic) + Inter (400, 500, 600) */
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;1,400&family=Inter:wght@400;500;600&display=swap");
+
+/*
+ * Satoshi — Regular 400 + Medium 500
+ * Source: Fontshare (https://www.fontshare.com/fonts/satoshi)
+ * Provides cross-platform system-data rendering with tabular metrics.
+ */
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500&display=swap");

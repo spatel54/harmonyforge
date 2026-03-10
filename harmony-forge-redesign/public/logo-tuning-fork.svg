@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Light Theme BG -->
+  <rect width="400" height="400" rx="40" fill="#fdf5e6" />
+  
+  <g transform="translate(0, -20)">
+    <!-- Anvil Base (Cherry Wood to Cognac) -->
+    <path d="M120 300 L280 300 L260 240 L140 240 Z" fill="#9e4b3e" />
+    <rect x="160" y="220" width="80" height="20" rx="4" fill="#a55b37" />
+    <rect x="140" y="300" width="120" height="12" rx="4" fill="#6b5740" />
+    
+    <!-- Tuning Fork (The 'H' / Harmony - Gold Accent) -->
+    <path d="M160 100 L160 220" stroke="#ffb300" stroke-width="24" stroke-linecap="round" />
+    <path d="M240 100 L240 220" stroke="#ffb300" stroke-width="24" stroke-linecap="round" />
+    <path d="M160 180 L240 180" stroke="#ffb300" stroke-width="24" stroke-linecap="round" />
+    
+    <!-- Spark / Note (Violation Red) -->
+    <circle cx="200" cy="110" r="16" fill="#d32f2f" />
+  </g>
+</svg>
