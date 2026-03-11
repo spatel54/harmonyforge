@@ -3,6 +3,7 @@
 ## Core Workflow
 - [plan.md](plan.md) — Objective / Research / Plan / Verification
 - [progress.md](progress.md) — RALPH Loop (Research, Analyze, Learn, Plan, Handover)
+- [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) — To-do list and prompting questions for final four MVP features
 
 ## Context
 - [context/system-map.md](context/system-map.md) — System architecture and data flow
