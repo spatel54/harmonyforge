@@ -102,7 +102,10 @@ export function parseMusicXML(xml: string): EditableScore | null {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "text/xml");
   const parseError = doc.querySelector("parsererror");
-  if (parseError) return null;
+  if (parseError) {
+    console.error("[parseMusicXML] XML parse error:", parseError.textContent);
+    return null;
+  }
 
   const scoreTimewise = doc.querySelector("score-timewise") ?? findByLocalName(doc, "score-timewise");
   if (scoreTimewise) return parseTimewise(doc, scoreTimewise);
@@ -110,6 +113,7 @@ export function parseMusicXML(xml: string): EditableScore | null {
   const scorePartwise = doc.querySelector("score-partwise") ?? findByLocalName(doc, "score-partwise");
   if (scorePartwise) return parsePartwise(doc, scorePartwise);
 
+  console.warn("[parseMusicXML] No score-timewise or score-partwise element found in MusicXML");
   return null;
 }
 

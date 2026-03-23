@@ -7,6 +7,7 @@ import { VexFlowScore } from "@/components/score/VexFlowScore";
 import { OSMDPreview } from "@/components/score/OSMDPreview";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
+import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 
 export type DisplayMode = "view" | "edit";
 
@@ -29,6 +30,10 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
   /** Part IDs to show (empty = all) */
   visiblePartIds?: Set<string>;
+  /** Pending AI corrections to render as ghost note overlays */
+  pendingCorrections?: ScoreCorrection[];
+  onAcceptCorrection?: (correctionId: string) => void;
+  onRejectCorrection?: (correctionId: string) => void;
 }
 
 /**
@@ -47,6 +52,9 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       selection = [],
       onNoteClick,
       visiblePartIds,
+      pendingCorrections,
+      onAcceptCorrection,
+      onRejectCorrection,
       className,
       ...props
     },
@@ -384,8 +392,8 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
           </>
         )}
 
-        {/* displayMode "view" → OSMD when musicXML; "edit" → VexFlow when score (enables note tools) */}
-        {displayMode === "edit" && score && !vexFlowCrashed ? (
+        {/* Edit mode: VexFlow when score exists */}
+        {displayMode === "edit" && score && !vexFlowCrashed && (
           <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
             <VexFlowScore
               score={score}
@@ -394,24 +402,42 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onNoteClick={onNoteClick}
               visiblePartIds={visiblePartIds}
               onError={handleVexFlowError}
+              pendingCorrections={pendingCorrections}
+              onAcceptCorrection={onAcceptCorrection}
+              onRejectCorrection={onRejectCorrection}
             />
           </div>
-        ) : musicXML ? (
+        )}
+
+        {/* Edit mode fallback: score unavailable, show OSMD read-only */}
+        {displayMode === "edit" && (!score || vexFlowCrashed) && musicXML && (
           <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
             <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
           </div>
-        ) : score && !vexFlowCrashed ? (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <VexFlowScore
-              score={score}
-              className="w-full h-full"
-              selection={selection}
-              onNoteClick={onNoteClick}
-              visiblePartIds={visiblePartIds}
-              onError={handleVexFlowError}
-            />
-          </div>
-        ) : null}
+        )}
+
+        {/* View mode: prefer OSMD when musicXML exists, else VexFlow */}
+        {displayMode === "view" && (
+          musicXML ? (
+            <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
+              <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
+            </div>
+          ) : score && !vexFlowCrashed ? (
+            <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
+              <VexFlowScore
+                score={score}
+                className="w-full h-full"
+                selection={selection}
+                onNoteClick={onNoteClick}
+                visiblePartIds={visiblePartIds}
+                onError={handleVexFlowError}
+                pendingCorrections={pendingCorrections}
+                onAcceptCorrection={onAcceptCorrection}
+                onRejectCorrection={onRejectCorrection}
+              />
+            </div>
+          ) : null
+        )}
 
         <SandboxContextMenu />
       </div>

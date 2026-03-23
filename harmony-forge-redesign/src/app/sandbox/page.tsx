@@ -27,12 +27,13 @@ import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { SandboxPlaybackBar } from "@/components/molecules/SandboxPlaybackBar";
 import { usePlayback } from "@/hooks/usePlayback";
 import { SandboxActionBar } from "@/components/molecules/SandboxActionBar";
-import {
-  TheoryInspectorPanel,
-  type TheoryInspectorMessage,
-} from "@/components/organisms/TheoryInspectorPanel";
+import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
+import { useTheoryInspector } from "@/hooks/useTheoryInspector";
+import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
+import { useSuggestionStore } from "@/store/useSuggestionStore";
+import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 
 const TOOL_GROUPS = [
   "SCORE",
@@ -43,48 +44,6 @@ const TOOL_GROUPS = [
   "MEASURE",
   "DYNAMICS",
   "ARTICULATION",
-];
-
-/** Simulated AI replies for the Theory Inspector chat */
-const AI_REPLIES = [
-  "According to Schenkerian analysis, this progression represents a middleground structural motion from I to V.",
-  "The parallel fifths between Soprano and Alto at beat 3 violate strict voice-leading (Schenker, Free Composition §100).",
-  "This cadential Ⅰ⁶₄ → V pattern is a standard suspension figure found throughout Classical-era counterpoint.",
-  "The bass line descends by step through a filled-in third — a common *Bassbrechung* pattern.",
-];
-
-/** Initial mock data matching Pencil Node qmx1U ChatArea */
-const INITIAL_MESSAGES: TheoryInspectorMessage[] = [
-  {
-    id: "init-sys",
-    type: "system",
-    content: "SATB Voice Leading Violations",
-  },
-  {
-    id: "init-v1",
-    type: "violation",
-    violationType: "Parallel 5ths",
-    content: "Parallel 5ths between Tenor and Bass detected in m. 2",
-    timestamp: "09:42 AM",
-  },
-  {
-    id: "init-u1",
-    type: "user",
-    content: "Can you fix the parallel 5ths?",
-    timestamp: "09:43 AM",
-  },
-  {
-    id: "init-ai1",
-    type: "ai",
-    content:
-      "I recommend resolving the Bass down to C instead of moving parallel with the Tenor. Would you like me to apply this fix automatically?",
-    timestamp: "09:43 AM",
-  },
-  {
-    id: "init-chips1",
-    type: "chips",
-    chips: ["Apply Fix", "Show Alternate Options", "Ignore"],
-  },
 ];
 
 /**
@@ -105,6 +64,71 @@ export default function TactileSandboxPage() {
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
   const { score, setScore, undo, redo, canUndo, canRedo, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
+  const {
+    messages: inspectorMessages,
+    inputValue: chatInput,
+    setInputValue: setChatInput,
+    isStreaming,
+    sendMessage,
+    handleChipClick,
+    runAudit,
+    clearMessages,
+  } = useTheoryInspector();
+  const suggestionStore = useSuggestionStore();
+  const pendingCorrections = suggestionStore.getPendingCorrections();
+
+  // Build suggestion batch map for the panel
+  const suggestionBatchMap = React.useMemo(() => {
+    const map = new Map<string, { corrections: import("@/lib/music/suggestionTypes").ScoreCorrection[]; summary: string }>();
+    for (const batch of suggestionStore.batches) {
+      map.set(batch.id, { corrections: batch.corrections, summary: batch.summary });
+    }
+    return map;
+  }, [suggestionStore.batches]);
+
+  // Accept/reject correction handlers
+  const handleAcceptCorrection = React.useCallback(
+    (correctionId: string) => {
+      if (!score) return;
+      const allCorrections = suggestionStore.batches.flatMap((b) => b.corrections);
+      const correction = allCorrections.find((c) => c.id === correctionId);
+      if (!correction) return;
+      const nextScore = applySuggestion(score, correction);
+      applyScore(nextScore);
+      suggestionStore.acceptCorrection(correctionId);
+    },
+    [score, applyScore, suggestionStore],
+  );
+
+  const handleRejectCorrection = React.useCallback(
+    (correctionId: string) => {
+      suggestionStore.rejectCorrection(correctionId);
+    },
+    [suggestionStore],
+  );
+
+  const handleAcceptAll = React.useCallback(
+    (batchId: string) => {
+      if (!score) return;
+      const batch = suggestionStore.batches.find((b) => b.id === batchId);
+      if (!batch) return;
+      const pending = batch.corrections.filter(
+        (c) => suggestionStore.correctionStatuses[c.id] === "pending",
+      );
+      if (pending.length === 0) return;
+      const nextScore = applySuggestions(score, pending);
+      applyScore(nextScore);
+      suggestionStore.acceptAll(batchId);
+    },
+    [score, applyScore, suggestionStore],
+  );
+
+  const handleRejectAll = React.useCallback(
+    (batchId: string) => {
+      suggestionStore.rejectAll(batchId);
+    },
+    [suggestionStore],
+  );
 
   // Restore from sessionStorage on mount, then redirect if still no music
   React.useEffect(() => {
@@ -404,54 +428,43 @@ export default function TactileSandboxPage() {
   // Display mode: view (OSMD) vs edit (VexFlow with note tools)
   const [displayMode, setDisplayMode] = React.useState<"view" | "edit">("view");
 
+  // Auto-switch to edit mode when suggestions arrive (ghost notes need VexFlow)
+  React.useEffect(() => {
+    if (pendingCorrections.length > 0 && displayMode === "view") {
+      setDisplayMode("edit");
+    }
+  }, [pendingCorrections.length, displayMode]);
+
   // Zoom
   const [zoom, setZoom] = React.useState(100);
   const handleZoomIn = () => setZoom((z) => Math.min(200, z + 25));
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 25));
 
-  // Chat state (edit 4)
-  const [chatInput, setChatInput] = React.useState("");
-  const [messages, setMessages] = React.useState<TheoryInspectorMessage[]>([]);
-
-  // Populate mock data when the inspector is opened
+  // Run audit when inspector is opened and score exists
   React.useEffect(() => {
-    if (isInspectorOpen && messages.length === 0) {
-      setMessages(INITIAL_MESSAGES);
+    if (isInspectorOpen && inspectorMessages.length === 0) {
+      // Welcome message + initial chips before user types anything
+      const { addMessage } = useTheoryInspectorStore.getState();
+      addMessage({
+        id: `sys-welcome-${Date.now()}`,
+        type: "system",
+        content: "Theory Inspector ready. What would you like to analyze?",
+        timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      });
+      addMessage({
+        id: `chips-welcome-${Date.now()}`,
+        type: "chips",
+        chips: ["Check voice leading", "Suggest correction", "Explain this chord"],
+      });
+
+      // Also run audit if score is available
+      if (score) runAudit(score);
     }
-  }, [isInspectorOpen, messages.length]);
+  }, [isInspectorOpen, score, inspectorMessages.length, runAudit]);
 
   const handleSend = React.useCallback(() => {
-    const text = chatInput.trim();
-    if (!text) return;
-    const now = new Date().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const userMsg = {
-      id: `u-${Date.now()}`,
-      type: "user" as const,
-      content: text,
-      timestamp: now,
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
-    // Simulate AI reply after 800ms
-    setTimeout(() => {
-      const reply = AI_REPLIES[Math.floor(Math.random() * AI_REPLIES.length)];
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          type: "ai" as const,
-          content: reply,
-          timestamp: new Date().toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    }, 800);
-  }, [chatInput]);
+    sendMessage(chatInput);
+  }, [sendMessage, chatInput]);
 
   const handleExport = (format: string) => {
     if (!score) return;
@@ -573,6 +586,9 @@ export default function TactileSandboxPage() {
                 selection={selection}
                 onNoteClick={toggleNoteSelection}
                 visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
+                pendingCorrections={pendingCorrections}
+                onAcceptCorrection={handleAcceptCorrection}
+                onRejectCorrection={handleRejectCorrection}
               />
             </div>
 
@@ -676,11 +692,22 @@ export default function TactileSandboxPage() {
 
             <TheoryInspectorPanel
               className="h-full flex-1"
-              messages={messages}
+              messages={inspectorMessages}
               inputValue={chatInput}
+              isStreaming={isStreaming}
               onInputChange={setChatInput}
               onSend={handleSend}
+              onChipClick={(chip) => handleChipClick(chip, score)}
+              onExplainMore={() => handleChipClick("Explain more", score)}
+              onSuggestFix={() => handleChipClick("Suggest correction", score)}
+              onNewChat={clearMessages}
               onClose={() => setIsInspectorOpen(false)}
+              suggestionBatches={suggestionBatchMap}
+              correctionStatuses={suggestionStore.correctionStatuses}
+              onAcceptCorrection={handleAcceptCorrection}
+              onRejectCorrection={handleRejectCorrection}
+              onAcceptAllCorrections={handleAcceptAll}
+              onRejectAllCorrections={handleRejectAll}
             />
           </div>
         )}

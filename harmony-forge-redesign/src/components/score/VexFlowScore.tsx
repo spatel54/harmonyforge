@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import VexFlow from "vexflow";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { noteToEasyScoreNotation, notesToBeats, beatsToRestNotation } from "@/lib/music/vexflowHelpers";
 import type { NoteSelection } from "@/store/useScoreStore";
+import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
+import { SuggestionOverlay } from "@/components/atoms/SuggestionOverlay";
 
 const Factory = (VexFlow as unknown as { Factory: new (o: object) => object }).Factory;
 
@@ -23,12 +25,17 @@ export interface VexFlowScoreProps {
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
   visiblePartIds?: Set<string>;
   onError?: (err: Error) => void;
+  pendingCorrections?: ScoreCorrection[];
+  onAcceptCorrection?: (correctionId: string) => void;
+  onRejectCorrection?: (correctionId: string) => void;
 }
 
-export function VexFlowScore({ score, className, selection = [], onNoteClick, visiblePartIds, onError }: VexFlowScoreProps) {
+export function VexFlowScore({ score, className, selection = [], onNoteClick, visiblePartIds, onError, pendingCorrections, onAcceptCorrection, onRejectCorrection }: VexFlowScoreProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const factoryRef = useRef<InstanceType<typeof Factory> | null>(null);
   const [notePositions, setNotePositions] = useState<NotePosition[]>([]);
+  const renderingRef = useRef(false);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -50,16 +57,17 @@ export function VexFlowScore({ score, className, selection = [], onNoteClick, vi
 
     let cancelled = false;
 
-    const run = () => {
-      if (cancelled || !container.isConnected) return;
-      
+    const render = (collectPositions: boolean) => {
+      if (cancelled || !container.isConnected || renderingRef.current) return;
+      renderingRef.current = true;
+
       try {
         const width = Math.max(container.clientWidth || 800, 400);
         const height = Math.max(container.clientHeight || 400, 280);
 
         container.innerHTML = "";
         const renderDiv = document.createElement("div");
-        renderDiv.id = `score-vexflow-${Date.now()}`;
+        renderDiv.id = `score-vexflow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         renderDiv.style.width = "100%";
         renderDiv.style.height = "100%";
         container.appendChild(renderDiv);
@@ -74,7 +82,6 @@ export function VexFlowScore({ score, className, selection = [], onNoteClick, vi
         context.clear();
 
         const system = vf.System({ x: 10, width: width - 20, spaceBetweenStaves: 12 });
-        const positions: NotePosition[] = [];
         const maxMeasures = Math.max(1, ...partsToRender.map((p) => p.measures.length));
         const beatsPerMeasure = 4;
         const totalBeatsPerPart = maxMeasures * beatsPerMeasure;
@@ -83,26 +90,25 @@ export function VexFlowScore({ score, className, selection = [], onNoteClick, vi
         for (const part of partsToRender) {
           const clef = clefMap[part.clef] ?? "treble";
           const tickables: unknown[] = [];
-          
+
           for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
             const measure = part.measures[mIdx];
             const measureNotes = measure?.notes ?? [];
-            
-            // Fixed floating point math
+
             const rawBeats = notesToBeats(measureNotes) || 0;
             const measureBeats = Math.round(rawBeats * 1000) / 1000;
             const padBeats = Math.max(0, beatsPerMeasure - measureBeats);
-            
+
             const measureNotation = measureNotes.length
               ? measureNotes.map((n) => noteToEasyScoreNotation(n)).join(", ")
               : "";
-              
+
             const measureTickables = measureNotation
               ? vf.EasyScore().notes(measureNotation, { clef })
               : vf.EasyScore().notes("B4/w/r", { clef });
-              
+
             tickables.push(...measureTickables);
-            
+
             if (padBeats > 0.001) {
               const restNotation = beatsToRestNotation(padBeats);
               if (restNotation) tickables.push(...vf.EasyScore().notes(restNotation, { clef }));
@@ -111,133 +117,82 @@ export function VexFlowScore({ score, className, selection = [], onNoteClick, vi
               tickables.push(vf.BarNote({ type: "single" }));
             }
           }
-          
+
           const voice = vf.Voice({ time: timeSig });
-          // CRITICAL FIX: Turn off strict mode BEFORE adding tickables
-          voice.setStrict(false); 
+          voice.setStrict(false);
           voice.addTickables(tickables as Parameters<ReturnType<typeof vf.Voice>["addTickables"]>[0]);
           system.addStave({ voices: [voice] }).addClef(clef).addTimeSignature("4/4");
         }
 
         system.format();
         vf.draw();
+        factoryRef.current = vf;
 
-        requestAnimationFrame(() => {
-          const svg = renderDiv.querySelector("svg");
-          if (svg) {
-            const containerRect = container.getBoundingClientRect();
-            const allRects = svg.querySelectorAll("ellipse, path[fill]");
-            let idx = 0;
-            for (const part of partsToRender) {
-              for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
-                const measure = part.measures[mIdx];
-                const measureNotes = measure?.notes ?? [];
-                const rawBeats = notesToBeats(measureNotes) || 0;
-                const measureBeats = Math.round(rawBeats * 1000) / 1000;
-                const padBeats = Math.max(0, beatsPerMeasure - measureBeats);
-                
-                for (let nIdx = 0; nIdx < measureNotes.length; nIdx++) {
-                  const note = measureNotes[nIdx];
-                  const el = allRects[idx];
-                  idx++;
-                  if (el) {
-                    const b = el.getBoundingClientRect();
-                    positions.push({
-                      x: b.left - containerRect.left + (container.scrollLeft || 0),
-                      y: b.top - containerRect.top + (container.scrollTop || 0),
-                      w: Math.max(b.width, 20),
-                      h: Math.max(b.height, 20),
-                      selection: { partId: part.id, measureIndex: mIdx, noteIndex: nIdx, noteId: note.id },
-                    });
+        if (collectPositions) {
+          requestAnimationFrame(() => {
+            if (cancelled) return;
+            const positions: NotePosition[] = [];
+            const svg = renderDiv.querySelector("svg");
+            if (svg) {
+              const containerRect = container.getBoundingClientRect();
+              const allRects = svg.querySelectorAll("ellipse, path[fill]");
+              let idx = 0;
+              for (const part of partsToRender) {
+                for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
+                  const measure = part.measures[mIdx];
+                  const measureNotes = measure?.notes ?? [];
+                  const rawBeats = notesToBeats(measureNotes) || 0;
+                  const measureBeats = Math.round(rawBeats * 1000) / 1000;
+                  const padBeats = Math.max(0, beatsPerMeasure - measureBeats);
+
+                  for (let nIdx = 0; nIdx < measureNotes.length; nIdx++) {
+                    const note = measureNotes[nIdx];
+                    const el = allRects[idx];
+                    idx++;
+                    if (el) {
+                      const b = el.getBoundingClientRect();
+                      positions.push({
+                        x: b.left - containerRect.left + (container.scrollLeft || 0),
+                        y: b.top - containerRect.top + (container.scrollTop || 0),
+                        w: Math.max(b.width, 20),
+                        h: Math.max(b.height, 20),
+                        selection: { partId: part.id, measureIndex: mIdx, noteIndex: nIdx, noteId: note.id },
+                      });
+                    }
                   }
+                  if (padBeats > 0.001) idx++;
                 }
-                if (padBeats > 0.001) idx++;
               }
             }
-          }
-          setNotePositions(positions);
-        });
-
-        factoryRef.current = vf;
-      } catch (err) {
-        console.error("VexFlow run() error:", err);
-        if (onError) onError(err instanceof Error ? err : new Error(String(err)));
-      }
-    };
-
-    const doRender = () => {
-      if (!container.isConnected) return;
-      try {
-        const w = container.clientWidth || 800;
-        const h = container.clientHeight || 400;
-        const elementId = `score-vexflow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        container.innerHTML = "";
-        const div = document.createElement("div");
-        div.id = elementId;
-        div.style.width = "100%";
-        div.style.height = "100%";
-        container.appendChild(div);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const vf2 = new Factory({ renderer: { elementId, width: w, height: h } }) as any;
-        vf2.initRenderer();
-        const sys = vf2.System({ x: 10, width: w - 20, spaceBetweenStaves: 12 });
-        const maxMeasures = Math.max(1, ...partsToRender.map((p) => p.measures.length));
-        const beatsPerMeasure = 4;
-        const totalBeatsPerPart = maxMeasures * beatsPerMeasure;
-        const timeSig = `${totalBeatsPerPart}/4`;
-
-        for (const part of partsToRender) {
-          const clef = clefMap[part.clef] ?? "treble";
-          const tickables: unknown[] = [];
-          for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
-            const measure = part.measures[mIdx];
-            const measureNotes = measure?.notes ?? [];
-            const rawBeats = notesToBeats(measureNotes) || 0;
-            const measureBeats = Math.round(rawBeats * 1000) / 1000;
-            const padBeats = Math.max(0, beatsPerMeasure - measureBeats);
-            
-            const measureNotation = measureNotes.length
-              ? measureNotes.map((n) => noteToEasyScoreNotation(n)).join(", ")
-              : "";
-            const measureTickables = measureNotation
-              ? vf2.EasyScore().notes(measureNotation, { clef })
-              : vf2.EasyScore().notes("B4/w/r", { clef });
-            tickables.push(...measureTickables);
-            
-            if (padBeats > 0.001) {
-              const restNotation = beatsToRestNotation(padBeats);
-              if (restNotation) tickables.push(...vf2.EasyScore().notes(restNotation, { clef }));
-            }
-            if (mIdx < maxMeasures - 1) {
-              tickables.push(vf2.BarNote({ type: "single" }));
-            }
-          }
-          
-          const voice = vf2.Voice({ time: timeSig });
-          // CRITICAL FIX: Turn off strict mode BEFORE adding tickables
-          voice.setStrict(false);
-          voice.addTickables(tickables as Parameters<ReturnType<typeof vf2.Voice>["addTickables"]>[0]);
-          sys.addStave({ voices: [voice] }).addClef(clef).addTimeSignature("4/4");
+            setNotePositions(positions);
+          });
         }
-        sys.format();
-        vf2.draw();
       } catch (err) {
-        console.error("VexFlow doRender() error:", err);
+        console.error("VexFlow render error:", err);
         if (onError) onError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        renderingRef.current = false;
       }
     };
 
-    const resizeObserver = new ResizeObserver(doRender);
-    resizeObserver.observe(container);
-
+    // Initial render with position collection
     requestAnimationFrame(() => {
-      run();
+      render(true);
     });
+
+    // Debounced resize handler — skip if already rendering
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = setTimeout(() => {
+        render(true);
+      }, 100);
+    });
+    resizeObserver.observe(container);
 
     return () => {
       cancelled = true;
       resizeObserver.disconnect();
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       factoryRef.current = null;
     };
   }, [score, visiblePartIds, onError]);
@@ -274,6 +229,29 @@ export function VexFlowScore({ score, className, selection = [], onNoteClick, vi
                 aria-label={`Note ${pos.selection.noteId}`}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suggestion overlays — ghost notes + accept/reject badges */}
+      {pendingCorrections && pendingCorrections.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="relative w-full h-full pointer-events-auto">
+            {pendingCorrections.map((correction) => {
+              const pos = notePositions.find(
+                (p) => p.selection.noteId === correction.noteId,
+              );
+              if (!pos) return null;
+              return (
+                <SuggestionOverlay
+                  key={correction.id}
+                  correction={correction}
+                  position={pos}
+                  onAccept={() => onAcceptCorrection?.(correction.id)}
+                  onReject={() => onRejectCorrection?.(correction.id)}
+                />
+              );
+            })}
           </div>
         </div>
       )}
