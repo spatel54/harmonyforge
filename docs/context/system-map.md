@@ -1,6 +1,6 @@
 # System Map
 
-> **Implementation status:** Logic Core (engine/) complete. Generate Harmonies flow wired: Document → API → Sandbox. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **Output:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **Parser:** MusicXML partwise via fast-xml-parser (no DTD); extracts `melodyPartName`. **Display:** View mode (OSMD) and Edit mode (VexFlow) toggle; session persistence (sessionStorage); CORS via `CORS_ORIGIN`. **Audio playback:** usePlayback hook + playbackUtils; issues remain (runtime, wrong notes). **CLI:** `make test-engine` with `-i`, `-o`, `--mood`, `--instruments`. Theory Inspector pending. See `@progress.md`.
+> **Implementation status:** Logic Core (engine/) complete. Generate Harmonies flow wired: Document → API → Sandbox. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **Output:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **Parser:** MusicXML partwise via fast-xml-parser (no DTD), plus frontend instrument-aware clef/transposition handling for common transposing instruments. **Display:** reliability-first notation (View = OSMD) with Edit mode fallback path (VexFlow + automatic safe preview when edit renderer fails); session persistence (sessionStorage); CORS via `CORS_ORIGIN`. **Audio playback:** hardened (rest-aware + measure-aware scheduling). **Onboarding:** first-time 3-step guided tour. **Theory Inspector:** wired via `/api/theory-inspector` with backend validation context, optional OpenAI fallback mode, and red/blue measure highlight suggestions. **Export:** chord-chart text export endpoint added (`/api/export-chord-chart`) alongside existing export modalities. **CLI:** `make test-engine` with `-i`, `-o`, `--mood`, `--instruments`. See `@progress.md`.
 
 ## Overview
 
@@ -58,8 +58,8 @@ flowchart TB
 | Component | Role | Tech |
 |-----------|------|------|
 | **Logic Core** | Deterministic constraint-satisfaction solver; generates valid SATB from lead sheet; variable parts (selected instruments only) | Node.js, TypeScript |
-| **Tactile Sandbox** | Interactive notation editor; direct manipulation, Edit-Authority. **Display:** View mode (OSMD) and Edit mode (VexFlow) toggle; session persistence for Sandbox. **Audio:** usePlayback + Tone.js (issues: runtime, wrong notes). **Lives in** `harmony-forge-redesign/` | Next 16, React 19, Tailwind, OSMD, VexFlow, Tone, Zustand |
-| **Theory Inspector** | Multi-agent LLM: Auditor (validate), Tutor (explain), Stylist (suggest). RAG retrieves from [Taxonomy.md](../../Taxonomy.md). | GPT-4o API |
+| **Tactile Sandbox** | Interactive notation editor; direct manipulation, Edit-Authority. **Display:** edit-first VexFlow (no View/Edit toggle), with OSMD fallback if VexFlow render path fails. Session persistence for Sandbox. **Audio:** usePlayback + Tone.js (rest-aware and measure-aware scheduling). **Onboarding:** first-time guided tour across `/`, `/document`, `/sandbox`. **Lives in** `harmony-forge-redesign/` | Next 16, React 19, Tailwind, OSMD, VexFlow, Tone, Zustand |
+| **Theory Inspector** | Inspector API route receives user query + score context, calls backend validator, and returns explanation/suggestions. Uses OpenAI when key exists; deterministic fallback otherwise. | Next.js API route, backend validator, optional OpenAI API |
 
 ## Data Flow
 
@@ -68,8 +68,8 @@ flowchart TB
 3. **Parse & normalize**: Backend converts to canonical format (ParsedScore); extracts melody, `melodyPartName`, key, chords (or infers chords using mood). fast-xml-parser for score-partwise (avoids DTD loading).
 4. **Generation**: Backend solver processes ParsedScore + config (mood affects chord inference) → outputs valid SATB. **Additive harmonies:** melody stays as Part 1; selected instruments (flute, cello) added as harmony parts (Alto, Bass voices).
 5. **Output**: Backend returns **partwise MusicXML 2.0** (melody + harmony parts, MuseScore/OSMD compatible) for Tactile Sandbox / note editor.
-6. **Frontend**: MusicXML → View mode (OSMD) or Edit mode (VexFlow) per Sandbox toggle; session persistence for generatedMusicXML; CORS configurable. Sandbox playback bar uses `sourceFileName`; audio via usePlayback (Tone.js) — issues remain. Partwise passed through; timewise via `timewiseToPartwise.ts`.
-7. **Explainability**: Deltas + natural language queries → Auditor/Tutor/Stylist. RAG from `Taxonomy.md`.
+6. **Frontend**: MusicXML → edit-first VexFlow rendering in Sandbox, with OSMD fallback path when VexFlow fails. Session persistence for generatedMusicXML; CORS configurable. Sandbox playback bar uses `sourceFileName`; audio via usePlayback (Tone.js) with rest-aware + measure-aware scheduling.
+7. **Explainability**: Natural-language query from Sandbox → `/api/theory-inspector` → optional backend validation context (`/api/validate-from-file`) → OpenAI response when configured, else fallback explanation.
 8. **Export**: MusicXML, PDF, chord charts, tablature.
 
 ## Entry Points

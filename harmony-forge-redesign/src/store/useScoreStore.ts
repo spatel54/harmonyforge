@@ -45,8 +45,8 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   setScore: (score) =>
     set({
       score,
-      history: [],
-      historyIndex: -1,
+      history: score ? [cloneScore(score)] : [],
+      historyIndex: score ? 0 : -1,
       canUndo: false,
       canRedo: false,
       visibleParts: score ? new Set(score.parts.map((p) => p.id)) : new Set(),
@@ -92,15 +92,23 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   deleteSelection: (noteIds) => {
     const { score } = get();
     if (!score || noteIds.length === 0) return;
-    get().pushState();
     const next = deleteNotes(score, new Set(noteIds));
-    set({ score: next });
+    get().applyScore(next);
   },
   applyScore: (nextScore: EditableScore) => {
     const { score } = get();
     if (!score) return;
-    get().pushState();
-    set({ score: nextScore });
+    const { history, historyIndex } = get();
+    const trimmed = history.slice(0, historyIndex + 1);
+    trimmed.push(cloneScore(nextScore));
+    if (trimmed.length > MAX_HISTORY) trimmed.shift();
+    set({
+      score: nextScore,
+      history: trimmed,
+      historyIndex: trimmed.length - 1,
+      canUndo: trimmed.length > 1,
+      canRedo: false,
+    });
   },
 }));
 

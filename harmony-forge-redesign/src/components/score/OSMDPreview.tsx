@@ -23,6 +23,32 @@ export function OSMDPreview({ musicXML, className, minHeight = 280 }: OSMDPrevie
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const tintNotationInk = (container: HTMLDivElement) => {
+    const svg = container.querySelector("svg");
+    if (!svg) return;
+    const darkMode = document.documentElement.classList.contains("dark");
+    if (!darkMode) return;
+
+    const ink = "var(--hf-text-primary)";
+    const elements = svg.querySelectorAll("line, path, rect, ellipse, polygon, text");
+    elements.forEach((el) => {
+      const node = el as SVGElement;
+      const stroke = node.getAttribute("stroke");
+      const fill = node.getAttribute("fill");
+      if (stroke && stroke !== "none") {
+        node.setAttribute("stroke", ink);
+      }
+      if (
+        fill &&
+        ["black", "#000", "#000000", "rgb(0,0,0)", "rgb(0, 0, 0)"].includes(
+          fill.toLowerCase(),
+        )
+      ) {
+        node.setAttribute("fill", ink);
+      }
+    });
+  };
+
   useEffect(() => {
     if (!musicXML || !containerRef.current) {
       setIsLoading(false);
@@ -58,6 +84,7 @@ export function OSMDPreview({ musicXML, className, minHeight = 280 }: OSMDPrevie
       .then(() => {
         if (cancelled || !container.isConnected) return;
         osmd.render();
+        tintNotationInk(container);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -76,6 +103,19 @@ export function OSMDPreview({ musicXML, className, minHeight = 280 }: OSMDPrevie
       }
     };
   }, [musicXML]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new MutationObserver(() => {
+      tintNotationInk(container);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
@@ -100,7 +140,7 @@ export function OSMDPreview({ musicXML, className, minHeight = 280 }: OSMDPrevie
       )}
       <div
         ref={containerRef}
-        className="w-full h-full overflow-auto"
+        className="osmd-container w-full h-full overflow-auto"
         style={{
           minHeight,
           opacity: isLoading || error ? 0 : 1,

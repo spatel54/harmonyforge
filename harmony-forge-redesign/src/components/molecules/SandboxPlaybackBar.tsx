@@ -26,6 +26,7 @@ export interface SandboxPlaybackBarProps extends React.HTMLAttributes<HTMLDivEle
   onSkipForward?: () => void;
   onPrevPage?: () => void;
   onNextPage?: () => void;
+  canPlay?: boolean;
 }
 
 /**
@@ -66,6 +67,7 @@ export const SandboxPlaybackBar = React.forwardRef<
       onSkipForward,
       onPrevPage,
       onNextPage,
+      canPlay = true,
       className,
       ...props
     },
@@ -146,7 +148,12 @@ export const SandboxPlaybackBar = React.forwardRef<
             type="button"
             onClick={onPlayPause}
             aria-label={isPlaying ? "Pause" : "Play"}
-            className={cn(iconBtn, "w-[40px] h-[36px] rounded-[20px]")}
+            disabled={!canPlay}
+            className={cn(
+              iconBtn,
+              "w-[40px] h-[36px] rounded-[20px]",
+              "disabled:opacity-40 disabled:cursor-not-allowed"
+            )}
             style={{
               backgroundColor: "var(--hf-text-primary)",
               color: "var(--hf-bg)",

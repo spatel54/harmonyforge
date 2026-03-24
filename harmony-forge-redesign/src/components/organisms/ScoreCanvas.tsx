@@ -2,19 +2,16 @@ import React from "react";
 import { Music, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SandboxContextMenu } from "./SandboxContextMenu";
-import { useSandboxStore } from "@/store/useSandboxStore";
 import { VexFlowScore } from "@/components/score/VexFlowScore";
 import { OSMDPreview } from "@/components/score/OSMDPreview";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
-
-export type DisplayMode = "view" | "edit";
+import type { EditCursor } from "@/store/useEditCursorStore";
+import { getInsertIndexAtBeat, parseMeasureBeats } from "@/lib/music/scoreUtils";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
   showViolations?: boolean;
-  /** "view" = OSMD when musicXML exists; "edit" = VexFlow when score exists (enables note tools) */
-  displayMode?: DisplayMode;
   /** Parsed score from MusicXML; when null, shows placeholder */
   score?: EditableScore | null;
   /** Raw MusicXML string — when provided, uses OpenSheetMusicDisplay for reliable display (overrides score) */
@@ -27,8 +24,22 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   selection?: NoteSelection[];
   /** Called when user clicks a note */
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
+  /** Called when user drags a note vertically; semitoneDelta can be positive/negative. */
+  onNoteDrag?: (sel: NoteSelection, semitoneDelta: number) => void;
   /** Part IDs to show (empty = all) */
   visiblePartIds?: Set<string>;
+  /** When true, prefer VexFlow edit rendering over OSMD display rendering. */
+  preferEditMode?: boolean;
+  /** Measure-level highlights shown as vertical overlays in the notation area. */
+  measureHighlights?: Array<{
+    measureIndex: number;
+    color: "red" | "blue";
+    label?: string;
+  }>;
+  /** Semantic edit cursor (renderer-independent). */
+  cursor?: EditCursor | null;
+  /** Callback when cursor moves via beat-grid interaction. */
+  onCursorChange?: (cursor: EditCursor) => void;
 }
 
 /**
@@ -39,20 +50,25 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
     {
       staveLabels = ["S", "A", "T", "B"],
       showViolations = false,
-      displayMode = "view",
       score = null,
       musicXML = null,
       onCanvasClick,
       onStaffClick,
       selection = [],
       onNoteClick,
+      onNoteDrag,
       visiblePartIds,
+      preferEditMode = false,
+      measureHighlights = [],
+      cursor = null,
+      onCursorChange,
       className,
       ...props
     },
     ref,
   ) => {
     const [vexFlowCrashed, setVexFlowCrashed] = React.useState(false);
+    const [vexFlowRendered, setVexFlowRendered] = React.useState(false);
 
     const handleVexFlowError = React.useCallback(() => {
       setVexFlowCrashed(true);
@@ -60,6 +76,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
 
     React.useEffect(() => {
       setVexFlowCrashed(false);
+      setVexFlowRendered(false);
     }, [score]);
 
     // For context menu (fix: define openContextMenu)
@@ -98,7 +115,19 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       [280, 255],
     ];
 
-    // Remove duplicated/crashing conditional block - unify display rendering below
+    const partsForGrid = React.useMemo(() => {
+      if (!score) return [];
+      const filtered =
+        visiblePartIds && visiblePartIds.size > 0
+          ? score.parts.filter((part) => visiblePartIds.has(part.id))
+          : score.parts;
+      return filtered.length > 0 ? filtered : score.parts;
+    }, [score, visiblePartIds]);
+
+    const maxMeasures = React.useMemo(() => {
+      if (partsForGrid.length === 0) return 1;
+      return Math.max(1, ...partsForGrid.map((part) => part.measures.length));
+    }, [partsForGrid]);
 
     return (
       <div
@@ -109,24 +138,8 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
         onClick={(e) => {
           const target = e.target as HTMLElement;
           if (target.closest("[data-note-hit]")) return;
-          if (onStaffClick && score) {
-            if (selection?.length) {
-              const sel = selection[0];
-              const part = score.parts.find((p) => p.id === sel.partId);
-              const measure = part?.measures[sel.measureIndex];
-              const noteIndex = measure ? Math.min(sel.noteIndex + 1, measure.notes.length) : 0;
-              onStaffClick(sel.partId, sel.measureIndex, noteIndex);
-            } else {
-              const first = score.parts[0];
-              if (first?.measures.length) {
-                onStaffClick(first.id, 0, 0);
-              } else {
-                onCanvasClick?.();
-              }
-            }
-          } else {
-            onCanvasClick?.();
-          }
+          if (target.closest("[data-grid-slot]")) return;
+          onCanvasClick?.();
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -193,7 +206,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={2}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* ── Barline 1: x:340 ──────────────────────────── */}
@@ -202,7 +215,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={1}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* ── Barline 2: x:600 ──────────────────────────── */}
@@ -211,7 +224,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={1}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* Highlight overlays (drawn before notes so notes are on top) ── */}
@@ -384,19 +397,8 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
           </>
         )}
 
-        {/* displayMode "view" → OSMD when musicXML; "edit" → VexFlow when score (enables note tools) */}
-        {displayMode === "edit" && score && !vexFlowCrashed ? (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <VexFlowScore
-              score={score}
-              className="w-full h-full"
-              selection={selection}
-              onNoteClick={onNoteClick}
-              visiblePartIds={visiblePartIds}
-              onError={handleVexFlowError}
-            />
-          </div>
-        ) : musicXML ? (
+        {/* Default to reliable display (OSMD) unless edit mode is explicitly requested. */}
+        {musicXML && !preferEditMode ? (
           <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
             <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
           </div>
@@ -407,11 +409,145 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               className="w-full h-full"
               selection={selection}
               onNoteClick={onNoteClick}
+              onNoteDrag={onNoteDrag}
               visiblePartIds={visiblePartIds}
               onError={handleVexFlowError}
+              onRendered={setVexFlowRendered}
             />
           </div>
+        ) : musicXML ? (
+          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
+            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
+          </div>
         ) : null}
+
+        {preferEditMode && musicXML && !vexFlowCrashed && !vexFlowRendered && (
+          <div className="absolute inset-0 pointer-events-none">
+            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
+            <div className="absolute top-2 right-2 rounded px-2 py-1 text-[11px] font-mono bg-black/50 text-white">
+              Edit renderer still loading; showing safe preview
+            </div>
+          </div>
+        )}
+
+        {preferEditMode && score && onStaffClick && partsForGrid.length > 0 && (
+          <div className="absolute inset-0 pointer-events-none z-20" aria-hidden="true">
+            {partsForGrid.map((part, partIdx) => {
+              const topPct = (partIdx / partsForGrid.length) * 100;
+              const heightPct = 100 / partsForGrid.length;
+              return (
+                <div
+                  key={`grid-part-${part.id}`}
+                  className="absolute left-0 right-0"
+                  style={{ top: `${topPct}%`, height: `${heightPct}%` }}
+                >
+                  {Array.from({ length: maxMeasures }).map((_, measureIndex) => {
+                    const measure = part.measures[measureIndex];
+                    const beats = parseMeasureBeats(measure?.timeSignature);
+                    const subdivision = beats >= 3 ? 0.5 : 0.25;
+                    const slotCount = Math.max(1, Math.round(beats / subdivision));
+                    const leftPct = (measureIndex / maxMeasures) * 100;
+                    const widthPct = 100 / maxMeasures;
+
+                    return (
+                      <div
+                        key={`grid-${part.id}-${measureIndex}`}
+                        className="absolute top-0 bottom-0"
+                        style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      >
+                        {Array.from({ length: slotCount + 1 }).map((__, slotIndex) => {
+                          const beat = Math.min(beats, slotIndex * subdivision);
+                          const noteIndex = measure
+                            ? getInsertIndexAtBeat(measure, beat)
+                            : 0;
+                          const slotLeft = (slotIndex / Math.max(1, slotCount)) * 100;
+                          const isCursor =
+                            cursor?.partId === part.id &&
+                            cursor.measureIndex === measureIndex &&
+                            Math.abs(cursor.beat - beat) < 0.001;
+
+                          return (
+                            <React.Fragment key={`slot-${part.id}-${measureIndex}-${slotIndex}`}>
+                              <button
+                                type="button"
+                                data-grid-slot
+                                className="absolute top-0 bottom-0 pointer-events-auto"
+                                style={{
+                                  left: `${slotLeft}%`,
+                                  width: `${100 / Math.max(1, slotCount)}%`,
+                                  background: "transparent",
+                                }}
+                                onClick={(evt) => {
+                                  evt.stopPropagation();
+                                  onStaffClick(part.id, measureIndex, noteIndex);
+                                  onCursorChange?.({
+                                    partId: part.id,
+                                    measureIndex,
+                                    beat,
+                                    noteIndex,
+                                  });
+                                }}
+                                title={`Part ${part.name}, measure ${measureIndex + 1}, beat ${beat.toFixed(2)}`}
+                              />
+                              {isCursor && (
+                                <div
+                                  className="absolute top-0 bottom-0"
+                                  style={{
+                                    left: `${slotLeft}%`,
+                                    width: "2px",
+                                    backgroundColor: "var(--hf-accent)",
+                                  }}
+                                />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {score && measureHighlights.length > 0 && (
+          <div className="absolute inset-0 pointer-events-none">
+            {measureHighlights.map((highlight) => {
+              const maxMeasures = Math.max(
+                1,
+                ...score.parts.map((part) => part.measures.length),
+              );
+              const leftPct = (highlight.measureIndex / maxMeasures) * 100;
+              const widthPct = Math.max(100 / maxMeasures, 3);
+              const fillColor =
+                highlight.color === "red"
+                  ? "color-mix(in srgb, var(--semantic-violation) 18%, transparent)"
+                  : "color-mix(in srgb, #1976d2 16%, transparent)";
+              const borderColor =
+                highlight.color === "red" ? "var(--semantic-violation)" : "#1976d2";
+              return (
+                <div
+                  key={`${highlight.color}-${highlight.measureIndex}-${highlight.label ?? ""}`}
+                  className="absolute top-0 bottom-0 rounded-[2px]"
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    backgroundColor: fillColor,
+                    border: `1px solid ${borderColor}`,
+                    borderTop: "none",
+                    borderBottom: "none",
+                  }}
+                  title={
+                    highlight.label
+                      ? `Measure ${highlight.measureIndex + 1}: ${highlight.label}`
+                      : `Measure ${highlight.measureIndex + 1}`
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
 
         <SandboxContextMenu />
       </div>

@@ -21,6 +21,29 @@ export interface ScheduledNote {
   durationBeats: number;
 }
 
+const PITCH_RE = /^[A-G](?:#{1,2}|b{1,2})?\d+$/;
+
+function parseBeatsPerMeasure(timeSignature?: string, fallback = 4): number {
+  if (!timeSignature) return fallback;
+  const match = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (!match) return fallback;
+  const numerator = Number.parseInt(match[1], 10);
+  const denominator = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    return fallback;
+  }
+  // quarter note = 1 beat in this app's beat model
+  return numerator * (4 / denominator);
+}
+
+function noteDurationInBeats(note: Note): number {
+  let durationBeats = DURATION_BEATS[note.duration] ?? 1;
+  if (note.dots) {
+    durationBeats *= 1.5;
+  }
+  return durationBeats;
+}
+
 /**
  * Extract all notes from score with timing (startBeat, durationBeats).
  * Merges all parts; notes from different parts at same beat play together.
@@ -32,20 +55,24 @@ export function scoreToScheduledNotes(
   const events: ScheduledNote[] = [];
 
   for (const part of score.parts) {
-    part.measures.forEach((measure, measureIndex) => {
-      const measureStartBeat = measureIndex * beatsPerMeasure;
+    let partBeatCursor = 0;
+    part.measures.forEach((measure) => {
+      const measureBeats = parseBeatsPerMeasure(measure.timeSignature, beatsPerMeasure);
+      const measureStartBeat = partBeatCursor;
       let currentBeat = measureStartBeat;
       for (const note of measure.notes) {
-        let durationBeats = DURATION_BEATS[note.duration] ?? 1;
-        if (note.dots) durationBeats *= 1.5;
+        const durationBeats = noteDurationInBeats(note);
 
-        events.push({
-          startBeat: currentBeat,
-          pitch: note.pitch,
-          durationBeats,
-        });
+        if (!note.isRest && PITCH_RE.test(note.pitch)) {
+          events.push({
+            startBeat: currentBeat,
+            pitch: note.pitch,
+            durationBeats,
+          });
+        }
         currentBeat += durationBeats;
       }
+      partBeatCursor = Math.max(measureStartBeat + measureBeats, currentBeat);
     });
   }
 

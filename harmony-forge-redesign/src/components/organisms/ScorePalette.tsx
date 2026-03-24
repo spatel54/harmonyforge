@@ -106,12 +106,12 @@ const TOOLS = [
   {
     category: "DURATION",
     items: [
-      { id: "duration-whole", icon: <SmuflWhole />, name: "Whole note" },
-      { id: "duration-half", icon: <SmuflHalf />, name: "Half note" },
-      { id: "duration-quarter", icon: <SmuflQuarter />, name: "Quarter note" },
-      { id: "duration-eighth", icon: <SmuflEighth />, name: "Eighth note" },
-      { id: "duration-16th", icon: <SmuflDot />, name: "16th note" },
-      { id: "duration-32nd", icon: <SmuflDot />, name: "32nd note" },
+      { id: "duration-whole", icon: <SmuflWhole />, name: "Whole note", shortcut: "6" },
+      { id: "duration-half", icon: <SmuflHalf />, name: "Half note", shortcut: "5" },
+      { id: "duration-quarter", icon: <SmuflQuarter />, name: "Quarter note", shortcut: "4" },
+      { id: "duration-eighth", icon: <SmuflEighth />, name: "Eighth note", shortcut: "3" },
+      { id: "duration-16th", icon: <SmuflDot />, name: "16th note", shortcut: "2" },
+      { id: "duration-32nd", icon: <SmuflDot />, name: "32nd note", shortcut: "1" },
       { id: "duration-dotted", icon: <SmuflDot />, name: "Dotted" },
       { id: "duration-tie", icon: <SmuflSlur />, name: "Tie" },
       { id: "duration-tuplet", icon: <SmuflSlur />, name: "Tuplet" },
@@ -120,10 +120,10 @@ const TOOLS = [
   {
     category: "PITCH",
     items: [
-      { id: "pitch-up-semitone", icon: <SmuflSharp />, name: "Pitch up semitone" },
-      { id: "pitch-down-semitone", icon: <SmuflFlat />, name: "Pitch down semitone" },
-      { id: "pitch-up-octave", icon: <SmuflSharp />, name: "Pitch up octave" },
-      { id: "pitch-down-octave", icon: <SmuflFlat />, name: "Pitch down octave" },
+      { id: "pitch-up-semitone", icon: <SmuflSharp />, name: "Pitch up semitone", shortcut: "↑" },
+      { id: "pitch-down-semitone", icon: <SmuflFlat />, name: "Pitch down semitone", shortcut: "↓" },
+      { id: "pitch-up-octave", icon: <SmuflSharp />, name: "Pitch up octave", shortcut: "⌘↑" },
+      { id: "pitch-down-octave", icon: <SmuflFlat />, name: "Pitch down octave", shortcut: "⌘↓" },
       { id: "pitch-accidental", icon: <SmuflSharp />, name: "Accidental" },
     ],
   },

@@ -1,6 +1,8 @@
 # Plan
 
-> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox complete (2a–2d, 2f, 2g): MusicXML render, selection, edit tools, Document page preview, Generate flow, variable-part generation, **Note Editor (Noteflight/MuseScore-style)**. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **API/CLI:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **CLI:** `make test-engine`; supports `-i`, `-o`, `--mood`, `--instruments`. **End-to-end flow:** Upload → Document → Generate → Sandbox. **Display:** View mode (OSMD) and Edit mode (VexFlow toggle); session persistence via sessionStorage; CORS configurable via `CORS_ORIGIN`. **Audio playback:** Wired (usePlayback, playbackUtils); runtime issues and wrong notes — to fix. Theory Inspector deferred. See `@progress.md`.
+> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox feature scope complete (2a–2d, 2f, 2g): MusicXML render, selection/edit tooling, Document preview, Generate flow, variable-part generation, and keyboard-first note input conventions. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **API/CLI:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **CLI:** `make test-engine`; supports `-i`, `-o`, `--mood`, `--instruments`. **End-to-end flow:** Upload → Document → Generate → Sandbox. **Display model:** reliability-first View mode (OSMD) with Edit mode fallback path and safety overlay while VexFlow edit renderer stabilizes. Session persistence via sessionStorage; CORS configurable via `CORS_ORIGIN`. **Audio playback:** stabilized (rest-aware timing, measure-aware scheduling, chord-safe transport). **Theory Inspector:** wired to `/api/theory-inspector` with validation context + OpenAI optional fallback mode and measure highlights (red/blue) returned to canvas.
+>
+> **Milestones:** M3 (XAI Backend & Architecture) complete (19/19 closed). M4 (Frontend) consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) and now complete for MVP scope (audio, onboarding, inspector wiring). **M5 (User Study)** next.
 
 ## Objective
 
@@ -71,16 +73,17 @@ Build order (from MVP scope):
      - [x] **2g.5** Voice lanes: activePartId tracks selected part for insertion; part isolation for bounded edits.
    - [ ] JSON-based score deltas for state sync with backend (deferred to Theory Inspector Phase 3)
 
-3. **Theory Inspector (Explainability)** — LLM-powered validation
-   - [ ] Implement multi-agent framework (Auditor, Tutor, Stylist) via GPT-4o
-   - [ ] Auditor: validate edits, flag violations; Red Line visual indicators
-   - [ ] Tutor: ante-hoc explanations when user queries flagged notes; RAG from `Taxonomy.md`
-   - [ ] Stylist: translate natural language prompts into candidate edits
+3. **Theory Inspector (Explainability)** — LLM-powered validation *(M4 #79 MVP wiring complete)*
+   - [x] Inspector API route wired (`/api/theory-inspector`) with graceful fallback
+   - [x] Auditor context wired via backend validation (`/api/validate-from-file`)
+   - [x] Tutor chat wiring: Sandbox asks inspector API; replies render in panel
+   - [ ] Stylist: structured candidate-edit application flow (post-MVP)
 
-4. **Supporting Features**
+4. **Supporting Features** *(M4 #79 — MVP by 3/27)*
    - [ ] Multi-clef & instrument transposition; multi-instrument selection
-   - [ ] Audio playback: Wired (usePlayback, playbackUtils); **issues remain** — runtime errors, wrong notes; fix score-to-events, pitch format, chord/rest timing
-   - [ ] Export: PDF, chord charts, tablature
+   - [x] Audio playback: rest-aware timing + measure-aware scheduling; pitch-safe filtering; transport stability
+   - [x] Onboarding flow: guided first-time tour (Upload → Document → Generate → Sandbox) with localStorage completion flag
+  - [ ] Export: PDF + chord-chart path implemented; tablature deferred
 
 ## Verification
 
@@ -90,3 +93,4 @@ Build order (from MVP scope):
 - `make test-engine` — CLI runs engine on `input/月亮代表我的心.xml` → `output/月亮代表我的心_flute_cello.xml` (melody + flute + cello, major)
 - Manual: Upload `月亮代表我的心.xml` → preview on `/document` → configure mood + instruments → Generate Harmonies → land on `/sandbox` with 3 parts (Violin, Flute, Cello)
 - **File pipeline**: `POST /api/generate-from-file` returns `200` with partwise MusicXML (additive harmonies)
+- **Known active limitation (2026-03-24):** VexFlow edit renderer still fails to produce visible notation for some generated scores; Sandbox now auto-falls back to safe OSMD preview in Edit mode to avoid blank-canvas regressions while preserving app usability.

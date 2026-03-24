@@ -62,6 +62,10 @@ export function pitchToVexFlowKey(pitch: string): string {
 
 /** Build EasyScore notation string for a note: "C#5/q" or "C4/q." for dotted */
 export function noteToEasyScoreNotation(note: Note): string {
+  if (note.isRest) {
+    const dots = note.dots ? ".".repeat(note.dots) : "";
+    return `B4/${note.duration}${dots}/r`;
+  }
   const key = pitchToVexFlowKey(note.pitch);
   const dots = note.dots ? ".".repeat(note.dots) : "";
   return `${key}/${note.duration}${dots}`;

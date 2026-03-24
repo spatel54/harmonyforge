@@ -110,8 +110,8 @@
   --hf-bg-grad-start: #3e2723;
   --hf-bg-grad-end: #2d1817;
 
-  /* Staff lines: surface-40 per lXHYH design */
-  --hf-staff-line: var(--nocturne-surface-40, #a55b3766);
+  /* In edit mode, keep notation glyphs/staves high-contrast (white). */
+  --hf-staff-line: var(--hf-text-primary);
   /* Score canvas bg — Node lXHYH: #1A1110 */
   --hf-canvas-bg: #1a1110;
   --hf-toolbar-bg: rgba(62, 39, 35, 0.92);
@@ -308,6 +308,28 @@ body {
 .score-canvas-container svg .vf-stave path {
   stroke: var(--hf-text-primary);
   fill: var(--hf-text-primary);
+}
+
+/* Dark mode: enforce white notation primitives (notes, staves, clefs, key/time signatures). */
+.dark .score-canvas-container svg .vf-stavenote path,
+.dark .score-canvas-container svg .vf-stave path,
+.dark .score-canvas-container svg .vf-clef path,
+.dark .score-canvas-container svg .vf-keysignature path,
+.dark .score-canvas-container svg .vf-timesignature path,
+.dark .score-canvas-container svg .vf-stem,
+.dark .score-canvas-container svg .vf-beam path,
+.dark .score-canvas-container svg .vf-rest path {
+  stroke: var(--hf-text-primary) !important;
+  fill: var(--hf-text-primary) !important;
+}
+
+/* OSMD fallback in dark mode: keep core notation readable and consistent. */
+.dark .score-canvas-container .osmd-container svg path,
+.dark .score-canvas-container .osmd-container svg line,
+.dark .score-canvas-container .osmd-container svg ellipse,
+.dark .score-canvas-container .osmd-container svg text {
+  stroke: var(--hf-text-primary) !important;
+  fill: var(--hf-text-primary) !important;
 }
 
 /* ─────────────────────────────────────────────────────────────

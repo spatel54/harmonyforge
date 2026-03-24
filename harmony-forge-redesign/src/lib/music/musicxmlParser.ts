@@ -33,6 +33,39 @@ function pitchToStr(step: string, alter: number, octave: number): string {
   return `${steps[idx]}${alterStr}${octave}`;
 }
 
+function pitchToMidi(pitch: string): number {
+  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  if (!m) return 60;
+  const stepMap: Record<string, number> = {
+    C: 0,
+    D: 2,
+    E: 4,
+    F: 5,
+    G: 7,
+    A: 9,
+    B: 11,
+  };
+  const step = m[1] ?? "C";
+  const accidental = m[2] ?? "";
+  const octave = parseInt(m[3] ?? "4", 10);
+  let midi = 12 * (octave + 1) + (stepMap[step] ?? 0);
+  if (accidental === "#") midi += 1;
+  if (accidental === "b") midi -= 1;
+  return midi;
+}
+
+function midiToPitch(midi: number): string {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const pitchClass = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  return `${names[pitchClass]}${octave}`;
+}
+
+function applyTransposition(pitch: string, semitones: number): string {
+  if (!semitones) return pitch;
+  return midiToPitch(pitchToMidi(pitch) + semitones);
+}
+
 /**
  * Extract metadata from MusicXML (work-title, part count, etc.).
  */
@@ -136,12 +169,16 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
       : findAllByLocalName(scoreTimewise, "measure");
   if (measures.length === 0) return null;
 
-  const parts: Part[] = partIds.map((partId) => ({
-    id: partId,
-    name: getPartName(partList, partId),
-    clef: PART_CLEFS[partId] ?? "treble",
-    measures: [],
-  }));
+  const parts: Part[] = partIds.map((partId, partIndex) => {
+    const partName = getPartName(partList, partId);
+    return {
+      id: partId,
+      name: partName,
+      clef: inferClef(partId, partIndex, partIds.length, partName),
+      transposeSemitones: inferTransposition(partName),
+      measures: [],
+    };
+  });
 
   let divisions = 4;
 
@@ -159,8 +196,17 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
         const partCandidates = findAllByLocalName(measureEl, "part");
         partEl = partCandidates.find((p) => p.getAttribute("id") === partId) ?? null;
       }
-      const notes = extractNotesFromElement(partEl);
-      parts[pIdx].measures.push({ id: generateId("m"), notes });
+      const notes = extractNotesFromElement(
+        partEl,
+        parts[pIdx]?.transposeSemitones ?? 0,
+      );
+      const beatsEl = measureEl.querySelector("attributes > time > beats") ?? findByLocalName(measureEl, "beats");
+      const beatTypeEl = measureEl.querySelector("attributes > time > beat-type") ?? findByLocalName(measureEl, "beat-type");
+      const timeSignature =
+        beatsEl?.textContent?.trim() && beatTypeEl?.textContent?.trim()
+          ? `${beatsEl.textContent.trim()}/${beatTypeEl.textContent.trim()}`
+          : undefined;
+      parts[pIdx].measures.push({ id: generateId("m"), notes, timeSignature });
     }
   }
 
@@ -185,20 +231,31 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
     const partEl = partEls[pIdx];
     const partId = partEl.getAttribute("id") ?? `P${pIdx + 1}`;
     const measures: Measure[] = [];
+    const partName = getPartName(partList, partId);
     const measureEls =
       partEl.querySelectorAll("measure").length > 0
         ? Array.from(partEl.querySelectorAll("measure"))
         : findAllByLocalName(partEl, "measure");
 
     for (const measureEl of measureEls) {
-      const notes = extractNotesFromElement(measureEl);
-      measures.push({ id: generateId("m"), notes });
+      const notes = extractNotesFromElement(
+        measureEl,
+        inferTransposition(partName),
+      );
+      const beatsEl = measureEl.querySelector("attributes > time > beats") ?? findByLocalName(measureEl, "beats");
+      const beatTypeEl = measureEl.querySelector("attributes > time > beat-type") ?? findByLocalName(measureEl, "beat-type");
+      const timeSignature =
+        beatsEl?.textContent?.trim() && beatTypeEl?.textContent?.trim()
+          ? `${beatsEl.textContent.trim()}/${beatTypeEl.textContent.trim()}`
+          : undefined;
+      measures.push({ id: generateId("m"), notes, timeSignature });
     }
     maxMeasures = Math.max(maxMeasures, measures.length);
     parts.push({
       id: partId,
-      name: getPartName(partList, partId),
-      clef: inferClef(partId, pIdx, partEls.length),
+      name: partName,
+      clef: inferClef(partId, pIdx, partEls.length, partName),
+      transposeSemitones: inferTransposition(partName),
       measures,
     });
   }
@@ -209,13 +266,48 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
   return { parts, divisions };
 }
 
-function inferClef(partId: string, partIndex: number, totalParts: number): string {
+function inferClef(
+  partId: string,
+  partIndex: number,
+  totalParts: number,
+  partName?: string,
+): string {
   if (PART_CLEFS[partId]) return PART_CLEFS[partId];
+  const normalized = (partName ?? "").toLowerCase();
+  if (
+    normalized.includes("cello") ||
+    normalized.includes("bass") ||
+    normalized.includes("trombone") ||
+    normalized.includes("fagot") ||
+    normalized.includes("bassoon")
+  ) {
+    return "bass";
+  }
+  if (normalized.includes("viola")) return "alto";
+  if (normalized.includes("tenor")) return "tenor";
   if (totalParts >= 4 && partIndex === totalParts - 1) return "bass";
   return "treble";
 }
 
-function extractNotesFromElement(container: Element | null): Note[] {
+function inferTransposition(partName: string): number {
+  const normalized = partName.toLowerCase();
+  if (
+    normalized.includes("clarinet in b") ||
+    normalized.includes("trumpet in b") ||
+    normalized.includes("soprano sax") ||
+    normalized.includes("tenor sax")
+  ) {
+    return -2;
+  }
+  if (normalized.includes("horn in f")) return -7;
+  if (normalized.includes("alto sax")) return -9;
+  return 0;
+}
+
+function extractNotesFromElement(
+  container: Element | null,
+  transposeSemitones = 0,
+): Note[] {
   if (!container) return [];
   const notes: Note[] = [];
   const noteEls =
@@ -224,7 +316,23 @@ function extractNotesFromElement(container: Element | null): Note[] {
       : findAllByLocalName(container, "note");
   noteEls.forEach((noteEl) => {
     const rest = noteEl.querySelector("rest") ?? findByLocalName(noteEl, "rest");
-    if (rest) return;
+    const typeEl = noteEl.querySelector("type") ?? findByLocalName(noteEl, "type");
+    const typeStr = typeEl?.textContent?.trim() ?? "quarter";
+    const duration = TYPE_TO_DURATION[typeStr] ?? "q";
+
+    const dotEl = noteEl.querySelector("dot") ?? findByLocalName(noteEl, "dot");
+    const dots = dotEl ? 1 : 0;
+
+    if (rest) {
+      notes.push({
+        id: generateId("n"),
+        pitch: "B4",
+        duration,
+        isRest: true,
+        ...(dots > 0 && { dots }),
+      });
+      return;
+    }
 
     const pitch = noteEl.querySelector("pitch") ?? findByLocalName(noteEl, "pitch");
     if (!pitch) return;
@@ -236,16 +344,12 @@ function extractNotesFromElement(container: Element | null): Note[] {
     const octaveEl = pitch.querySelector("octave") ?? findByLocalName(pitch, "octave");
     const octave = octaveEl ? parseInt(octaveEl.textContent ?? "4", 10) : 4;
 
-    const typeEl = noteEl.querySelector("type") ?? findByLocalName(noteEl, "type");
-    const typeStr = typeEl?.textContent?.trim() ?? "whole";
-    const duration = TYPE_TO_DURATION[typeStr] ?? "w";
-
-    const dotEl = noteEl.querySelector("dot") ?? findByLocalName(noteEl, "dot");
-    const dots = dotEl ? 1 : 0;
-
     notes.push({
       id: generateId("n"),
-      pitch: pitchToStr(step, alter, octave),
+      pitch: applyTransposition(
+        pitchToStr(step, alter, octave),
+        transposeSemitones,
+      ),
       duration,
       ...(dots > 0 && { dots }),
     });

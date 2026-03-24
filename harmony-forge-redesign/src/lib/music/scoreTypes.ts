@@ -9,6 +9,8 @@ export interface Note {
   id: string;
   pitch: string; // "C4", "F#5"
   duration: DurationType;
+  /** True when this is a notated rest. */
+  isRest?: boolean;
   dots?: number;
   tie?: "start" | "stop" | "continue";
   articulations?: string[];
@@ -26,6 +28,8 @@ export interface Part {
   id: string;
   name: string;
   clef: string;
+  /** Instrument transposition in semitones to concert pitch (e.g. Bb clarinet = -2). */
+  transposeSemitones?: number;
   measures: Measure[];
 }
 

@@ -1,10 +1,8 @@
 "use client";
 
 import React from "react";
-import { Undo2, Redo2, Trash2, Pencil, Eye } from "lucide-react";
+import { Undo2, Redo2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-export type DisplayMode = "view" | "edit";
 
 export interface SandboxActionBarProps {
   onUndo: () => void;
@@ -13,9 +11,8 @@ export interface SandboxActionBarProps {
   canUndo: boolean;
   canRedo: boolean;
   hasSelection: boolean;
-  /** View = OSMD display; Edit = VexFlow with note tools */
-  displayMode?: DisplayMode;
-  onDisplayModeChange?: (mode: DisplayMode) => void;
+  mode: "view" | "edit";
+  onModeChange: (mode: "view" | "edit") => void;
   className?: string;
 }
 
@@ -30,8 +27,8 @@ export function SandboxActionBar({
   canUndo,
   canRedo,
   hasSelection,
-  displayMode = "view",
-  onDisplayModeChange,
+  mode,
+  onModeChange,
   className,
 }: SandboxActionBarProps) {
   return (
@@ -45,41 +42,37 @@ export function SandboxActionBar({
       role="toolbar"
       aria-label="Edit actions"
     >
-      {onDisplayModeChange && (
-        <>
-          <button
-            type="button"
-            onClick={() => onDisplayModeChange("view")}
-            className={cn(
-              "flex items-center justify-center w-8 h-8 rounded transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--hf-accent)]",
-              displayMode === "view" && "ring-1 ring-inset"
-            )}
-            style={{
-              color: displayMode === "view" ? "var(--hf-accent)" : "var(--hf-text-secondary)",
-            }}
-            aria-label="View mode"
-            title="View (OSMD display)"
-          >
-            <Eye className="w-4 h-4" strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDisplayModeChange("edit")}
-            className={cn(
-              "flex items-center justify-center w-8 h-8 rounded transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--hf-accent)]",
-              displayMode === "edit" && "ring-1 ring-inset"
-            )}
-            style={{
-              color: displayMode === "edit" ? "var(--hf-accent)" : "var(--hf-text-secondary)",
-            }}
-            aria-label="Edit mode"
-            title="Edit (VexFlow, note tools)"
-          >
-            <Pencil className="w-4 h-4" strokeWidth={1.75} />
-          </button>
-          <div className="w-px h-5" style={{ backgroundColor: "var(--hf-detail)" }} />
-        </>
-      )}
+      <div
+        className="flex items-center rounded-md border border-[var(--hf-detail)] overflow-hidden mr-1"
+        aria-label="Notation mode"
+      >
+        <button
+          type="button"
+          onClick={() => onModeChange("view")}
+          className="px-2 py-1 text-[11px] font-mono"
+          style={{
+            backgroundColor: mode === "view" ? "var(--hf-surface)" : "transparent",
+            color: mode === "view" ? "#fff" : "var(--hf-text-primary)",
+          }}
+          aria-pressed={mode === "view"}
+          title="Reliable display mode"
+        >
+          View
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange("edit")}
+          className="px-2 py-1 text-[11px] font-mono"
+          style={{
+            backgroundColor: mode === "edit" ? "var(--hf-surface)" : "transparent",
+            color: mode === "edit" ? "#fff" : "var(--hf-text-primary)",
+          }}
+          aria-pressed={mode === "edit"}
+          title="Direct note editing mode"
+        >
+          Edit
+        </button>
+      </div>
       <button
         type="button"
         onClick={onUndo}
