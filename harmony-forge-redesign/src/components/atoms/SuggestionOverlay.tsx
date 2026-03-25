@@ -3,7 +3,7 @@
 import React from "react";
 import { Check, X } from "lucide-react";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
-import type { NotePosition } from "@/components/score/VexFlowScore";
+import type { NotePosition } from "@/lib/music/scoreTypes";
 
 export interface SuggestionOverlayProps {
   correction: ScoreCorrection;

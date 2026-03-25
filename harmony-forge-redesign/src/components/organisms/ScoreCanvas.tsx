@@ -2,24 +2,16 @@ import React from "react";
 import { Music, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SandboxContextMenu } from "./SandboxContextMenu";
-import { useSandboxStore } from "@/store/useSandboxStore";
-import { VexFlowScore } from "@/components/score/VexFlowScore";
-import { OSMDPreview } from "@/components/score/OSMDPreview";
+import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 
-export type DisplayMode = "view" | "edit";
-
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
   showViolations?: boolean;
-  /** "view" = OSMD when musicXML exists; "edit" = VexFlow when score exists (enables note tools) */
-  displayMode?: DisplayMode;
   /** Parsed score from MusicXML; when null, shows placeholder */
   score?: EditableScore | null;
-  /** Raw MusicXML string — when provided, uses OpenSheetMusicDisplay for reliable display (overrides score) */
-  musicXML?: string | null;
   /** Called when user clicks on canvas background (e.g. to clear selection) */
   onCanvasClick?: () => void;
   /** Called when user clicks on empty staff area (for note placement). Receives partId, measureIndex, noteIndex. */
@@ -34,6 +26,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
+  /** Called when the score changes from within the editor (RiffScore user edits) */
+  onScoreChange?: (score: EditableScore) => void;
 }
 
 /**
@@ -44,9 +38,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
     {
       staveLabels = ["S", "A", "T", "B"],
       showViolations = false,
-      displayMode = "view",
       score = null,
-      musicXML = null,
       onCanvasClick,
       onStaffClick,
       selection = [],
@@ -55,28 +47,21 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       pendingCorrections,
       onAcceptCorrection,
       onRejectCorrection,
+      onScoreChange,
       className,
       ...props
     },
     ref,
   ) => {
-    const [vexFlowCrashed, setVexFlowCrashed] = React.useState(false);
+    const [riffScoreCrashed, setRiffScoreCrashed] = React.useState(false);
 
-    const handleVexFlowError = React.useCallback(() => {
-      setVexFlowCrashed(true);
+    const handleRiffScoreError = React.useCallback(() => {
+      setRiffScoreCrashed(true);
     }, []);
 
     React.useEffect(() => {
-      setVexFlowCrashed(false);
+      setRiffScoreCrashed(false);
     }, [score]);
-
-    // For context menu (fix: define openContextMenu)
-    const openContextMenu = React.useCallback((x: number, y: number) => {
-      // This should be implemented or imported from context.
-      // For now, fallback to not throwing.
-      // You can hook this up to a real context menu if desired.
-      // (No-op)
-    }, []);
 
     // Stave definitions matching Pencil absolute coords
     const staves = [
@@ -139,12 +124,11 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          openContextMenu(e.clientX, e.clientY);
         }}
         {...props}
       >
-        {/* Static mockup — only when no score and no musicXML (placeholder) */}
-        {!score && !musicXML && (
+        {/* Static mockup — only when no score (placeholder) */}
+        {!score && (
           <>
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none"
@@ -392,51 +376,22 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
           </>
         )}
 
-        {/* Edit mode: VexFlow when score exists */}
-        {displayMode === "edit" && score && !vexFlowCrashed && (
+        {/* RiffScore editor when score exists */}
+        {score && !riffScoreCrashed && (
           <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <VexFlowScore
+            <RiffScoreEditor
               score={score}
               className="w-full h-full"
               selection={selection}
               onNoteClick={onNoteClick}
               visiblePartIds={visiblePartIds}
-              onError={handleVexFlowError}
+              onError={handleRiffScoreError}
+              onScoreChange={onScoreChange}
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={onAcceptCorrection}
               onRejectCorrection={onRejectCorrection}
             />
           </div>
-        )}
-
-        {/* Edit mode fallback: score unavailable, show OSMD read-only */}
-        {displayMode === "edit" && (!score || vexFlowCrashed) && musicXML && (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
-          </div>
-        )}
-
-        {/* View mode: prefer OSMD when musicXML exists, else VexFlow */}
-        {displayMode === "view" && (
-          musicXML ? (
-            <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-              <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
-            </div>
-          ) : score && !vexFlowCrashed ? (
-            <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-              <VexFlowScore
-                score={score}
-                className="w-full h-full"
-                selection={selection}
-                onNoteClick={onNoteClick}
-                visiblePartIds={visiblePartIds}
-                onError={handleVexFlowError}
-                pendingCorrections={pendingCorrections}
-                onAcceptCorrection={onAcceptCorrection}
-                onRejectCorrection={onRejectCorrection}
-              />
-            </div>
-          ) : null
         )}
 
         <SandboxContextMenu />

@@ -1,0 +1,318 @@
+/**
+ * Bidirectional adapter between HarmonyForge's EditableScore model
+ * and RiffScore's Score/Staff/Measure/ScoreEvent model.
+ */
+
+import type { EditableScore, DurationType, Note as HfNote, Part, Measure as HfMeasure } from "./scoreTypes";
+import type {
+  Score as RsScore,
+  Staff as RsStaff,
+  Measure as RsMeasure,
+  ScoreEvent,
+  Note as RsNote,
+  RiffScoreConfig,
+} from "riffscore";
+
+// ---------------------------------------------------------------------------
+// Duration maps
+// ---------------------------------------------------------------------------
+
+const HF_TO_RS_DURATION: Record<DurationType, string> = {
+  w: "whole",
+  h: "half",
+  q: "quarter",
+  "8": "eighth",
+  "16": "sixteenth",
+  "32": "thirtysecond",
+};
+
+const RS_TO_HF_DURATION: Record<string, DurationType> = {
+  whole: "w",
+  half: "h",
+  quarter: "q",
+  eighth: "8",
+  sixteenth: "16",
+  thirtysecond: "32",
+};
+
+export function hfDurationToRs(d: DurationType): string {
+  return HF_TO_RS_DURATION[d] ?? "quarter";
+}
+
+export function rsDurationToHf(d: string): DurationType {
+  return RS_TO_HF_DURATION[d] ?? "q";
+}
+
+// ---------------------------------------------------------------------------
+// Clef maps
+// ---------------------------------------------------------------------------
+
+/** SATB part name -> RiffScore clef */
+const PART_CLEF_MAP: Record<string, "treble" | "bass" | "alto" | "tenor"> = {
+  soprano: "treble",
+  alto: "treble",
+  tenor: "tenor",
+  bass: "bass",
+};
+
+function hfClefToRs(clef: string): "treble" | "bass" | "alto" | "tenor" {
+  const lower = clef.toLowerCase();
+  if (lower in PART_CLEF_MAP) return PART_CLEF_MAP[lower];
+  if (lower === "treble" || lower === "bass" || lower === "alto" || lower === "tenor") {
+    return lower as "treble" | "bass" | "alto" | "tenor";
+  }
+  return "treble";
+}
+
+// ---------------------------------------------------------------------------
+// Pitch helpers
+// ---------------------------------------------------------------------------
+
+/** Parse accidental from HarmonyForge pitch string. "F#5" -> { letter: "F", acc: "sharp", octave: "5" } */
+function parsePitch(pitch: string): { letter: string; accidental: "sharp" | "flat" | "natural" | null; octave: string } {
+  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  if (!m) return { letter: "C", accidental: null, octave: "4" };
+  const acc = m[2] === "#" ? "sharp" as const : m[2] === "b" ? "flat" as const : null;
+  return { letter: m[1], accidental: acc, octave: m[3] };
+}
+
+/** Convert RiffScore note to HarmonyForge pitch string. */
+function rsPitchToHf(note: RsNote): string {
+  if (!note.pitch) return "C4";
+  // RiffScore pitch is already "C4", "F#5", etc.
+  // But accidentals may be stored separately
+  let pitch = note.pitch;
+  if (note.accidental === "sharp" && !pitch.includes("#")) {
+    const m = pitch.match(/^([A-G])(\d+)$/);
+    if (m) pitch = `${m[1]}#${m[2]}`;
+  } else if (note.accidental === "flat" && !pitch.includes("b")) {
+    const m = pitch.match(/^([A-G])(\d+)$/);
+    if (m) pitch = `${m[1]}b${m[2]}`;
+  }
+  return pitch;
+}
+
+// ---------------------------------------------------------------------------
+// Key signature conversion
+// ---------------------------------------------------------------------------
+
+/** HarmonyForge uses numeric key sig (positive = sharps, negative = flats).
+ *  RiffScore uses string key names like "C", "G", "F", "Bb", etc. */
+const FIFTHS_TO_KEY: Record<number, string> = {
+  "-7": "Cb", "-6": "Gb", "-5": "Db", "-4": "Ab", "-3": "Eb", "-2": "Bb", "-1": "F",
+  "0": "C", "1": "G", "2": "D", "3": "A", "4": "E", "5": "B", "6": "F#", "7": "C#",
+};
+
+const KEY_TO_FIFTHS: Record<string, number> = {};
+for (const [k, v] of Object.entries(FIFTHS_TO_KEY)) {
+  KEY_TO_FIFTHS[v] = parseInt(k, 10);
+}
+
+function hfKeySigToRs(keySig: number | undefined): string {
+  if (keySig === undefined) return "C";
+  return FIFTHS_TO_KEY[keySig] ?? "C";
+}
+
+function rsKeySigToHf(keySig: string): number {
+  return KEY_TO_FIFTHS[keySig] ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// ID mapping
+// ---------------------------------------------------------------------------
+
+export type IdMap = Map<string, string>;
+
+/**
+ * Build a bidirectional ID map correlating HarmonyForge note IDs
+ * to RiffScore note IDs by position (staff/measure/event/note index).
+ */
+export function buildIdMap(hfScore: EditableScore, rsScore: RsScore): { hfToRs: IdMap; rsToHf: IdMap } {
+  const hfToRs: IdMap = new Map();
+  const rsToHf: IdMap = new Map();
+
+  const staffCount = Math.min(hfScore.parts.length, rsScore.staves.length);
+  for (let si = 0; si < staffCount; si++) {
+    const part = hfScore.parts[si];
+    const staff = rsScore.staves[si];
+    const measCount = Math.min(part.measures.length, staff.measures.length);
+
+    for (let mi = 0; mi < measCount; mi++) {
+      const hfMeasure = part.measures[mi];
+      const rsMeasure = staff.measures[mi];
+      const eventCount = Math.min(hfMeasure.notes.length, rsMeasure.events.length);
+
+      for (let ei = 0; ei < eventCount; ei++) {
+        const hfNote = hfMeasure.notes[ei];
+        const rsEvent = rsMeasure.events[ei];
+        // RiffScore events can have multiple notes (chords); for SATB monophonic we use notes[0]
+        const rsNote = rsEvent.notes[0];
+        if (hfNote && rsNote) {
+          hfToRs.set(hfNote.id, rsNote.id);
+          rsToHf.set(rsNote.id, hfNote.id);
+        }
+      }
+    }
+  }
+
+  return { hfToRs, rsToHf };
+}
+
+// ---------------------------------------------------------------------------
+// EditableScore -> RiffScoreConfig
+// ---------------------------------------------------------------------------
+
+function hfNoteToRsEvent(note: HfNote): ScoreEvent {
+  const { accidental } = parsePitch(note.pitch);
+  const rsNote: RsNote = {
+    id: `rs-${note.id}`,
+    pitch: note.pitch,
+    accidental: accidental,
+    tied: note.tie === "start" || note.tie === "continue",
+    isRest: false,
+  };
+
+  return {
+    id: `rse-${note.id}`,
+    duration: hfDurationToRs(note.duration),
+    dotted: (note.dots ?? 0) > 0,
+    notes: [rsNote],
+    isRest: false,
+  };
+}
+
+function hfMeasureToRs(measure: HfMeasure): RsMeasure {
+  return {
+    id: `rsm-${measure.id}`,
+    events: measure.notes.map(hfNoteToRsEvent),
+  };
+}
+
+function hfPartToRsStaff(part: Part): RsStaff {
+  const firstMeasure = part.measures[0];
+  return {
+    id: `rss-${part.id}`,
+    clef: hfClefToRs(part.clef),
+    keySignature: hfKeySigToRs(firstMeasure?.keySignature),
+    measures: part.measures.map(hfMeasureToRs),
+  };
+}
+
+/**
+ * Convert an EditableScore into a RiffScoreConfig for loading into the RiffScore component.
+ */
+export function editableScoreToRiffConfig(
+  score: EditableScore,
+  options?: { theme?: "DARK" | "LIGHT"; scale?: number },
+): Partial<RiffScoreConfig> {
+  const firstMeasure = score.parts[0]?.measures[0];
+  const timeSignature = firstMeasure?.timeSignature ?? "4/4";
+  const keySignature = hfKeySigToRs(firstMeasure?.keySignature);
+
+  return {
+    ui: {
+      showToolbar: true,
+      scale: options?.scale ?? 1,
+      theme: options?.theme ?? "DARK",
+      showBackground: false,
+      showScoreTitle: false,
+    },
+    interaction: {
+      isEnabled: true,
+      enableKeyboard: true,
+      enablePlayback: true,
+    },
+    score: {
+      title: "",
+      bpm: 120,
+      timeSignature,
+      keySignature,
+      staves: score.parts.map(hfPartToRsStaff),
+    },
+  };
+}
+
+/**
+ * Convert an EditableScore into a RiffScore Score object for loadScore() API.
+ */
+export function editableScoreToRsScore(score: EditableScore): RsScore {
+  const firstMeasure = score.parts[0]?.measures[0];
+  return {
+    title: "",
+    timeSignature: firstMeasure?.timeSignature ?? "4/4",
+    keySignature: hfKeySigToRs(firstMeasure?.keySignature),
+    bpm: 120,
+    staves: score.parts.map(hfPartToRsStaff),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// RsScore -> EditableScore
+// ---------------------------------------------------------------------------
+
+function rsEventToHfNote(event: ScoreEvent, idMap: IdMap): HfNote | null {
+  if (event.isRest || event.notes.length === 0) return null;
+  const rsNote = event.notes[0];
+  if (!rsNote.pitch) return null;
+
+  // Try to recover original HF note ID from the map
+  const hfId = idMap.get(rsNote.id) ?? `n-${rsNote.id}`;
+
+  const pitch = rsPitchToHf(rsNote);
+  const duration = rsDurationToHf(event.duration);
+  const dots = event.dotted ? 1 : 0;
+  const tie = rsNote.tied ? "start" as const : undefined;
+
+  return { id: hfId, pitch, duration, dots, tie };
+}
+
+function rsMeasureToHf(measure: RsMeasure, idMap: IdMap, index: number): HfMeasure {
+  const notes: HfNote[] = [];
+  for (const event of measure.events) {
+    const note = rsEventToHfNote(event, idMap);
+    if (note) notes.push(note);
+  }
+  return {
+    id: `m-${measure.id ?? index}`,
+    notes,
+  };
+}
+
+function rsStaffToHfPart(staff: RsStaff, partName: string, partId: string, idMap: IdMap): Part {
+  return {
+    id: partId,
+    name: partName,
+    clef: staff.clef === "grand" ? "treble" : staff.clef,
+    measures: staff.measures.map((m, i) => rsMeasureToHf(m, idMap, i)),
+  };
+}
+
+const DEFAULT_PART_NAMES = ["Soprano", "Alto", "Tenor", "Bass"];
+const DEFAULT_PART_IDS = ["soprano", "alto", "tenor", "bass"];
+
+/**
+ * Convert a RiffScore Score object back into an EditableScore.
+ * Uses the rsToHf ID map to preserve original note IDs where possible.
+ */
+export function riffScoreToEditableScore(
+  rsScore: RsScore,
+  rsToHf: IdMap,
+  originalParts?: Part[],
+): EditableScore {
+  const parts = rsScore.staves.map((staff, i) => {
+    const name = originalParts?.[i]?.name ?? DEFAULT_PART_NAMES[i] ?? `Part ${i + 1}`;
+    const id = originalParts?.[i]?.id ?? DEFAULT_PART_IDS[i] ?? `part-${i}`;
+    return rsStaffToHfPart(staff, name, id, rsToHf);
+  });
+
+  // Propagate key/time signature from the RiffScore score level
+  const keySig = rsKeySigToHf(rsScore.keySignature);
+  for (const part of parts) {
+    if (part.measures.length > 0) {
+      part.measures[0].keySignature = keySig;
+      part.measures[0].timeSignature = rsScore.timeSignature;
+    }
+  }
+
+  return { parts, divisions: 1 };
+}

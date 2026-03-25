@@ -41,6 +41,30 @@
         "uriFormat": "%s/sandbox",
         "action": "debugWithChrome"
       }
+    },
+    {
+      "name": "HarmonyForge Backend (port 8000)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/..",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "watch", "engine/server.ts"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "listening on (https?://.+)",
+        "uriFormat": "%s/health",
+        "action": "openExternally"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack + Backend",
+      "configurations": [
+        "Next.js: debug full stack",
+        "HarmonyForge Backend (port 8000)"
+      ]
     }
   ]
 }

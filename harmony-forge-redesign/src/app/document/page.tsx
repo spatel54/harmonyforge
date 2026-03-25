@@ -113,7 +113,6 @@ export default function DocumentPage() {
         <div className="flex flex-row flex-1 min-h-0">
           <ScorePreviewPanel
             score={previewScore}
-            musicXML={previewMusicXML}
             scoreTitle={previewMeta?.title ?? (file ? file.name.replace(/\.[^/.]+$/, "") : "The First Noel")}
             scoreMeta={previewMeta?.meta ?? "Traditional • 4 voices • Page 1 of 4"}
             onReupload={() => router.push("/")}

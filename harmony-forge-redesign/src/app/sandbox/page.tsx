@@ -2,9 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { ZoomIn, ZoomOut } from "lucide-react";
 import { SandboxHeader } from "@/components/organisms/SandboxHeader";
-import { ScorePalette } from "@/components/organisms/ScorePalette";
 import { ScoreCanvas } from "@/components/organisms/ScoreCanvas";
 import { useUploadStore } from "@/store/useUploadStore";
 import { useScoreStore, getClipboard, setClipboard, pasteNotes } from "@/store/useScoreStore";
@@ -24,9 +22,7 @@ import {
 import { useToolStore } from "@/store/useToolStore";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
-import { SandboxPlaybackBar } from "@/components/molecules/SandboxPlaybackBar";
 import { usePlayback } from "@/hooks/usePlayback";
-import { SandboxActionBar } from "@/components/molecules/SandboxActionBar";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
@@ -34,17 +30,6 @@ import { useTheoryInspector } from "@/hooks/useTheoryInspector";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
-
-const TOOL_GROUPS = [
-  "SCORE",
-  "EDIT",
-  "DURATION",
-  "PITCH",
-  "TEXT",
-  "MEASURE",
-  "DYNAMICS",
-  "ARTICULATION",
-];
 
 /**
  * TactileSandboxPage
@@ -384,8 +369,7 @@ export default function TactileSandboxPage() {
   }, []);
 
   // Search + filter (multi-select)
-  const [searchValue, setSearchValue] = React.useState("");
-  const [activeFilters, setActiveFilters] = React.useState<string[]>(["All Tools"]);
+  // searchValue and activeFilters removed — RiffScore provides its own toolbar
 
   // Note input: selected duration for click-on-staff placement (Noteflight/MuseScore-style)
   const durationForInput = React.useMemo(() => {
@@ -436,9 +420,7 @@ export default function TactileSandboxPage() {
   }, [pendingCorrections.length, displayMode]);
 
   // Zoom
-  const [zoom, setZoom] = React.useState(100);
-  const handleZoomIn = () => setZoom((z) => Math.min(200, z + 25));
-  const handleZoomOut = () => setZoom((z) => Math.max(50, z - 25));
+  // Zoom removed — RiffScore provides its own scale controls
 
   // Run audit when inspector is opened and score exists
   React.useEffect(() => {
@@ -503,172 +485,29 @@ export default function TactileSandboxPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left column */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {/* ScorePalette — search & filter wired */}
-          <div className="relative shrink-0">
-            <ScorePalette
-              className="h-[192px]"
-              searchValue={searchValue}
-              onSearchChange={setSearchValue}
-              activeFilters={activeFilters}
-              onFilterChange={setActiveFilters}
-              filterOptions={["All Tools", ...TOOL_GROUPS]}
-              onToolSelect={handleToolSelect}
-              activeToolId={activeTool}
-              disabledToolIds={[
-                ...(!canUndo ? ["edit-undo"] : []),
-                ...(!canRedo ? ["edit-redo"] : []),
-              ]}
+          {/* RiffScore editor — includes its own toolbar, score canvas, and playback */}
+          <div className="relative flex-1 min-h-[320px] overflow-hidden">
+            <ScoreCanvas
+              className="w-full h-full"
+              score={scoreForCanvas}
+              showViolations={isInspectorOpen}
+              onCanvasClick={clearSelection}
+              onStaffClick={isNoteInputMode ? handleStaffClick : undefined}
+              selection={selection}
+              onNoteClick={toggleNoteSelection}
+              visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
+              pendingCorrections={pendingCorrections}
+              onAcceptCorrection={handleAcceptCorrection}
+              onRejectCorrection={handleRejectCorrection}
             />
-            {layersPanelOpen && score && (
-              <div
-                className="absolute left-4 top-full mt-1 z-50 rounded-lg px-3 py-2 shadow-lg min-w-[140px]"
-                style={{
-                  backgroundColor: "var(--hf-bg)",
-                  border: "1px solid var(--hf-detail)",
-                }}
-              >
-                <div className="text-[11px] font-medium mb-2" style={{ color: "var(--hf-text-secondary)" }}>
-                  Visible parts
-                </div>
-                {score.parts.map((part) => {
-                  const isVisible = visibleParts.size === 0 || visibleParts.has(part.id);
-                  return (
-                    <label
-                      key={part.id}
-                      className="flex items-center gap-2 py-1 cursor-pointer text-[13px]"
-                      style={{ color: "var(--hf-text-primary)" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isVisible}
-                        onChange={() => togglePartVisibility(part.id)}
-                        className="rounded"
-                      />
-                      {part.name}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* 2g.4: Action bar — Undo, Redo, Delete always visible (Noteflight pattern) */}
-          <div className="shrink-0 flex items-center px-4 py-2">
-            <SandboxActionBar
-              onUndo={undo}
-              onRedo={redo}
-              onDelete={() => handleToolSelect("edit-delete")}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              hasSelection={selection.length > 0}
-              displayMode={displayMode}
-              onDisplayModeChange={setDisplayMode}
-            />
-          </div>
-
-          {/* Canvas wrapper — relative for FAB + zoom controls; min-h ensures visible area */}
-          <div className="relative flex-1 min-h-[320px] overflow-auto">
-            <div
-              className="w-full h-full min-h-[320px]"
-              style={{
-                transform: `scale(${zoom / 100})`,
-                transformOrigin: "top left",
-              }}
-            >
-              <ScoreCanvas
-                className="w-full h-full min-h-[320px]"
-                score={scoreForCanvas}
-                musicXML={generatedMusicXML}
-                displayMode={displayMode}
-                showViolations={isInspectorOpen}
-                onCanvasClick={clearSelection}
-                onStaffClick={isNoteInputMode ? handleStaffClick : undefined}
-                selection={selection}
-                onNoteClick={toggleNoteSelection}
-                visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
-                pendingCorrections={pendingCorrections}
-                onAcceptCorrection={handleAcceptCorrection}
-                onRejectCorrection={handleRejectCorrection}
-              />
-            </div>
-
-            {/* Zoom controls — bottom-left of canvas */}
-            <div
-              className="absolute bottom-[28px] left-[24px] flex items-center gap-[4px] rounded-[6px] px-[8px] py-[6px]"
-              style={{
-                backgroundColor: "var(--hf-bg)",
-                border: "1px solid var(--hf-detail)",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                disabled={zoom <= 50}
-                className="flex items-center justify-center w-[24px] h-[24px] rounded-[4px] transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hf-accent)"
-                aria-label="Zoom out"
-              >
-                <ZoomOut
-                  className="w-[14px] h-[14px]"
-                  style={{ color: "var(--hf-text-primary)" }}
-                  strokeWidth={1.75}
-                />
-              </button>
-
-              <span
-                className="font-mono text-[11px] font-medium tabular-nums w-[34px] text-center select-none"
-                style={{ color: "var(--hf-text-primary)" }}
-              >
-                {zoom}%
-              </span>
-
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                disabled={zoom >= 200}
-                className="flex items-center justify-center w-[24px] h-[24px] rounded-[4px] transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hf-accent)"
-                aria-label="Zoom in"
-              >
-                <ZoomIn
-                  className="w-[14px] h-[14px]"
-                  style={{ color: "var(--hf-text-primary)" }}
-                  strokeWidth={1.75}
-                />
-              </button>
-            </div>
 
             {/* ChatFAB — shown only when inspector is closed */}
             {!isInspectorOpen && (
-              <div className="absolute bottom-[28px] right-[28px]">
+              <div className="absolute bottom-[28px] right-[28px] z-10">
                 <ChatFAB onClick={() => setIsInspectorOpen(true)} />
               </div>
             )}
           </div>
-
-          {/* Playback bar */}
-          <SandboxPlaybackBar
-            className="shrink-0"
-            title={playbackMeta.title}
-            subtitle={playbackMeta.subtitle}
-            isPlaying={isPlaying}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPlayPause={() => (isPlaying ? pause() : play())}
-            onSkipBack={() => {
-              stop();
-              setCurrentPage(1);
-            }}
-            onSkipForward={() => {
-              stop();
-              setCurrentPage(totalPages);
-            }}
-            onRewind={() => stop()}
-            onFastForward={() => stop()}
-            onPrevPage={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            onNextPage={() =>
-              setCurrentPage((p) => Math.min(totalPages, p + 1))
-            }
-          />
         </div>
 
         {/* Right column: Theory Inspector — resizable */}

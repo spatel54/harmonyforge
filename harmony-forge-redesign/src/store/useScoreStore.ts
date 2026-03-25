@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EditableScore, Note } from "@/lib/music/scoreTypes";
-import { cloneScore, deleteNotes, extractNotes } from "@/lib/music/scoreUtils";
+import { cloneScore, deleteNotes } from "@/lib/music/scoreUtils";
 import { generateId } from "@/lib/music/scoreTypes";
 
 export interface NoteSelection {
@@ -17,6 +17,9 @@ export interface ScoreState {
   history: EditableScore[];
   historyIndex: number;
   visibleParts: Set<string>;
+  /** When true, undo/redo is managed by RiffScore's command history. */
+  isExternallyManaged: boolean;
+  setExternallyManaged: (managed: boolean) => void;
   setVisibleParts: (parts: Set<string>) => void;
   togglePartVisibility: (partId: string) => void;
   setScore: (score: EditableScore | null) => void;
@@ -34,6 +37,8 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   history: [],
   historyIndex: -1,
   visibleParts: new Set<string>(),
+  isExternallyManaged: false,
+  setExternallyManaged: (managed) => set({ isExternallyManaged: managed }),
   setVisibleParts: (visibleParts) => set({ visibleParts }),
   togglePartVisibility: (partId) => {
     const { visibleParts } = get();
