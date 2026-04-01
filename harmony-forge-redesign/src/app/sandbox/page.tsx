@@ -2,9 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { ZoomIn, ZoomOut } from "lucide-react";
 import { SandboxHeader } from "@/components/organisms/SandboxHeader";
-import { ScorePalette } from "@/components/organisms/ScorePalette";
 import { ScoreCanvas } from "@/components/organisms/ScoreCanvas";
 import { useUploadStore } from "@/store/useUploadStore";
 import { useScoreStore, getClipboard, setClipboard, pasteNotes } from "@/store/useScoreStore";
@@ -28,28 +26,16 @@ import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
-import { SandboxPlaybackBar } from "@/components/molecules/SandboxPlaybackBar";
 import { usePlayback } from "@/hooks/usePlayback";
-import { SandboxActionBar } from "@/components/molecules/SandboxActionBar";
-import {
-  TheoryInspectorPanel,
-  type TheoryInspectorMessage,
-} from "@/components/organisms/TheoryInspectorPanel";
+import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
+import { useTheoryInspector } from "@/hooks/useTheoryInspector";
+import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
+import { useSuggestionStore } from "@/store/useSuggestionStore";
+import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
-
-const TOOL_GROUPS = [
-  "SCORE",
-  "EDIT",
-  "DURATION",
-  "PITCH",
-  "TEXT",
-  "MEASURE",
-  "DYNAMICS",
-  "ARTICULATION",
-];
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DURATION_TOOL_ORDER = [
@@ -60,20 +46,6 @@ const DURATION_TOOL_ORDER = [
   "duration-half",
   "duration-whole",
 ] as const;
-
-/** Initial inspector payload (before first user query). */
-const INITIAL_MESSAGES: TheoryInspectorMessage[] = [
-  {
-    id: "init-sys",
-    type: "system",
-    content: "Theory Inspector ready. Ask for explanations or suggested fixes.",
-  },
-  {
-    id: "init-chips",
-    type: "chips",
-    chips: ["Validate harmony", "Why is this flagged?", "Suggest correction"],
-  },
-];
 
 type MeasureHighlight = {
   measureIndex: number;
@@ -156,6 +128,72 @@ export default function TactileSandboxPage() {
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
   const { score, setScore, undo, redo, canUndo, canRedo, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
+  const {
+    messages: inspectorMessages,
+    inputValue: chatInput,
+    setInputValue: setChatInput,
+    isStreaming,
+    sendMessage,
+    handleChipClick,
+    runAudit,
+    clearMessages,
+  } = useTheoryInspector();
+  const suggestionStore = useSuggestionStore();
+  const pendingCorrections = suggestionStore.getPendingCorrections();
+
+  // Build suggestion batch map for the panel
+  const suggestionBatchMap = React.useMemo(() => {
+    const map = new Map<string, { corrections: import("@/lib/music/suggestionTypes").ScoreCorrection[]; summary: string }>();
+    for (const batch of suggestionStore.batches) {
+      map.set(batch.id, { corrections: batch.corrections, summary: batch.summary });
+    }
+    return map;
+  }, [suggestionStore.batches]);
+
+  // Accept/reject correction handlers
+  const handleAcceptCorrection = React.useCallback(
+    (correctionId: string) => {
+      if (!score) return;
+      const allCorrections = suggestionStore.batches.flatMap((b) => b.corrections);
+      const correction = allCorrections.find((c) => c.id === correctionId);
+      if (!correction) return;
+      const nextScore = applySuggestion(score, correction);
+      applyScore(nextScore);
+      suggestionStore.acceptCorrection(correctionId);
+    },
+    [score, applyScore, suggestionStore],
+  );
+
+  const handleRejectCorrection = React.useCallback(
+    (correctionId: string) => {
+      suggestionStore.rejectCorrection(correctionId);
+    },
+    [suggestionStore],
+  );
+
+  const handleAcceptAll = React.useCallback(
+    (batchId: string) => {
+      if (!score) return;
+      const batch = suggestionStore.batches.find((b) => b.id === batchId);
+      if (!batch) return;
+      const pending = batch.corrections.filter(
+        (c) => suggestionStore.correctionStatuses[c.id] === "pending",
+      );
+      if (pending.length === 0) return;
+      const nextScore = applySuggestions(score, pending);
+      applyScore(nextScore);
+      suggestionStore.acceptAll(batchId);
+    },
+    [score, applyScore, suggestionStore],
+  );
+
+  const handleRejectAll = React.useCallback(
+    (batchId: string) => {
+      suggestionStore.rejectAll(batchId);
+    },
+    [suggestionStore],
+  );
+
   const { cursor, setCursor, clearCursor } = useEditCursorStore();
 
   // Restore from sessionStorage on mount, then redirect if still no music
@@ -588,12 +626,7 @@ export default function TactileSandboxPage() {
   }, []);
 
   // Search + filter (multi-select)
-  const [searchValue, setSearchValue] = React.useState("");
-  const [activeFilters, setActiveFilters] = React.useState<string[]>([
-    "EDIT",
-    "DURATION",
-    "PITCH",
-  ]);
+  // searchValue and activeFilters removed — RiffScore provides its own toolbar
 
   // Note input: selected duration for click-on-staff placement (Noteflight/MuseScore-style)
   const durationForInput = React.useMemo(() => {
@@ -781,112 +814,41 @@ export default function TactileSandboxPage() {
     [score, applyScore, selection, setSelection]
   );
 
-  // Zoom
-  const [zoom, setZoom] = React.useState(100);
-  const handleZoomIn = () => setZoom((z) => Math.min(200, z + 25));
-  const handleZoomOut = () => setZoom((z) => Math.max(50, z - 25));
-
-  // Chat state (edit 4)
-  const [chatInput, setChatInput] = React.useState("");
-  const [messages, setMessages] = React.useState<TheoryInspectorMessage[]>([]);
-  const [inspectorBusy, setInspectorBusy] = React.useState(false);
-
-  // Populate mock data when the inspector is opened
+  // Auto-switch to edit mode when suggestions arrive (ghost notes need VexFlow)
   React.useEffect(() => {
-    if (isInspectorOpen && messages.length === 0) {
-      setMessages(INITIAL_MESSAGES);
+    if (pendingCorrections.length > 0 && canvasMode === "view") {
+      setCanvasMode("edit");
     }
-  }, [isInspectorOpen, messages.length]);
+  }, [pendingCorrections.length, canvasMode]);
 
-  const handleSend = React.useCallback(async () => {
-    const text = chatInput.trim();
-    if (!text || inspectorBusy) return;
-    const now = new Date().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const userMsg = {
-      id: `u-${Date.now()}`,
-      type: "user" as const,
-      content: text,
-      timestamp: now,
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
-    setInspectorBusy(true);
-    try {
-      const res = await fetch("/api/theory-inspector", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: text,
-          musicXML: generatedMusicXML,
-        }),
+  // Zoom
+  // Zoom removed — RiffScore provides its own scale controls
+
+  // Run audit when inspector is opened and score exists
+  React.useEffect(() => {
+    if (isInspectorOpen && inspectorMessages.length === 0) {
+      // Welcome message + initial chips before user types anything
+      const { addMessage } = useTheoryInspectorStore.getState();
+      addMessage({
+        id: `sys-welcome-${Date.now()}`,
+        type: "system",
+        content: "Theory Inspector ready. What would you like to analyze?",
+        timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
       });
-      if (!res.ok) throw new Error("Theory Inspector unavailable");
-      const data = (await res.json()) as {
-        reply?: string;
-        validation?: {
-          violations?: unknown;
-        } | null;
-        highlights?: Array<{
-          measureIndex: number;
-          color: "red" | "blue";
-          label?: string;
-        }>;
-      };
-
-      const timestamp = new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
+      addMessage({
+        id: `chips-welcome-${Date.now()}`,
+        type: "chips",
+        chips: ["Check voice leading", "Suggest correction", "Explain this chord"],
       });
 
-      const aiMsg: TheoryInspectorMessage = {
-        id: `ai-${Date.now()}`,
-        type: "ai",
-        content: data.reply ?? "I could not generate a response.",
-        timestamp,
-      };
-
-      const violations = toViolationMessages(data.validation).slice(0, 2).map((v, idx) => ({
-        id: `vio-${Date.now()}-${idx}`,
-        type: "violation" as const,
-        violationType: v.type,
-        content: v.message,
-        timestamp,
-      }));
-
-      setMessages((prev) => [...prev, ...violations, aiMsg]);
-      const maxMeasures = Math.max(
-        0,
-        ...(score?.parts.map((part) => part.measures.length) ?? [0]),
-      );
-      const parsedHighlights = parseInspectorHighlights(
-        data.highlights ?? [],
-        maxMeasures,
-      );
-      if (parsedHighlights.length > 0) {
-        setCanvasMode("edit");
-      }
-      setMeasureHighlights(parsedHighlights);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          type: "ai",
-          content:
-            "Theory Inspector is temporarily unavailable. You can continue editing, or try again in a moment.",
-          timestamp: new Date().toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    } finally {
-      setInspectorBusy(false);
+      // Also run audit if score is available
+      if (score) runAudit(score);
     }
-  }, [chatInput, generatedMusicXML, inspectorBusy, score]);
+  }, [isInspectorOpen, score, inspectorMessages.length, runAudit]);
+
+  const handleSend = React.useCallback(() => {
+    sendMessage(chatInput);
+  }, [sendMessage, chatInput]);
 
   const handleExport = async (format: string) => {
     if (!score) return;
@@ -951,21 +913,20 @@ export default function TactileSandboxPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left column */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {/* ScorePalette — search & filter wired */}
-          <div className="relative shrink-0">
-            <ScorePalette
-              className="h-[192px]"
-              searchValue={searchValue}
-              onSearchChange={setSearchValue}
-              activeFilters={activeFilters}
-              onFilterChange={setActiveFilters}
-              filterOptions={["All Tools", ...TOOL_GROUPS]}
-              onToolSelect={handleToolSelect}
-              activeToolId={activeTool}
-              disabledToolIds={[
-                ...(!canUndo ? ["edit-undo"] : []),
-                ...(!canRedo ? ["edit-redo"] : []),
-              ]}
+          {/* RiffScore editor — includes its own toolbar, score canvas, and playback */}
+          <div className="relative flex-1 min-h-[320px] overflow-hidden">
+            <ScoreCanvas
+              className="w-full h-full"
+              score={scoreForCanvas}
+              showViolations={isInspectorOpen}
+              onCanvasClick={clearSelection}
+              onStaffClick={isNoteInputMode ? handleStaffClick : undefined}
+              selection={selection}
+              onNoteClick={toggleNoteSelection}
+              visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
+              pendingCorrections={pendingCorrections}
+              onAcceptCorrection={handleAcceptCorrection}
+              onRejectCorrection={handleRejectCorrection}
             />
             {layersPanelOpen && score && (
               <div
@@ -998,136 +959,14 @@ export default function TactileSandboxPage() {
                 })}
               </div>
             )}
-          </div>
-
-          {/* 2g.4: Action bar — Undo, Redo, Delete always visible (Noteflight pattern) */}
-          <div className="shrink-0 flex items-center px-4 py-2">
-            <SandboxActionBar
-              onUndo={undo}
-              onRedo={redo}
-              onDelete={() => handleToolSelect("edit-delete")}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              hasSelection={selection.length > 0}
-              mode={canvasMode}
-              onModeChange={setCanvasMode}
-            />
-            <span
-              className="ml-3 text-[11px] font-mono opacity-70"
-              style={{ color: "var(--hf-text-secondary)" }}
-            >
-              A-G insert/pitch, 1-6 duration, arrows move cursor or transpose selection
-            </span>
-          </div>
-
-          {/* Canvas wrapper — relative for FAB + zoom controls; min-h ensures visible area */}
-          <div className="relative flex-1 min-h-[320px] overflow-auto">
-            <div
-              className="w-full h-full min-h-[320px]"
-              style={{
-                transform: `scale(${zoom / 100})`,
-                transformOrigin: "top left",
-              }}
-            >
-              <ScoreCanvas
-                className="w-full h-full min-h-[320px]"
-                score={scoreForCanvas}
-                musicXML={generatedMusicXML}
-                showViolations={isInspectorOpen}
-                onCanvasClick={() => {
-                  clearSelection();
-                  clearCursor();
-                }}
-                onStaffClick={isNoteInputMode ? handleStaffClick : undefined}
-                selection={selection}
-                onNoteClick={toggleNoteSelection}
-                onNoteDrag={handleNoteDrag}
-                visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
-                preferEditMode={canvasMode === "edit"}
-                measureHighlights={measureHighlights}
-                cursor={cursor}
-                onCursorChange={setCursor}
-              />
-            </div>
-
-            {/* Zoom controls — bottom-left of canvas */}
-            <div
-              className="absolute bottom-[28px] left-[24px] flex items-center gap-[4px] rounded-[6px] px-[8px] py-[6px]"
-              style={{
-                backgroundColor: "var(--hf-bg)",
-                border: "1px solid var(--hf-detail)",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                disabled={zoom <= 50}
-                className="flex items-center justify-center w-[24px] h-[24px] rounded-[4px] transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hf-accent)"
-                aria-label="Zoom out"
-              >
-                <ZoomOut
-                  className="w-[14px] h-[14px]"
-                  style={{ color: "var(--hf-text-primary)" }}
-                  strokeWidth={1.75}
-                />
-              </button>
-
-              <span
-                className="font-mono text-[11px] font-medium tabular-nums w-[34px] text-center select-none"
-                style={{ color: "var(--hf-text-primary)" }}
-              >
-                {zoom}%
-              </span>
-
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                disabled={zoom >= 200}
-                className="flex items-center justify-center w-[24px] h-[24px] rounded-[4px] transition-opacity hover:opacity-70 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hf-accent)"
-                aria-label="Zoom in"
-              >
-                <ZoomIn
-                  className="w-[14px] h-[14px]"
-                  style={{ color: "var(--hf-text-primary)" }}
-                  strokeWidth={1.75}
-                />
-              </button>
-            </div>
 
             {/* ChatFAB — shown only when inspector is closed */}
             {!isInspectorOpen && (
-              <div className="absolute bottom-[28px] right-[28px]">
+              <div className="absolute bottom-[28px] right-[28px] z-10">
                 <ChatFAB onClick={() => setIsInspectorOpen(true)} />
               </div>
             )}
           </div>
-
-          {/* Playback bar */}
-          <SandboxPlaybackBar
-            className="shrink-0"
-            title={playbackMeta.title}
-            subtitle={playbackMeta.subtitle}
-            isPlaying={isPlaying}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPlayPause={() => (isPlaying ? pause() : play())}
-            canPlay={canPlay}
-            onSkipBack={() => {
-              stop();
-              setCurrentPage(1);
-            }}
-            onSkipForward={() => {
-              stop();
-              setCurrentPage(totalPages);
-            }}
-            onRewind={() => stop()}
-            onFastForward={() => stop()}
-            onPrevPage={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            onNextPage={() =>
-              setCurrentPage((p) => Math.min(totalPages, p + 1))
-            }
-          />
         </div>
 
         {/* Right column: Theory Inspector — resizable */}
@@ -1151,12 +990,22 @@ export default function TactileSandboxPage() {
 
             <TheoryInspectorPanel
               className="h-full flex-1"
-              messages={messages}
+              messages={inspectorMessages}
               inputValue={chatInput}
+              isStreaming={isStreaming}
               onInputChange={setChatInput}
               onSend={handleSend}
-              onChipClick={(chip) => setChatInput(chip)}
+              onChipClick={(chip) => handleChipClick(chip, score)}
+              onExplainMore={() => handleChipClick("Explain more", score)}
+              onSuggestFix={() => handleChipClick("Suggest correction", score)}
+              onNewChat={clearMessages}
               onClose={() => setIsInspectorOpen(false)}
+              suggestionBatches={suggestionBatchMap}
+              correctionStatuses={suggestionStore.correctionStatuses}
+              onAcceptCorrection={handleAcceptCorrection}
+              onRejectCorrection={handleRejectCorrection}
+              onAcceptAllCorrections={handleAcceptAll}
+              onRejectAllCorrections={handleRejectAll}
             />
           </div>
         )}

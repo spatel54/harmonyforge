@@ -4,6 +4,7 @@
 
 import type { EditableScore, Note, Part, Measure, DurationType } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
+import type { ScoreCorrection } from "./suggestionTypes";
 
 function midiToPitch(midi: number): string {
   const oct = Math.floor(midi / 12);
@@ -262,5 +263,37 @@ export function insertNote(
     dynamics: note.dynamics,
   };
   measure.notes.splice(Math.min(noteIndex, measure.notes.length), 0, newNote);
+  return next;
+}
+
+/** Apply a single correction: replace a note's pitch (and optionally duration). */
+export function applySuggestion(
+  score: EditableScore,
+  correction: ScoreCorrection,
+): EditableScore {
+  const next = cloneScore(score);
+  const found = getNoteById(next, correction.noteId);
+  if (!found) return score;
+  found.note.pitch = correction.suggestedPitch;
+  if (correction.suggestedDuration) {
+    found.note.duration = correction.suggestedDuration;
+  }
+  return next;
+}
+
+/** Apply multiple corrections in a single clone (one undo step). */
+export function applySuggestions(
+  score: EditableScore,
+  corrections: ScoreCorrection[],
+): EditableScore {
+  const next = cloneScore(score);
+  for (const correction of corrections) {
+    const found = getNoteById(next, correction.noteId);
+    if (!found) continue;
+    found.note.pitch = correction.suggestedPitch;
+    if (correction.suggestedDuration) {
+      found.note.duration = correction.suggestedDuration;
+    }
+  }
   return next;
 }

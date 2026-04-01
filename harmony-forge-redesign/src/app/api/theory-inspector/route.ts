@@ -1,252 +1,122 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { streamChat } from "@/lib/ai/llmClient";
+import { buildSystemPrompt } from "@/lib/ai/prompts";
+import type { Persona } from "@/lib/ai/prompts";
+import {
+  getTaxonomyContext,
+  getFallbackExplanation,
+  type Genre,
+  type ViolationKey,
+} from "@/lib/ai/taxonomyIndex";
 
-const BACKEND_API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-
-interface InspectorRequestBody {
-  query?: string;
-  musicXML?: string | null;
+interface TheoryInspectorRequestBody {
+  persona: Persona;
+  genre: Genre;
+  userMessage: string;
+  violationType?: ViolationKey;
+  violationContext?: string;
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
-interface ValidationResponse {
-  valid: boolean;
-  her: number;
-  totalSlots: number;
-  violations: unknown;
-}
+/**
+ * POST /api/theory-inspector
+ *
+ * Streams an LLM response through the Theory Inspector.
+ * Falls back to Taxonomy.md definitions when no API key is configured.
+ */
+export async function POST(request: NextRequest) {
+  const body = (await request.json()) as TheoryInspectorRequestBody;
+  const { persona, genre, userMessage, violationType, violationContext } = body;
 
-interface InspectorHighlight {
-  measureIndex: number;
-  color: "red" | "blue";
-  label?: string;
-}
-
-function countMeasures(musicXML?: string | null): number {
-  if (!musicXML) return 0;
-  const matches = musicXML.match(/<\s*measure\b/gi);
-  return matches?.length ?? 0;
-}
-
-function fallbackReply(query: string, validation: ValidationResponse | null): string {
-  const q = query.toLowerCase();
-  const violationCount = getViolationCount(validation);
-  const her = validation?.her ?? 1;
-
-  if (q.includes("parallel")) {
-    return `I found ${violationCount} flagged voice-leading issue(s). Parallel fifths/octaves typically reduce contrapuntal independence. Try contrary or oblique motion in one voice while keeping the harmonic function intact.`;
+  // Validate required fields
+  if (!persona || !genre || !userMessage) {
+    return NextResponse.json(
+      { error: "Missing required fields: persona, genre, userMessage" },
+      { status: 400 },
+    );
   }
-  if (q.includes("fix") || q.includes("correct")) {
-    return `Suggested workflow: identify the flagged interval, keep the bass harmonic anchor, and move the upper voice by step to avoid direct parallels. Current HER is ${her.toFixed(2)}.`;
-  }
-  if (q.includes("why")) {
-    return `Theory Inspector is in fallback mode (no API key), but the rule-of-thumb still applies: preserve independent melodic contour between voices, especially around cadences.`;
-  }
-  return `I can explain and suggest fixes. Current harmony quality estimate (HER): ${her.toFixed(2)} with ${violationCount} violation(s). Ask “why is this flagged?” or “suggest a fix for measure X.”`;
-}
 
-function getViolationCount(validation: ValidationResponse | null): number {
-  if (!validation) return 0;
-  const violations = validation.violations;
-  if (Array.isArray(violations)) return violations.length;
-  if (violations && typeof violations === "object") {
-    return Object.values(violations).reduce((sum, v) => {
-      return sum + (typeof v === "number" ? v : 0);
-    }, 0);
-  }
-  return 0;
-}
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
-function fallbackHighlights(
-  query: string,
-  validation: ValidationResponse | null,
-  musicXML?: string | null,
-): InspectorHighlight[] {
-  const totalMeasures = Math.max(1, countMeasures(musicXML));
-  const violationCount = getViolationCount(validation);
-  if (violationCount === 0) {
-    return [{ measureIndex: 0, color: "blue", label: "Stable opening" }];
-  }
-  const highlights: InspectorHighlight[] = [];
-  const span = Math.min(4, violationCount + 1);
-  for (let i = 0; i < span; i++) {
-    highlights.push({
-      measureIndex: Math.min(totalMeasures - 1, i),
-      color: i < 2 ? "red" : "blue",
-      label:
-        i === 0
-          ? "Likely issue focus"
-          : i === 1
-            ? "Secondary issue"
-            : `Context (${query.slice(0, 24)})`,
-    });
-  }
-  return highlights;
-}
-
-async function validateWithBackend(musicXML: string): Promise<ValidationResponse | null> {
-  const formData = new FormData();
-  const xmlBlob = new Blob([musicXML], { type: "application/xml" });
-  formData.append("file", xmlBlob, "score.xml");
-
-  const response = await fetch(`${BACKEND_API_BASE}/api/validate-from-file`, {
-    method: "POST",
-    body: formData,
-  });
-  if (!response.ok) return null;
-  return (await response.json()) as ValidationResponse;
-}
-
-async function openAIReply(query: string, validation: ValidationResponse | null): Promise<string | null> {
-  if (!OPENAI_API_KEY) return null;
-
-  const validationSummary = validation
-    ? `Validation context: HER=${validation.her.toFixed(3)}, totalSlots=${validation.totalSlots}, violations=${getViolationCount(validation)}.`
-    : "Validation context unavailable.";
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are HarmonyForge Theory Inspector. Be concise, deterministic, and educational. Explain and suggest, but do not auto-apply edits. Maintain user sovereignty.",
-        },
-        {
-          role: "system",
-          content: validationSummary,
-        },
-        {
-          role: "user",
-          content: query,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) return null;
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
-}
-
-async function openAIHighlights(
-  query: string,
-  validation: ValidationResponse | null,
-  musicXML?: string | null,
-): Promise<InspectorHighlight[] | null> {
-  if (!OPENAI_API_KEY) return null;
-  const totalMeasures = Math.max(1, countMeasures(musicXML));
-  const violationCount = getViolationCount(validation);
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      temperature: 0.1,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Return only valid JSON. Schema: {\"highlights\":[{\"measureIndex\":number,\"color\":\"red\"|\"blue\",\"label\":string}]}.",
-        },
-        {
-          role: "user",
-          content: `Pick up to 4 measure highlights for a SATB score using query="${query}", totalMeasures=${totalMeasures}, violationCount=${violationCount}. Use red for likely violations and blue for context.`,
-        },
-      ],
-    }),
-  });
-  if (!response.ok) return null;
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(content) as {
-      highlights?: Array<{
-        measureIndex?: number;
-        color?: string;
-        label?: string;
-      }>;
-    };
-    if (!Array.isArray(parsed.highlights)) return null;
-    return parsed.highlights
-      .map((h): InspectorHighlight | null => {
-        if (typeof h.measureIndex !== "number") return null;
-        if (h.color !== "red" && h.color !== "blue") return null;
-        return {
-          measureIndex: Math.max(
-            0,
-            Math.min(totalMeasures - 1, Math.floor(h.measureIndex)),
-          ),
-          color: h.color,
-          label: typeof h.label === "string" ? h.label : undefined,
-        };
-      })
-      .filter((h): h is InspectorHighlight => h !== null);
-  } catch {
-    return null;
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as InspectorRequestBody;
-    const query = body.query?.trim();
-    if (!query) {
-      return NextResponse.json({ error: "Missing query" }, { status: 400 });
-    }
-
-    let validation: ValidationResponse | null = null;
-    if (body.musicXML) {
-      try {
-        validation = await validateWithBackend(body.musicXML);
-      } catch {
-        validation = null;
-      }
-    }
-
-    let reply: string | null = null;
-    try {
-      reply = await openAIReply(query, validation);
-    } catch {
-      reply = null;
-    }
-
-    if (!reply) {
-      reply = fallbackReply(query, validation);
-    }
-
-    let highlights: InspectorHighlight[] | null = null;
-    try {
-      highlights = await openAIHighlights(query, validation, body.musicXML);
-    } catch {
-      highlights = null;
-    }
-    if (!highlights || highlights.length === 0) {
-      highlights = fallbackHighlights(query, validation, body.musicXML);
-    }
+  // --- Fallback mode: no API key ---
+  if (!apiKey) {
+    const fallbackContent = violationType
+      ? getFallbackExplanation(violationType)
+      : getTaxonomyContext(genre);
 
     return NextResponse.json({
-      reply,
-      validation,
-      highlights,
-      mode: OPENAI_API_KEY ? "llm" : "fallback",
+      content:
+        fallbackContent +
+        "\n\n_[Offline mode — add OPENAI_API_KEY to .env.local for full AI explanations]_",
+      source: "fallback" as const,
+      chips: getChipsForPersona(persona, violationType),
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
+
+  // --- Live LLM mode ---
+  const taxonomySection = getTaxonomyContext(genre, violationType);
+  const systemPrompt = buildSystemPrompt(persona, {
+    genre,
+    taxonomySection,
+    violationType,
+    violationContext,
+  });
+
+  // Build conversation history (capped at last 10 exchanges)
+  const history = (body.conversationHistory ?? []).slice(-20);
+  const messages = [
+    ...history.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: userMessage },
+  ];
+
+  try {
+    const stream = await streamChat(apiKey, model, systemPrompt, messages);
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: `LLM request failed: ${message}` },
+      { status: 502 },
+    );
+  }
+}
+
+/** Return contextual quick-reply chips based on persona and violation type. */
+function getChipsForPersona(
+  persona: Persona,
+  violationType?: string,
+): string[] {
+  if (violationType) {
+    switch (persona) {
+      case "auditor":
+        return ["Explain more", "Suggest fix", "Show in score"];
+      case "tutor":
+        return ["Suggest fix", "Show example", "Why does this matter?"];
+      case "stylist":
+        return ["Apply fix", "Show alternate options", "Explain rule"];
+    }
+  }
+  return ["Explain this chord", "Check voice leading", "Suggest correction"];
+}
+
+/**
+ * GET /api/theory-inspector
+ * Health check — also tells the client whether an API key is configured.
+ */
+export async function GET() {
+  return NextResponse.json({
+    status: "ok",
+    hasApiKey: !!process.env.OPENAI_API_KEY,
+  });
 }

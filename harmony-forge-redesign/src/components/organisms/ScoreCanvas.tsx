@@ -2,20 +2,16 @@ import React from "react";
 import { Music, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SandboxContextMenu } from "./SandboxContextMenu";
-import { VexFlowScore } from "@/components/score/VexFlowScore";
-import { OSMDPreview } from "@/components/score/OSMDPreview";
+import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
-import type { EditCursor } from "@/store/useEditCursorStore";
-import { getInsertIndexAtBeat, parseMeasureBeats } from "@/lib/music/scoreUtils";
+import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
   showViolations?: boolean;
   /** Parsed score from MusicXML; when null, shows placeholder */
   score?: EditableScore | null;
-  /** Raw MusicXML string — when provided, uses OpenSheetMusicDisplay for reliable display (overrides score) */
-  musicXML?: string | null;
   /** Called when user clicks on canvas background (e.g. to clear selection) */
   onCanvasClick?: () => void;
   /** Called when user clicks on empty staff area (for note placement). Receives partId, measureIndex, noteIndex. */
@@ -24,22 +20,14 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   selection?: NoteSelection[];
   /** Called when user clicks a note */
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
-  /** Called when user drags a note vertically; semitoneDelta can be positive/negative. */
-  onNoteDrag?: (sel: NoteSelection, semitoneDelta: number) => void;
   /** Part IDs to show (empty = all) */
   visiblePartIds?: Set<string>;
-  /** When true, prefer VexFlow edit rendering over OSMD display rendering. */
-  preferEditMode?: boolean;
-  /** Measure-level highlights shown as vertical overlays in the notation area. */
-  measureHighlights?: Array<{
-    measureIndex: number;
-    color: "red" | "blue";
-    label?: string;
-  }>;
-  /** Semantic edit cursor (renderer-independent). */
-  cursor?: EditCursor | null;
-  /** Callback when cursor moves via beat-grid interaction. */
-  onCursorChange?: (cursor: EditCursor) => void;
+  /** Pending AI corrections to render as ghost note overlays */
+  pendingCorrections?: ScoreCorrection[];
+  onAcceptCorrection?: (correctionId: string) => void;
+  onRejectCorrection?: (correctionId: string) => void;
+  /** Called when the score changes from within the editor (RiffScore user edits) */
+  onScoreChange?: (score: EditableScore) => void;
 }
 
 /**
@@ -51,41 +39,29 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       staveLabels = ["S", "A", "T", "B"],
       showViolations = false,
       score = null,
-      musicXML = null,
       onCanvasClick,
       onStaffClick,
       selection = [],
       onNoteClick,
-      onNoteDrag,
       visiblePartIds,
-      preferEditMode = false,
-      measureHighlights = [],
-      cursor = null,
-      onCursorChange,
+      pendingCorrections,
+      onAcceptCorrection,
+      onRejectCorrection,
+      onScoreChange,
       className,
       ...props
     },
     ref,
   ) => {
-    const [vexFlowCrashed, setVexFlowCrashed] = React.useState(false);
-    const [vexFlowRendered, setVexFlowRendered] = React.useState(false);
+    const [riffScoreCrashed, setRiffScoreCrashed] = React.useState(false);
 
-    const handleVexFlowError = React.useCallback(() => {
-      setVexFlowCrashed(true);
+    const handleRiffScoreError = React.useCallback(() => {
+      setRiffScoreCrashed(true);
     }, []);
 
     React.useEffect(() => {
-      setVexFlowCrashed(false);
-      setVexFlowRendered(false);
+      setRiffScoreCrashed(false);
     }, [score]);
-
-    // For context menu (fix: define openContextMenu)
-    const openContextMenu = React.useCallback((x: number, y: number) => {
-      // This should be implemented or imported from context.
-      // For now, fallback to not throwing.
-      // You can hook this up to a real context menu if desired.
-      // (No-op)
-    }, []);
 
     // Stave definitions matching Pencil absolute coords
     const staves = [
@@ -115,20 +91,6 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       [280, 255],
     ];
 
-    const partsForGrid = React.useMemo(() => {
-      if (!score) return [];
-      const filtered =
-        visiblePartIds && visiblePartIds.size > 0
-          ? score.parts.filter((part) => visiblePartIds.has(part.id))
-          : score.parts;
-      return filtered.length > 0 ? filtered : score.parts;
-    }, [score, visiblePartIds]);
-
-    const maxMeasures = React.useMemo(() => {
-      if (partsForGrid.length === 0) return 1;
-      return Math.max(1, ...partsForGrid.map((part) => part.measures.length));
-    }, [partsForGrid]);
-
     return (
       <div
         ref={ref}
@@ -144,12 +106,11 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          openContextMenu(e.clientX, e.clientY);
         }}
         {...props}
       >
-        {/* Static mockup — only when no score and no musicXML (placeholder) */}
-        {!score && !musicXML && (
+        {/* Static mockup — only when no score (placeholder) */}
+        {!score && (
           <>
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none"
@@ -339,7 +300,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               ))}
             </svg>
 
-            {/* ── Badges (HTML overlays) — only when no score and no musicXML ── */}
+            {/* ── Badges (HTML overlays) — only when no score ── */}
             {showViolations && (
               <>
                 {/* BlueBadge: x:114 y:24 fill:#1976D2 */}
@@ -397,155 +358,21 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
           </>
         )}
 
-        {/* Default to reliable display (OSMD) unless edit mode is explicitly requested. */}
-        {musicXML && !preferEditMode ? (
+        {/* RiffScore editor when score exists */}
+        {score && !riffScoreCrashed && (
           <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
-          </div>
-        ) : score && !vexFlowCrashed ? (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <VexFlowScore
+            <RiffScoreEditor
               score={score}
               className="w-full h-full"
               selection={selection}
               onNoteClick={onNoteClick}
-              onNoteDrag={onNoteDrag}
               visiblePartIds={visiblePartIds}
-              onError={handleVexFlowError}
-              onRendered={setVexFlowRendered}
+              onError={handleRiffScoreError}
+              onScoreChange={onScoreChange}
+              pendingCorrections={pendingCorrections}
+              onAcceptCorrection={onAcceptCorrection}
+              onRejectCorrection={onRejectCorrection}
             />
-          </div>
-        ) : musicXML ? (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
-            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
-          </div>
-        ) : null}
-
-        {preferEditMode && musicXML && !vexFlowCrashed && !vexFlowRendered && (
-          <div className="absolute inset-0 pointer-events-none">
-            <OSMDPreview musicXML={musicXML} className="w-full h-full" minHeight={280} />
-            <div className="absolute top-2 right-2 rounded px-2 py-1 text-[11px] font-mono bg-black/50 text-white">
-              Edit renderer still loading; showing safe preview
-            </div>
-          </div>
-        )}
-
-        {preferEditMode && score && onStaffClick && partsForGrid.length > 0 && (
-          <div className="absolute inset-0 pointer-events-none z-20" aria-hidden="true">
-            {partsForGrid.map((part, partIdx) => {
-              const topPct = (partIdx / partsForGrid.length) * 100;
-              const heightPct = 100 / partsForGrid.length;
-              return (
-                <div
-                  key={`grid-part-${part.id}`}
-                  className="absolute left-0 right-0"
-                  style={{ top: `${topPct}%`, height: `${heightPct}%` }}
-                >
-                  {Array.from({ length: maxMeasures }).map((_, measureIndex) => {
-                    const measure = part.measures[measureIndex];
-                    const beats = parseMeasureBeats(measure?.timeSignature);
-                    const subdivision = beats >= 3 ? 0.5 : 0.25;
-                    const slotCount = Math.max(1, Math.round(beats / subdivision));
-                    const leftPct = (measureIndex / maxMeasures) * 100;
-                    const widthPct = 100 / maxMeasures;
-
-                    return (
-                      <div
-                        key={`grid-${part.id}-${measureIndex}`}
-                        className="absolute top-0 bottom-0"
-                        style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                      >
-                        {Array.from({ length: slotCount + 1 }).map((__, slotIndex) => {
-                          const beat = Math.min(beats, slotIndex * subdivision);
-                          const noteIndex = measure
-                            ? getInsertIndexAtBeat(measure, beat)
-                            : 0;
-                          const slotLeft = (slotIndex / Math.max(1, slotCount)) * 100;
-                          const isCursor =
-                            cursor?.partId === part.id &&
-                            cursor.measureIndex === measureIndex &&
-                            Math.abs(cursor.beat - beat) < 0.001;
-
-                          return (
-                            <React.Fragment key={`slot-${part.id}-${measureIndex}-${slotIndex}`}>
-                              <button
-                                type="button"
-                                data-grid-slot
-                                className="absolute top-0 bottom-0 pointer-events-auto"
-                                style={{
-                                  left: `${slotLeft}%`,
-                                  width: `${100 / Math.max(1, slotCount)}%`,
-                                  background: "transparent",
-                                }}
-                                onClick={(evt) => {
-                                  evt.stopPropagation();
-                                  onStaffClick(part.id, measureIndex, noteIndex);
-                                  onCursorChange?.({
-                                    partId: part.id,
-                                    measureIndex,
-                                    beat,
-                                    noteIndex,
-                                  });
-                                }}
-                                title={`Part ${part.name}, measure ${measureIndex + 1}, beat ${beat.toFixed(2)}`}
-                              />
-                              {isCursor && (
-                                <div
-                                  className="absolute top-0 bottom-0"
-                                  style={{
-                                    left: `${slotLeft}%`,
-                                    width: "2px",
-                                    backgroundColor: "var(--hf-accent)",
-                                  }}
-                                />
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {score && measureHighlights.length > 0 && (
-          <div className="absolute inset-0 pointer-events-none">
-            {measureHighlights.map((highlight) => {
-              const maxMeasures = Math.max(
-                1,
-                ...score.parts.map((part) => part.measures.length),
-              );
-              const leftPct = (highlight.measureIndex / maxMeasures) * 100;
-              const widthPct = Math.max(100 / maxMeasures, 3);
-              const fillColor =
-                highlight.color === "red"
-                  ? "color-mix(in srgb, var(--semantic-violation) 18%, transparent)"
-                  : "color-mix(in srgb, #1976d2 16%, transparent)";
-              const borderColor =
-                highlight.color === "red" ? "var(--semantic-violation)" : "#1976d2";
-              return (
-                <div
-                  key={`${highlight.color}-${highlight.measureIndex}-${highlight.label ?? ""}`}
-                  className="absolute top-0 bottom-0 rounded-[2px]"
-                  style={{
-                    left: `${leftPct}%`,
-                    width: `${widthPct}%`,
-                    backgroundColor: fillColor,
-                    border: `1px solid ${borderColor}`,
-                    borderTop: "none",
-                    borderBottom: "none",
-                  }}
-                  title={
-                    highlight.label
-                      ? `Measure ${highlight.measureIndex + 1}: ${highlight.label}`
-                      : `Measure ${highlight.measureIndex + 1}`
-                  }
-                />
-              );
-            })}
           </div>
         )}
 

@@ -1,9 +1,22 @@
 /**
  * Editable score model for Tactile Sandbox.
- * Used by MusicXML parser and VexFlow renderer.
  */
 
 export type DurationType = "w" | "h" | "q" | "8" | "16" | "32";
+
+/** Bounding box of a rendered note element, used by overlay positioning. */
+export interface NotePosition {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  selection: {
+    partId: string;
+    measureIndex: number;
+    noteIndex: number;
+    noteId: string;
+  };
+}
 
 export interface Note {
   id: string;

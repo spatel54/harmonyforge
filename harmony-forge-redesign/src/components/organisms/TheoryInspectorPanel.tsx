@@ -6,19 +6,23 @@ import { cn } from "@/lib/utils";
 import { ChatBubble } from "@/components/molecules/ChatBubble";
 import { ViolationCard } from "@/components/molecules/ViolationCard";
 import { QuickReplyChips } from "@/components/molecules/QuickReplyChips";
+import { SuggestionCard } from "@/components/molecules/SuggestionCard";
+import type { ScoreCorrection, CorrectionStatus } from "@/lib/music/suggestionTypes";
 
 export interface TheoryInspectorMessage {
   id: string;
-  type: "system" | "user" | "ai" | "violation" | "divider" | "chips";
+  type: "system" | "user" | "ai" | "violation" | "divider" | "chips" | "suggestion";
   content?: string;
   timestamp?: string;
   violationType?: string;
   chips?: string[];
+  suggestionBatchId?: string;
 }
 
 export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivElement> {
   messages?: TheoryInspectorMessage[];
   inputValue?: string;
+  isStreaming?: boolean;
   onInputChange?: (value: string) => void;
   onSend?: () => void;
   onChipClick?: (chip: string) => void;
@@ -27,6 +31,13 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onNewChat?: () => void;
   onHistory?: () => void;
   onClose?: () => void;
+  /** Suggestion card support */
+  suggestionBatches?: Map<string, { corrections: ScoreCorrection[]; summary: string }>;
+  correctionStatuses?: Record<string, CorrectionStatus>;
+  onAcceptCorrection?: (correctionId: string) => void;
+  onRejectCorrection?: (correctionId: string) => void;
+  onAcceptAllCorrections?: (batchId: string) => void;
+  onRejectAllCorrections?: (batchId: string) => void;
 }
 
 const DEFAULT_MESSAGES: TheoryInspectorMessage[] = [
@@ -99,6 +110,7 @@ export const TheoryInspectorPanel = React.forwardRef<
     {
       messages = DEFAULT_MESSAGES,
       inputValue = "",
+      isStreaming = false,
       onInputChange,
       onSend,
       onChipClick,
@@ -107,6 +119,12 @@ export const TheoryInspectorPanel = React.forwardRef<
       onNewChat,
       onHistory,
       onClose,
+      suggestionBatches,
+      correctionStatuses = {},
+      onAcceptCorrection,
+      onRejectCorrection,
+      onAcceptAllCorrections,
+      onRejectAllCorrections,
       className,
       ...props
     },
@@ -297,10 +315,50 @@ export const TheoryInspectorPanel = React.forwardRef<
                     onChipClick={onChipClick}
                   />
                 );
+              case "suggestion": {
+                const batchId = msg.suggestionBatchId;
+                const batch = batchId ? suggestionBatches?.get(batchId) : undefined;
+                if (!batch) return null;
+                return (
+                  <SuggestionCard
+                    key={msg.id}
+                    corrections={batch.corrections}
+                    correctionStatuses={correctionStatuses}
+                    summary={batch.summary}
+                    timestamp={msg.timestamp}
+                    onAcceptCorrection={(id) => onAcceptCorrection?.(id)}
+                    onRejectCorrection={(id) => onRejectCorrection?.(id)}
+                    onAcceptAll={() => onAcceptAllCorrections?.(batchId!)}
+                    onRejectAll={() => onRejectAllCorrections?.(batchId!)}
+                  />
+                );
+              }
               default:
                 return null;
             }
           })}
+
+          {/* Streaming typing indicator */}
+          {isStreaming && (
+            <div
+              className="flex items-center gap-[4px] px-[12px] py-[6px]"
+              aria-label="AI is typing"
+              role="status"
+            >
+              <span
+                className="w-[6px] h-[6px] rounded-full animate-pulse"
+                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }}
+              />
+              <span
+                className="w-[6px] h-[6px] rounded-full animate-pulse"
+                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }}
+              />
+              <span
+                className="w-[6px] h-[6px] rounded-full animate-pulse"
+                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Chat Input Bar — Node CaIdi ──────────────────────
@@ -326,8 +384,9 @@ export const TheoryInspectorPanel = React.forwardRef<
               value={inputValue}
               onChange={(e) => onInputChange?.(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about harmony, voice-leading…"
-              className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal"
+              placeholder={isStreaming ? "Generating…" : "Ask about harmony, voice-leading…"}
+              disabled={isStreaming}
+              className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
               style={{ color: "var(--hf-text-primary)" }}
               aria-label="Ask a theory question"
             />
@@ -337,8 +396,9 @@ export const TheoryInspectorPanel = React.forwardRef<
           <button
             type="button"
             onClick={onSend}
+            disabled={isStreaming}
             aria-label="Send message"
-            className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+            className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
             style={{ backgroundColor: "var(--hf-surface)" }}
           >
             <SendHorizontal

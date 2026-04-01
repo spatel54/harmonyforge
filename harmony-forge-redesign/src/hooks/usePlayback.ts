@@ -12,6 +12,8 @@ const BPM = 120;
 export interface UsePlaybackOptions {
   score: EditableScore | null;
   bpm?: number;
+  /** Optional RiffScore API ref — when available, delegates playback to RiffScore. */
+  riffScoreApi?: import("riffscore").MusicEditorAPI | null;
 }
 
 export interface UsePlaybackReturn {
@@ -29,6 +31,7 @@ export interface UsePlaybackReturn {
 export function usePlayback({
   score,
   bpm = BPM,
+  riffScoreApi,
 }: UsePlaybackOptions): UsePlaybackReturn {
   const [isPlaying, setIsPlaying] = useState(false);
   const synthRef = useRef<import("tone").PolySynth | null>(null);
@@ -48,6 +51,12 @@ export function usePlayback({
   }, []);
 
   const stop = useCallback(async () => {
+    // Delegate to RiffScore if available
+    if (riffScoreApi) {
+      riffScoreApi.stop();
+      setIsPlaying(false);
+      return;
+    }
     if (endTimeoutRef.current) {
       clearTimeout(endTimeoutRef.current);
       endTimeoutRef.current = null;
@@ -58,14 +67,27 @@ export function usePlayback({
     Tone.getTransport().seconds = 0;
     partRef.current?.stop(0);
     setIsPlaying(false);
-  }, []);
+  }, [riffScoreApi]);
 
   const pause = useCallback(async () => {
+    // Delegate to RiffScore if available
+    if (riffScoreApi) {
+      riffScoreApi.pause();
+      setIsPlaying(false);
+      return;
+    }
     await stop();
-  }, [stop]);
+  }, [stop, riffScoreApi]);
 
   const play = useCallback(async () => {
     if (!score || score.parts.length === 0) return;
+
+    // Delegate to RiffScore if available
+    if (riffScoreApi) {
+      await riffScoreApi.play();
+      setIsPlaying(true);
+      return;
+    }
 
     const Tone = await import("tone");
 
@@ -115,7 +137,7 @@ export function usePlayback({
       endTimeoutRef.current = null;
       stop();
     }, (totalDuration + 0.5) * 1000);
-  }, [score, bpm, dispose, stop]);
+  }, [score, bpm, dispose, stop, riffScoreApi]);
 
   useEffect(() => {
     return () => {

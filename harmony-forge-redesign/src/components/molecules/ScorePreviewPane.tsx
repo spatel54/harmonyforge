@@ -1,8 +1,8 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
-import { OSMDPreview } from "../score/OSMDPreview";
-import { extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
+import { RiffScoreEditor } from "../score/RiffScoreEditor";
+import { extractMusicXMLMetadata, parseMusicXML } from "@/lib/music/musicxmlParser";
 
 export interface ScorePreviewPaneProps {
   /** Raw MusicXML — when provided, renders actual score via OSMD */
@@ -14,6 +14,11 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
   const meta = React.useMemo(() => {
     if (!musicXML) return null;
     return extractMusicXMLMetadata(musicXML);
+  }, [musicXML]);
+
+  const score = React.useMemo(() => {
+    if (!musicXML) return null;
+    return parseMusicXML(musicXML);
   }, [musicXML]);
 
   return (
@@ -33,12 +38,11 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
 
       {/* Preview Area — OSMD when musicXML provided, else placeholder */}
       <div className="flex-1 relative overflow-hidden bg-[#F8F3EA] dark:bg-[#1A1110] min-h-0">
-        {musicXML ? (
+        {score ? (
           <div className="absolute inset-0 overflow-auto">
-            <OSMDPreview
-              musicXML={musicXML}
+            <RiffScoreEditor
+              score={score}
               className="w-full min-h-full"
-              minHeight={400}
             />
           </div>
         ) : (

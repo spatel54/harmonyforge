@@ -1,15 +1,12 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { PlaybackBar } from "@/components/molecules/PlaybackBar";
-import { VexFlowScore } from "@/components/score/VexFlowScore";
-import { OSMDPreview } from "@/components/score/OSMDPreview";
+import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 
 export interface ScorePreviewPanelProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Parsed score for VexFlow (legacy) */
+  /** Parsed score for rendering */
   score?: EditableScore | null;
-  /** Raw MusicXML string — when provided, uses OpenSheetMusicDisplay for reliable display */
-  musicXML?: string | null;
   scoreTitle?: string;
   scoreMeta?: string;
   onReupload?: () => void;
@@ -28,7 +25,6 @@ export const ScorePreviewPanel = React.forwardRef<
   (
     {
       score,
-      musicXML,
       scoreTitle = "The First Noel",
       scoreMeta = "Traditional • 4 voices • Page 1 of 4",
       onReupload,
@@ -128,10 +124,8 @@ export const ScorePreviewPanel = React.forwardRef<
           aria-label="Score preview canvas"
           role="img"
         >
-          {musicXML ? (
-            <OSMDPreview musicXML={musicXML} className="w-full h-full min-h-[280px]" minHeight={280} />
-          ) : score ? (
-            <VexFlowScore score={score} className="w-full h-full min-h-[280px]" />
+          {score ? (
+            <RiffScoreEditor score={score} className="w-full h-full min-h-[280px]" />
           ) : (
             <StaffLinePlaceholder />
           )}
