@@ -10,6 +10,8 @@ import { useUploadStore } from "@/store/useUploadStore";
 import type { GenerationConfig } from "@/components/organisms/EnsembleBuilderPanel";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import type { EditableScore } from "@/lib/music/scoreTypes";
+import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
+import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -25,15 +27,30 @@ export default function DocumentPage() {
   const [previewScore, setPreviewScore] = React.useState<EditableScore | null>(null);
   const [previewMusicXML, setPreviewMusicXML] = React.useState<string | null>(null);
   const [previewMeta, setPreviewMeta] = React.useState<{ title: string; meta: string } | null>(null);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
   const file = useUploadStore((s) => s.file);
+  const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
   const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
+  const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
+
+  React.useEffect(() => {
+    restoreFromStorage();
+  }, [restoreFromStorage]);
 
   // Redirect to upload if no file (e.g. direct nav or refresh)
   React.useEffect(() => {
     if (!file) {
-      router.replace("/");
+      if (generatedMusicXML) {
+        router.replace("/sandbox");
+      } else {
+        router.replace("/");
+      }
     }
-  }, [file, router]);
+  }, [file, generatedMusicXML, router]);
+
+  React.useEffect(() => {
+    setShowOnboarding(!isOnboardingComplete());
+  }, []);
 
   React.useEffect(() => {
     if (!file) {
@@ -129,6 +146,20 @@ export default function DocumentPage() {
           >
             {error}
           </div>
+        )}
+        {showOnboarding && (
+          <OnboardingCoachmark
+            stepLabel="Step 2 of 3"
+            title="Set mood and instrumentation"
+            description="Preview your uploaded score, choose mood and genre, then select instruments before generating harmonies."
+            primaryCta="Continue"
+            onPrimary={() => setShowOnboarding(false)}
+            onSecondary={() => {
+              completeOnboarding();
+              setShowOnboarding(false);
+            }}
+            secondaryCta="Skip tour"
+          />
         )}
       </div>
 

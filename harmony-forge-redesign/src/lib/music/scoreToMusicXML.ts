@@ -52,8 +52,15 @@ export function scoreToMusicXML(score: EditableScore): string {
         if (!measure) return `  <part id="P${pIdx + 1}">\n  </part>`;
         const noteEls = measure.notes
           .map((note) => {
-            const { step, alter, octave } = pitchFromStr(note.pitch);
             const { divs, type } = DUR_MAP[note.duration] ?? { divs: 4, type: "quarter" };
+            if (note.isRest) {
+              return `    <note>
+    <rest/>
+    <duration>${divs}</duration>
+    <type>${type}</type>
+  </note>`;
+            }
+            const { step, alter, octave } = pitchFromStr(note.pitch);
             const alterEl = alter !== 0 ? `\n    <alter>${alter}</alter>` : "";
             return `    <note>
     <pitch>

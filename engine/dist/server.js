@@ -237,6 +237,45 @@ app.post("/api/validate-from-file", upload.single("file"), (req, res) => {
     const validation = validateSATBSequence(result.slots.map((s) => s.voices));
     res.json(validation);
 });
+/** Export practical plain-text chord chart from MusicXML file. */
+app.post("/api/export-chord-chart", upload.single("file"), (req, res) => {
+    const file = req.file;
+    if (!file) {
+        res.status(400).json({ error: "No file uploaded" });
+        return;
+    }
+    const ext = (file.originalname.split(".").pop() ?? "").toLowerCase();
+    if (!["xml", "musicxml"].includes(ext)) {
+        res.status(400).json({ error: "Use MusicXML .xml file for chord chart export" });
+        return;
+    }
+    const xml = file.buffer.toString("utf-8");
+    const parsed = parseMusicXML(xml);
+    if (!parsed || parsed.melody.length === 0) {
+        res.status(422).json({ error: "Could not parse file or no melody found" });
+        return;
+    }
+    const withChords = ensureChords(parsed, "major", "classical");
+    const title = parsed.melodyPartName ?? "Untitled";
+    const keyLabel = `${withChords.key.tonic} ${withChords.key.mode}`;
+    const timeLabel = withChords.timeSignature
+        ? `${withChords.timeSignature.beats}/${withChords.timeSignature.beatType}`
+        : "4/4";
+    const lines = [];
+    lines.push(`Title: ${title}`);
+    lines.push(`Key: ${keyLabel}`);
+    lines.push(`Time: ${timeLabel}`);
+    lines.push("");
+    lines.push("Chord Chart");
+    lines.push("-----------");
+    withChords.chords.forEach((chord, idx) => {
+        lines.push(`M${idx + 1}: ${chord.roman}`);
+    });
+    if (withChords.chords.length === 0) {
+        lines.push("No chord data available.");
+    }
+    res.type("text/plain; charset=utf-8").send(lines.join("\n"));
+});
 /** Validate SATB: accept LeadSheet (generate + validate) or raw slots. Returns HER-style metrics. */
 app.post("/api/validate-satb", (req, res) => {
     const body = req.body;

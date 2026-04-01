@@ -91,8 +91,6 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       [280, 255],
     ];
 
-    // Remove duplicated/crashing conditional block - unify display rendering below
-
     return (
       <div
         ref={ref}
@@ -102,24 +100,8 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
         onClick={(e) => {
           const target = e.target as HTMLElement;
           if (target.closest("[data-note-hit]")) return;
-          if (onStaffClick && score) {
-            if (selection?.length) {
-              const sel = selection[0];
-              const part = score.parts.find((p) => p.id === sel.partId);
-              const measure = part?.measures[sel.measureIndex];
-              const noteIndex = measure ? Math.min(sel.noteIndex + 1, measure.notes.length) : 0;
-              onStaffClick(sel.partId, sel.measureIndex, noteIndex);
-            } else {
-              const first = score.parts[0];
-              if (first?.measures.length) {
-                onStaffClick(first.id, 0, 0);
-              } else {
-                onCanvasClick?.();
-              }
-            }
-          } else {
-            onCanvasClick?.();
-          }
+          if (target.closest("[data-grid-slot]")) return;
+          onCanvasClick?.();
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -185,7 +167,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={2}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* ── Barline 1: x:340 ──────────────────────────── */}
@@ -194,7 +176,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={1}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* ── Barline 2: x:600 ──────────────────────────── */}
@@ -203,7 +185,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
                 y={40}
                 width={1}
                 height={255}
-                style={{ fill: "var(--hf-detail)" }}
+                style={{ fill: "var(--hf-text-primary)" }}
               />
 
               {/* Highlight overlays (drawn before notes so notes are on top) ── */}
@@ -318,7 +300,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               ))}
             </svg>
 
-            {/* ── Badges (HTML overlays) — only when no score and no musicXML ── */}
+            {/* ── Badges (HTML overlays) — only when no score ── */}
             {showViolations && (
               <>
                 {/* BlueBadge: x:114 y:24 fill:#1976D2 */}

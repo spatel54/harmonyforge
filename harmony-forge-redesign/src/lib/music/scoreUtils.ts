@@ -15,6 +15,15 @@ function midiToPitch(midi: number): string {
 
 const STEP_SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
+const DURATION_BEATS: Record<DurationType, number> = {
+  w: 4,
+  h: 2,
+  q: 1,
+  "8": 0.5,
+  "16": 0.25,
+  "32": 0.125,
+};
+
 function pitchToMidi(pitch: string): number {
   const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
   if (!m) return 60;
@@ -29,6 +38,40 @@ function pitchToMidi(pitch: string): number {
 /** Deep clone EditableScore */
 export function cloneScore(score: EditableScore): EditableScore {
   return JSON.parse(JSON.stringify(score));
+}
+
+export function noteBeats(note: Note): number {
+  const base = DURATION_BEATS[note.duration] ?? 1;
+  if (!note.dots) return base;
+  let factor = 1;
+  let add = 0.5;
+  for (let i = 0; i < note.dots; i++) {
+    factor += add;
+    add /= 2;
+  }
+  return base * factor;
+}
+
+export function parseMeasureBeats(timeSignature?: string): number {
+  if (!timeSignature) return 4;
+  const m = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (!m) return 4;
+  const num = Number.parseInt(m[1] ?? "4", 10);
+  const den = Number.parseInt(m[2] ?? "4", 10);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) return 4;
+  return (num * 4) / den;
+}
+
+export function getInsertIndexAtBeat(measure: Measure, beat: number): number {
+  if (!measure.notes.length) return 0;
+  let cursor = 0;
+  for (let i = 0; i < measure.notes.length; i++) {
+    const start = cursor;
+    cursor += noteBeats(measure.notes[i]);
+    if (beat <= start + 0.001) return i;
+    if (beat > start && beat < cursor) return i + 1;
+  }
+  return measure.notes.length;
 }
 
 /** Get note by ID from score */
@@ -111,6 +154,7 @@ export function setPitchByLetter(score: EditableScore, noteIds: Set<string>, let
     for (const measure of part.measures) {
       for (const note of measure.notes) {
         if (noteIds.has(note.id)) {
+          if (note.isRest) continue;
           const midi = pitchToMidi(note.pitch);
           const oct = Math.floor(midi / 12) - 1;
           const newMidi = (oct + 1) * 12 + targetPc;
@@ -129,6 +173,7 @@ export function transposeNotes(score: EditableScore, noteIds: Set<string>, semit
     for (const measure of part.measures) {
       for (const note of measure.notes) {
         if (noteIds.has(note.id)) {
+          if (note.isRest) continue;
           const midi = pitchToMidi(note.pitch);
           note.pitch = midiToPitch(midi + semitones);
         }
@@ -211,6 +256,7 @@ export function insertNote(
     id: generateId("n"),
     pitch: note.pitch ?? "C4",
     duration: (note.duration ?? "q") as DurationType,
+    isRest: note.isRest ?? false,
     dots: note.dots,
     tie: note.tie,
     articulations: note.articulations,

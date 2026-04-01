@@ -82,6 +82,7 @@ export function ExportOptionsPane({
     { id: "pdf", icon: FileText, label: "PDF", desc: "Print-ready" },
     { id: "midi", icon: Music2, label: "MIDI", desc: "DAW-compatible" },
     { id: "xml", icon: Code, label: "MusicXML", desc: "Universal score" },
+    { id: "chord-chart", icon: Music2, label: "Chord Chart", desc: "Lead-sheet text" },
     { id: "png", icon: ImageIcon, label: "PNG", desc: "High-res image" },
     { id: "json", icon: Braces, label: "JSON", desc: "Symbolic data" },
     { id: "mp3", icon: Headphones, label: "Audio", desc: "WAV / MP3" },

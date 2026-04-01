@@ -16,7 +16,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 1. **Fix parsing** (backend + frontend) — MusicXML partwise/timewise, no DTD loading, correct pitch mapping.
 2. **Fix SATB solver** — Handle real melodies, non-chord tones, relaxed fallback when strict voice-leading fails.
 3. **Fix MusicXML output** — Preserve rhythm, variable parts (only selected instruments). **Additive harmonies**: melody stays as first part; user-selected instruments (flute, cello) are added as harmony parts.
-4. **Fix frontend display** — Document preview and Sandbox render scores reliably; OSMD for display, VexFlow for editable tools when parse succeeds.
+4. **Fix frontend display** — Document preview renders reliably; Sandbox is edit-first (VexFlow default) with OSMD fallback when VexFlow fails.
 5. **Variable parts** — Generator outputs melody + harmony parts only (e.g. melody + flute + cello = 3 parts). Soprano instruments map to Alto voice; Alto/Tenor/Bass map to their voices.
 
 ---
@@ -75,17 +75,59 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 27. **CORS** — `CORS_ORIGIN` env var (default `http://localhost:3000`).
 28. **Edit mode toggle** — View (OSMD) vs Edit (VexFlow) in SandboxActionBar; enables note tools when Edit selected. ADR `docs/adr/001-sandbox-display-mode.md`.
 29. **CLI args** — `-i/--input`, `-o/--output`, `--mood`, `--instruments` (e.g. `Soprano:Flute,Bass:Cello`).
-30. **Audio playback** — `usePlayback` hook (Tone.js), `playbackUtils.ts`; play/pause/stop wired to SandboxPlaybackBar. **Issues remain:** runtime errors, wrong notes (to fix next).
+30. **Audio playback** — `usePlayback` hook (Tone.js), `playbackUtils.ts`; play/pause/stop wired to SandboxPlaybackBar.
+31. **Audio playback hardening (2026-03-23)** — measure-aware scheduling (time-signature support), rest-aware timing, pitch-safe filtering, transport cancellation before replay, PolySynth for stable overlapping notes.
+32. **Onboarding flow (2026-03-23)** — Added first-time guided tour across Upload, Document, and Sandbox via `OnboardingCoachmark` + `localStorage` completion flag.
+33. **Theory Inspector wiring (2026-03-23)** — Replaced simulated chat with `/api/theory-inspector` route; route uses backend validation context and optional OpenAI completion (`OPENAI_API_KEY`) with graceful fallback when keys are unavailable.
 
 ---
 
-## Current Failure We're Working On
+## Current Focus
 
-**Audio playback (2026-03-09):** Playback in Sandbox has two issues to address next:
-1. **Playback reliability** — May still throw (e.g. Tone.Part timing). Fixed "Start time must be strictly greater than previous start time" via `scheduledNotesToSeconds` (MIN_STEP offset for chords), but other runtime issues may remain.
-2. **Wrong notes** — Playback does not play the correct notes; score-to-events mapping or pitch conversion needs investigation (e.g. EditableScore note ordering, chord/rest handling, MusicXML divisions vs beats).
+**Issue #79 execution:** Remaining MVP tasks are implemented in code:
+1. **Audio playback reliability/correctness** — implemented with rest-safe + measure-aware scheduling and transport stability.
+2. **Onboarding flow** — implemented as first-time guided tour across the 3-step UX.
+3. **Theory Inspector configuration** — implemented via app API route with backend validation context and optional OpenAI mode.
 
-**Deferred:** VexFlow edit tools were re-enabled via Edit mode toggle (View vs Edit in Action Bar).
+**Current limitation being worked:** The VexFlow edit renderer can still fail to show notation for some generated scores. Mitigation is now in place: `/sandbox` never goes blank because Edit mode overlays a safe OSMD preview when VexFlow does not produce note positions.
+
+**Deferred:** Advanced Stylist auto-apply workflow (candidate edit application) remains post-MVP.
+
+---
+
+## Session Log (2026-03-24)
+
+**Browser QA + docs sync pass:**
+- Ran a full in-browser pass against `docs/plan.md` and `docs/progress.md` expectations.
+- Confirmed routes and controls load (`/`, `/document` guard behavior, `/sandbox` toolbar/playback/inspector shell).
+- Confirmed edit-first UX state in code (no Eye/View toggle path in sandbox action bar).
+- Found critical regression: notation canvas is blank on `/sandbox` during live browser pass.
+- Logged this as the active blocker across docs and shifted immediate focus to render-path stabilization before M5 transition.
+- Updated `docs/plan.md`, `docs/progress.md`, and `docs/context/system-map.md` to align with current architecture and blocker state.
+
+**Ship-ready implementation pass:**
+- Reproduced blank-canvas regression in live browser QA and confirmed root cause in edit-first render path.
+- Added reliability-first mode controls in sandbox (`View`/`Edit`) and changed default to visible notation path.
+- Implemented ScoreCanvas measure highlight overlays (red/blue) and wired inspector responses to highlight state.
+- Extended Theory Inspector API to return highlight guidance (`highlights`) with OpenAI-assisted generation when `OPENAI_API_KEY` is present and deterministic fallback when unavailable.
+- Added transposition-aware + instrument-aware MusicXML parse improvements (clef inference + concert-pitch conversion for common transposing instruments).
+- Added chord-chart export endpoint (`POST /api/export-chord-chart`) and wired frontend Export modal with chord-chart option plus clearer format fallback behavior.
+- Hardened Document-page refresh behavior: if generated score exists in session storage and upload file is missing, route recovers to `/sandbox`.
+- Verified browser flow again: visible notation in View mode, inspector response rendered, red/blue highlight overlay visible, export UI includes chord-chart path.
+
+**Browser QA pass (post-caret architecture):**
+- Re-ran live browser validation on `/`, `/document`, and `/sandbox` with active dev stack (`make dev` session).
+- Confirmed `/` upload screen renders correctly; `/document` recovery path redirects to `/sandbox` when session score exists (expected continuity behavior).
+- Confirmed `/sandbox` editor behaviors: View/Edit mode switch, semantic beat-grid slots in Edit + duration mode, note insertion via grid, inspector chat request (`/api/theory-inspector` 200), playback toggle Play↔Pause, and Export modal includes Chord Chart option.
+- Found and fixed undo-history regression: first edit was not immediately undoable because initial state was not tracked in history.
+- Implemented history fix in `useScoreStore`: seed history on `setScore`, append next snapshot on `applyScore`, and route delete edits through `applyScore`; browser retest confirms first edit now enables Undo immediately.
+
+**Full upload→generate→sandbox acceptance pass (requested):**
+- Executed real file upload flow using `月亮代表我的心.xml` on `/` and confirmed navigation to `/document`.
+- On `/document`, selected Soprano instrument `Flute` and generated harmonies; network request `POST /api/generate-from-file` returned `200`.
+- Confirmed arrival on `/sandbox` with generated arrangement metadata (`Violin, Flute`) and visible notation.
+- Re-validated core interactions on generated score: first edit enables Undo, inspector query returns (`POST /api/theory-inspector` `200`), playback Play↔Pause works, and Export modal contains Chord Chart option.
+- Current state aligns with `docs/plan.md` verification flow for MVP path (Upload → Document config → Generate → Sandbox).
 
 ---
 
@@ -100,6 +142,15 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 6. Reworked generated MusicXML to preserve source melody rhythm and measure structure.
 7. Fixed the sandbox hook-order bug and aligned upload affordances/Makefile commands with the actual MVP path.
 8. Verified the live browser flow: upload `月亮代表我的心.xml` → `/document` preview/config → `POST /api/generate-from-file` returns `200` → `/sandbox` renders the generated score.
+
+---
+
+## Session Log (2026-03-23)
+
+**Milestone consolidation (M3/M4 → M5 readiness):**
+- **M3**: 19/19 closed; no open issues. Genre preset, harmony validation API, engine refinement complete.
+- **M4**: [#79](https://github.com/salt-family/harmonyforge/issues/79) executed for MVP scope: audio playback fixes, onboarding flow, and Theory Inspector API wiring completed in app code.
+- **Docs**: plan.md and progress.md updated with M3/M4 status, M5 transition readiness.
 
 ---
 
@@ -321,10 +372,11 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ## Learnings
 
-### Milestone 3/4 Issues (2026-03-09)
-- **#75 Accessibility (M4)**: Closed. Skip link and focus rings in layout.tsx/globals.css. Focus ring uses var(--hf-text-primary) for 2px contrast per WCAG §1.4.11. Contrast audit: Sonata #ffb300 on #fdf5e6 — focus rings use text-primary; skip link uses accent bg + dark text.
-- **#76, #74**: Excluded per user (genres, parameter tuning).
-- **Harmony validation API (M3)**: HFLitReview recommends HER, parallel fifths/octaves, voice-leading. Implemented:
+### Milestone 3/4 Issues (2026-03-23)
+- **M3 (XAI Backend & Architecture)**: Complete — 19/19 issues closed. Genre preset, harmony validation API, engine refinement, Theory Inspector RAG prep all done.
+- **M4 (Frontend Development & Interactivity)**: Consolidated into [#79](https://github.com/salt-family/harmonyforge/issues/79) and executed for MVP. Completed: (1) audio playback hardening, (2) onboarding flow, (3) Theory Inspector API wiring with fallback/optional OpenAI.
+- **#75 Accessibility (M4)**: Closed. Skip link and focus rings in layout.tsx/globals.css.
+- **Harmony validation API (M3)**: Implemented:
   - `engine/validateSATB.ts` — `validateSATBSequence(slots)` returns `{ violations, totalSlots, her, valid }`.
   - `POST /api/validate-satb` — accepts `{ leadSheet }` or `{ slots }`; returns HER-style metrics.
   - `POST /api/validate-from-file` — accepts MusicXML file; parse → infer → generate SATB → validate.
@@ -361,10 +413,10 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 - **Pitch conversion fix**: Backend parsers now map note steps (`C D E F G A B`) to semitone pitch classes correctly instead of using character index order.
 - **Debug**: `POST /api/debug-parse` with raw XML body (express.raw) returns `{ bodyLength, hasPartwise, parsed }`.
 
-### Audio Playback (2026-03-09)
-- **Tone.js**: usePlayback hook, playbackUtils (scoreToScheduledNotes, scheduledNotesToSeconds). Play/pause/stop wired to SandboxPlaybackBar.
-- **Tone.Part**: Requires strictly increasing event times; MIN_STEP 0.001s offset for simultaneous notes (chords).
-- **Issues (to fix):** Runtime errors may persist; playback does not play correct notes. Likely causes: score-to-events mapping, chord/rest handling, pitch format for Tone, or MusicXML divisions vs beat conversion.
+### Audio Playback (2026-03-23)
+- **Tone.js**: usePlayback + playbackUtils now handle rests and per-measure timing.
+- **Timing correctness**: score scheduling uses measure time signatures when present, and keeps beat cursor aligned across measures.
+- **Runtime stability**: transport cancellation before replay, PolySynth playback for overlapping notes, and pitch-safe filtering for invalid note tokens.
 
 ### API Contract
 - `POST /api/generate-satb`: JSON body `LeadSheet` → SATB JSON
@@ -433,6 +485,9 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ## Next Steps
 
+**MVP by 3/27 (M4 #79):** Core tasks completed. **M5 (User Study & Evaluation):** ready to transition.
+
+0. **Fix sandbox blank canvas regression** — `/sandbox` shell loads but notation does not render under current edit-first path (active blocker).
 1. ~~**Fix Next.js dev server**~~ — Resolved: run `npm install` in `harmony-forge-redesign/`
 2. ~~**Render MusicXML in ScoreCanvas**~~ — Done: parseMusicXML, VexFlowScore, useScoreStore
 3. ~~**Selection + active tool**~~ — Done: useToolStore, ScorePalette onToolSelect, Escape/click to clear
@@ -442,10 +497,10 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 7. ~~**Fix "Could not parse file or no melody found"**~~ — Done (Phase 14): Switched partwise parser to fast-xml-parser
 8. ~~**Resolve VexFlow TickMismatch**~~ — Done (2g.1): Fixed 4 beats per measure; pad per measure; prefer OSMD when musicXML exists for reliable display (blank canvas fix)
 9. ~~**Re-enable VexFlow edit tools**~~ — Done: Edit mode toggle (View/Edit) in SandboxActionBar; Edit uses VexFlow for note tools
-10. **Fix audio playback** — Playback has runtime issues and plays wrong notes; verify score-to-events extraction, pitch format, chord/rest timing.
+10. ~~**Fix audio playback**~~ — Done: rest-aware/measure-aware scheduling + stable transport + pitch filtering.
 11. **Optional: reduce frontend lint debt** — Remaining `harmony-forge-redesign` lint errors are outside the restored MVP path
 12. ~~**Optional: improve sandbox metadata**~~ — Done: Playback bar uses `sourceFileName` and `extractMusicXMLMetadata` for title/subtitle
-13. **Connect Theory Inspector** — Replace mock replies with RAG retrieval from `Taxonomy.md`
+13. ~~**Connect Theory Inspector**~~ — Done for MVP: inspector API route + backend validation context + optional OpenAI fallback mode.
 14. **JSON-based score deltas** — State sync with backend (deferred to Theory Inspector integration)
 
 ---
@@ -464,7 +519,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Handover template (2026-03-09):**
 - **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score and working audio playback (Noteflight/MuseScore-style). Engine **adds** harmonies (melody + flute + cello = 3 parts), not replacement.
-- **Approach:** Additive harmonies; partwise MusicXML 2.0 (MuseScore/OSMD); variable parts. **View mode** (OSMD) for display; **Edit mode** (VexFlow) for note tools. Session persistence for Sandbox. CORS via `CORS_ORIGIN`.
-- **Current failure:** Audio playback — may still throw; plays wrong notes. Next: fix score-to-events extraction, pitch format for Tone.js, chord/rest timing.
-- **Key files:** `usePlayback.ts`, `playbackUtils.ts` (scoreToScheduledNotes, scheduledNotesToSeconds), `ScoreCanvas.tsx` (displayMode), `SandboxActionBar.tsx` (View/Edit toggle), `useUploadStore.ts` (sessionStorage restore), `engine/server.ts` (CORS_ORIGIN).
+- **Approach:** Additive harmonies; partwise MusicXML 2.0 (MuseScore/OSMD); variable parts. **Edit-first** rendering in sandbox (VexFlow default) with OSMD fallback path. Session persistence for Sandbox. CORS via `CORS_ORIGIN`.
+- **Current status:** #79 MVP items implemented (audio hardened, onboarding added, Theory Inspector wired), but active regression remains: blank notation canvas on `/sandbox` in browser QA.
+- **Key files:** `usePlayback.ts`, `playbackUtils.ts` (scoreToScheduledNotes, scheduledNotesToSeconds), `ScoreCanvas.tsx` (render-path + fallback), `VexFlowScore.tsx` (editable render path), `sandbox/page.tsx` (edit-first wiring), `useUploadStore.ts` (sessionStorage restore), `engine/server.ts` (CORS_ORIGIN).
 - **Run:** `make dev-clean && make dev` → http://localhost:3000. `make test-engine` → CLI test (supports `-i`, `-o`, `--mood`, `--instruments`).

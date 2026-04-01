@@ -34,7 +34,7 @@ export function usePlayback({
   riffScoreApi,
 }: UsePlaybackOptions): UsePlaybackReturn {
   const [isPlaying, setIsPlaying] = useState(false);
-  const synthRef = useRef<import("tone").Synth | null>(null);
+  const synthRef = useRef<import("tone").PolySynth | null>(null);
   const partRef = useRef<import("tone").Part | null>(null);
   const hasStartedRef = useRef(false);
   const endTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +62,7 @@ export function usePlayback({
       endTimeoutRef.current = null;
     }
     const Tone = await import("tone");
+    Tone.getTransport().cancel(0);
     Tone.getTransport().stop();
     Tone.getTransport().seconds = 0;
     partRef.current?.stop(0);
@@ -102,8 +103,8 @@ export function usePlayback({
 
     if (timed.length === 0) return;
 
-    const synth = new Tone.Synth({
-      oscillator: { type: "sine" },
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "triangle" },
       envelope: {
         attack: 0.01,
         decay: 0.1,
@@ -144,11 +145,18 @@ export function usePlayback({
     };
   }, [dispose]);
 
+  const canPlay = Boolean(
+    score &&
+      score.parts.some((part) =>
+        part.measures.some((measure) => measure.notes.some((note) => !note.isRest))
+      )
+  );
+
   return {
     play,
     pause,
     stop,
     isPlaying,
-    canPlay: Boolean(score && score.parts.length > 0),
+    canPlay,
   };
 }

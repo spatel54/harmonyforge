@@ -8,6 +8,8 @@ import { DropzoneCopy } from "@/components/organisms/DropzoneCopy";
 import { TransitionOverlay } from "@/components/organisms/TransitionOverlay";
 import { BrandTitle } from "@/components/atoms/BrandTitle";
 import { useUploadStore } from "@/store/useUploadStore";
+import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
+import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 
 /**
  * Playground Screen (Step 1: Upload)
@@ -17,7 +19,12 @@ import { useUploadStore } from "@/store/useUploadStore";
 export default function Home() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
   const setFile = useUploadStore((s) => s.setFile);
+
+  React.useEffect(() => {
+    setShowOnboarding(!isOnboardingComplete());
+  }, []);
 
   const handleFileUpload = (files: FileList) => {
     const file = files[0];
@@ -50,6 +57,20 @@ export default function Home() {
             />
           </div>
         </main>
+        {showOnboarding && (
+          <OnboardingCoachmark
+            stepLabel="Step 1 of 3"
+            title="Start by uploading a score"
+            description="Drop a MusicXML, MXL, or MIDI file to begin. You will configure mood and instruments on the next screen."
+            primaryCta="Got it"
+            onPrimary={() => setShowOnboarding(false)}
+            onSecondary={() => {
+              completeOnboarding();
+              setShowOnboarding(false);
+            }}
+            secondaryCta="Skip tour"
+          />
+        )}
       </PlaygroundBackground>
 
       {/* Loading overlay — mounts over everything */}
