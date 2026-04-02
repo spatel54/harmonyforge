@@ -125,7 +125,8 @@ Rules:
 - If evidence in the message is thin, say exactly which pieces are missing—not vague uncertainty.
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
-- Avoid bullet lists in the user-visible answer unless the user asked for a list; prefer a few tight paragraphs or one cohesive short block.`;
+- Avoid bullet lists in the main answer unless the user asked for a list; prefer a few tight paragraphs or one cohesive short block.
+- **Note-inspector note click:** If the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only.`;
 }
 
 interface StructuredPromptContext extends PromptContext {

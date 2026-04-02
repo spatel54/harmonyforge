@@ -48,7 +48,8 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 | **Rests** | `normalizeScoreRests` in `scoreUtils`; `setScore`/`applyScore` normalize; RiffScore adapter preserves `isRest` both directions; `insertNote` can replace a rest slot. |
 | **Editor / toolbar** | Removed duplicate floating palette pattern; `toolbarPlugins` patch; palette visibility + styled plugin buttons; many functional plugin actions. |
 | **Stability** | Fixed React “getSnapshot / maximum update depth” by using **per-field** `useScoreStore` selectors in `RiffScoreEditor` (no object literal selector). |
-| **Theory Inspector** | Dual-mode (`inspectorMode`, `theoryInspectorMode.ts`); `originalGeneratedPitch` on `Note`, sandbox stamp + RiffScore preserve; tutor `theoryInspectorNoteMode`; panel labels Origin Justifier / Harmonic Guide; **multi-part** roster + cross-part interval FACTs; `resolveSatbPartIndices` + `requireExactlyFourParts` for note-explain SATB gate; SATB FACTs show part names; vitest for `noteExplainContext`. **2026-04-02:** Source-aligned `Taxonomy.md` + `taxonomyIndex.ts` + `prompts.ts` (Fux / A&S / Caplin / OMT) with engine-mapping honesty; `engine/solver.ts` + `engine/constraints.ts` + `engine/types.ts` comments; chamber `harmonize-core.ts` Caplin disclaimer. **2026-04 (follow-up):** `prompts.ts` — `CITATION_AND_BREVITY` + **`HONESTY_NO_SYCOPHANCY`** (realistic, non-sycophantic Auditor/Tutor/Stylist). |
+| **Theory Inspector** | Dual-mode (`inspectorMode`, `theoryInspectorMode.ts`); `originalGeneratedPitch` on `Note`, sandbox stamp + RiffScore preserve; tutor `theoryInspectorNoteMode`; **2026-04 (UX):** note panel **Tutor summary first**, plain-language section titles, **`aiSuggestions`** via `<<<SUGGESTIONS>>>` + `noteInsightAiSplit.ts`; **multi-part** roster + cross-part interval FACTs; `resolveSatbPartIndices` + `requireExactlyFourParts` for note-explain SATB gate; SATB FACTs show part names; vitest for `noteExplainContext` + `noteInsightAiSplit`. **2026-04-02:** Source-aligned `Taxonomy.md` + `taxonomyIndex.ts` + `prompts.ts` (Fux / A&S / Caplin / OMT) with engine-mapping honesty; `engine/solver.ts` + `engine/constraints.ts` + `engine/types.ts` comments; chamber `harmonize-core.ts` Caplin disclaimer. **2026-04 (follow-up):** `prompts.ts` — `CITATION_AND_BREVITY` + **`HONESTY_NO_SYCOPHANCY`**. |
+| **Score canvas (staff IDs)** | **2026-04:** `extractStaffLabelLayout` in `riffscorePositions.ts`; `RiffScoreEditor` part-name overlays or **Staves (top → bottom)** fallback. |
 | **Config** | `harmony-forge-redesign/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
 | **Ops** | Documented `make dev`; port-conflict cleanup for 3000/8000 when restarting. |
 
@@ -56,7 +57,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Objective (product):** Pitch-only transparency: Mode A explains **engine snapshot** (with trace-backed checks where available); Mode B explains **how the live pitch sits** against vertical sonority and neighbors. Relational FACTs cover same-beat stack and prev/next musical moments (SATB slot + additive barline neighbors).
 
-**Files (primary):** Repo-root `Taxonomy.md`, `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`, `harmony-forge-redesign/src/lib/music/theoryInspectorMode.ts`, `theoryInspectorBaseline.ts`, `theoryInspectorSlots.ts`, `noteExplainContext.ts`, `scoreTypes.ts` (`originalGeneratedPitch`), `riffscoreAdapter.ts`, `useRiffScoreSync.ts`, `scoreUtils.ts` (paste drops provenance), `useTheoryInspector.ts`, `useTheoryInspectorStore.ts`, `TheoryInspectorPanel.tsx`, `app/api/theory-inspector/route.ts`, `lib/ai/prompts.ts` (`CITATION_AND_BREVITY`, `HONESTY_NO_SYCOPHANCY`), `app/sandbox/page.tsx` (baseline + stamp), `vitest.config.ts`, `noteExplainContext.test.ts`.
+**Files (primary):** Repo-root `Taxonomy.md`, `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`, `harmony-forge-redesign/src/lib/music/theoryInspectorMode.ts`, `theoryInspectorBaseline.ts`, `theoryInspectorSlots.ts`, `noteExplainContext.ts`, `scoreTypes.ts` (`originalGeneratedPitch`), `riffscoreAdapter.ts`, `useRiffScoreSync.ts`, `scoreUtils.ts` (paste drops provenance), `useTheoryInspector.ts`, `useTheoryInspectorStore.ts`, `TheoryInspectorPanel.tsx`, `app/api/theory-inspector/route.ts`, `lib/ai/prompts.ts` (`CITATION_AND_BREVITY`, `HONESTY_NO_SYCOPHANCY`), `lib/ai/noteInsightAiSplit.ts`, `riffscorePositions.ts` (`extractStaffLabelLayout`), `RiffScoreEditor.tsx` (staff labels), `app/sandbox/page.tsx` (baseline + stamp), `vitest.config.ts`, `noteExplainContext.test.ts`, `noteInsightAiSplit.test.ts`.
 
 **Still thin vs aspirational copy:** Mode A “axiomatic” lines like “resolved the leading tone” are **not** fully supplied by the engine today — `validate-satb-trace` is **violation-oriented**; richer generative rationale remains a **future engine / ADR** item unless we add more client-side heuristics (e.g. chord-tone classification without Roman numerals).
 
@@ -86,12 +87,43 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - [x] `harmonize-core.ts` — `planStructuralHierarchy` disclaimer  
 - [x] `docs/plan.md`, `docs/progress.md`, `docs/context/system-map.md` — synced for theory/RAG narrative + honest/non-sycophantic tutor (`HONESTY_NO_SYCOPHANCY`)  
 - [x] `make test` + `harmony-forge-redesign && npm run test` passed after engine/taxonomy/prompt edits  
+- [x] **Theory Inspector UX + staff labels (2026-04):** panel reorder (tutor first), plain-language blocks, `<<<SUGGESTIONS>>>` split (`noteInsightAiSplit.ts`, `NoteInsight.aiSuggestions`), `extractStaffLabelLayout` + `RiffScoreEditor` labels, `useLayoutEffect` autoscroll workaround for Turbopack / React Compiler — see **Theory Inspector UX (2026-04)** above; docs re-synced in this edit  
 
 **D. Learnings (compact)**
 
 - **OMT** = primary **pedagogical organization** for RAG; **A&S** = anchor for **hard** SATB rules in code; **Fux** = lineage for **smooth motion** (solver is only a proxy); **Caplin** = vocabulary only when facts support it.  
 - Tutor must **teach without flooding** — one source per theoretical claim in short answers.
 - Trust comes from **accuracy and limits**, not cheerleading—prompts explicitly forbid sycophancy.
+
+### Theory Inspector UX — average-user clarity, suggestions, staff labels (2026-04)
+
+**End goal (this slice):** Non-expert musicians can use the note-level Theory Inspector without jargon-first layout: **AI summary leads**, deterministic blocks read in plain language, **optional “what to try next” bullets** from the tutor, and the **score canvas shows which staff is which part** (instrument / input melody).
+
+**Approach:**
+
+1. **Panel order** — After “This note”, show **Tutor summary** (LLM) first, then **Ideas to try next** (parsed suggestions), then **What the tool first wrote** (origin snapshot), **How this note fits the score now**, **Facts passed to the tutor** (evidence). Internal dual-mode names stay in `title` tooltips where useful.
+2. **Single-stream LLM split** — Tutor user brief requires a line `<<<SUGGESTIONS>>>` then bullets; `splitNoteInsightAiContent` in `noteInsightAiSplit.ts` splits streamed/JSON text into `NoteInsight.aiExplanation` + `NoteInsight.aiSuggestions`. `prompts.ts` allows that bullet block after the delimiter.
+3. **Staff ↔ part** — RiffScore `Staff` has no label in types; **`extractStaffLabelLayout`** (`riffscorePositions.ts`) measures `g.staff` rects vs the editor container; **`RiffScoreEditor`** draws left-edge **part name** overlays (with **Input** badge on first staff when multiple parts) or a **“Staves (top → bottom)”** fallback strip if geometry doesn’t match `score.parts.length`.
+4. **React 19 / Compiler quirk** — `useEffect(..., [messages, noteInsight, …])` triggered **“The final argument passed to useEffect changed size between renders”** under **Next 16.1.6 + Turbopack + React Compiler** (dependency array shape differed across renders—e.g. compiler treating `messages` as expanded deps). **Mitigation:** autoscroll uses **`useLayoutEffect` with no dependency array** (scroll after every paint—cheap for this panel). Revisit if we add a stable single-string digest + one dep without compiler rewrite.
+
+**Steps completed (files):**
+
+| Item | Location |
+|------|-----------|
+| Panel copy + order + suggestions cards | `harmony-forge-redesign/src/components/organisms/TheoryInspectorPanel.tsx` |
+| `hasApiKey` for offline copy | same (reads `useTheoryInspectorStore`) |
+| `aiSuggestions` on model | `useTheoryInspectorStore.ts` |
+| Stream/json split | `useTheoryInspector.ts` + `NOTE_EXPLAIN_TUTOR_BRIEF` |
+| Split helper + tests | `lib/ai/noteInsightAiSplit.ts`, `noteInsightAiSplit.test.ts` |
+| Tutor rule for delimiter section | `lib/ai/prompts.ts` |
+| Staff geometry | `lib/music/riffscorePositions.ts` — `extractStaffLabelLayout` |
+| Overlays + fallback strip | `components/score/RiffScoreEditor.tsx` |
+
+**Verification:** `cd harmony-forge-redesign && npm run test` (includes `noteInsightAiSplit`); `npm run build` passes. **`npm run lint`** still reports broader repo debt (including pre-existing `RiffScoreEditor` `useMemo` / React Compiler warnings)—not introduced solely by this slice.
+
+**Current status / failure we addressed:** Console error from **changing `useEffect` dependency array length** under Turbopack—**workaround shipped** (`useLayoutEffect` without deps). **Still open:** prettier scroll triggers without tripping compiler; full-project lint green; optional **scroll/resize** re-measure if staff labels drift inside nested scroll containers (only add if QA shows drift).
+
+---
 
 ### Current failures / work in progress
 
@@ -112,6 +144,10 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 6. **Mode A narrative depth:** “Why this exact pitch” beyond violation trace still thin without **solver metadata** or richer client-side analysis.
 
 7. **Optional engine stretch (not done):** Fux-informed **motion penalties** (contrary motion, etc.) beyond L1 sum — deferred; comments document the gap.
+
+8. **Theory Inspector panel scroll:** **`useLayoutEffect` runs every render** by design (React Compiler / `useEffect` deps array size bug). Acceptable for now; refine if perf or a compiler-safe single-dep pattern is validated.
+
+9. **Staff labels:** If RiffScore DOM or scroll containers change, **`extractStaffLabelLayout`** may fail → fallback list only; watch QA on multi-staff scores.
 
 ---
 

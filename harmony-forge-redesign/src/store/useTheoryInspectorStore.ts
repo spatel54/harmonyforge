@@ -43,6 +43,8 @@ export interface NoteInsight {
   deterministicExplanation: string;
   evidenceLines: string[];
   aiExplanation?: string;
+  /** Parsed from tutor reply after <<<SUGGESTIONS>>> */
+  aiSuggestions?: string;
 
   insightKind: NoteInsightKind;
   currentPitch: string;

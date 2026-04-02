@@ -38,6 +38,7 @@ import {
 import type { ScoreCorrection, LLMCorrection } from "@/lib/music/suggestionTypes";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import { SATB_RULES, isVoiceInRange, type VoiceKey } from "@/lib/music/theoryRules";
+import { splitNoteInsightAiContent } from "@/lib/ai/noteInsightAiSplit";
 
 const ENGINE_URL =
   typeof window !== "undefined"
@@ -51,7 +52,8 @@ const NOTE_EXPLAIN_TUTOR_BRIEF =
   "STAFF ROSTER and vertical FACT lines name each staff (input vs generated) using the score’s part names (e.g. violin, cello). When multiple harmony staves are listed, relate the clicked note to the **input melody AND each other staff** that has a pitch at that moment—not only melody vs clicked line. Use every relevant INTERVAL FACT toward other staves when present. " +
   "CURRENT SCORE FACTS describe the live notation (all staves at the same time, intervals, neighbors). Treat FACT lines as authoritative; when a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
   "If the user clicked the input melody (no engine-origin block), explain how that melody pitch relates to **each generated staff** at the same beat—do not invent generator intent. " +
-  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Short paragraphs, 2–5 max.";
+  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Short paragraphs, 2–5 max. " +
+  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”) with practical ideas to refine this harmony or voice-leading or what to try at the **next** chord moment—only when grounded in the supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions.”";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -906,9 +908,12 @@ export function useTheoryInspector() {
         const contentType = response.headers.get("Content-Type") ?? "";
         if (contentType.includes("application/json")) {
           const data = (await response.json()) as { content?: string };
+          const raw = data.content ?? "";
+          const { explanation, suggestions } = splitNoteInsightAiContent(raw);
           store.setSelectedNoteInsight({
             ...base,
-            aiExplanation: data.content ?? "",
+            aiExplanation: explanation,
+            aiSuggestions: suggestions || undefined,
           });
         } else {
           const reader = response.body?.getReader();
@@ -919,9 +924,11 @@ export function useTheoryInspector() {
             const { done, value } = await reader.read();
             if (done) break;
             accumulated += decoder.decode(value, { stream: true });
+            const { explanation, suggestions } = splitNoteInsightAiContent(accumulated);
             store.setSelectedNoteInsight({
               ...base,
-              aiExplanation: accumulated,
+              aiExplanation: explanation,
+              aiSuggestions: suggestions || undefined,
             });
           }
         }
@@ -930,6 +937,7 @@ export function useTheoryInspector() {
         store.setSelectedNoteInsight({
           ...base,
           aiExplanation: `Could not generate AI note explanation: ${message}`,
+          aiSuggestions: undefined,
         });
       } finally {
         store.setIsStreaming(false);

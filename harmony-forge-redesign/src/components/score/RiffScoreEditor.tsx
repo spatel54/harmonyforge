@@ -15,7 +15,11 @@ import { editableScoreToRiffConfig } from "@/lib/music/riffscoreAdapter";
 import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
-import { extractNotePositions } from "@/lib/music/riffscorePositions";
+import {
+  extractNotePositions,
+  extractStaffLabelLayout,
+  type StaffLabelLayout,
+} from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
@@ -95,6 +99,8 @@ export function RiffScoreEditor({
   const apiRef = useRef<MusicEditorAPI | null>(null);
   const [instanceId] = useState(() => `hf-score-${Date.now()}`);
   const [notePositions, setNotePositions] = useState<NotePosition[]>([]);
+  const [staffLabelLayouts, setStaffLabelLayouts] = useState<StaffLabelLayout[]>([]);
+  const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [showPaletteMenu, setShowPaletteMenu] = useState(false);
   const [visiblePalettes, setVisiblePalettes] = useState<Set<ToolbarPalette>>(
@@ -405,6 +411,12 @@ export function RiffScoreEditor({
       if (!containerRef.current) return;
       const positions = extractNotePositions(containerRef.current, score, rsToHf);
       setNotePositions(positions);
+      const layouts = extractStaffLabelLayout(containerRef.current, score.parts.length);
+      const overlayOk =
+        layouts.length === score.parts.length &&
+        layouts.every((l) => l.height >= 4);
+      setStaffLabelsUseOverlay(overlayOk);
+      setStaffLabelLayouts(overlayOk ? layouts : []);
     };
 
     // Wait for RiffScore to render
@@ -590,6 +602,79 @@ export function RiffScoreEditor({
         id={instanceId}
         config={config}
       />
+
+      {/* Part names when SVG staff geometry is unavailable */}
+      {score.parts.length > 0 && !staffLabelsUseOverlay && (
+        <div
+          className="absolute left-0 right-0 z-[6] px-2 py-1 pointer-events-none"
+          style={{
+            top: 48,
+            backgroundColor: "color-mix(in srgb, var(--hf-bg) 94%, transparent)",
+            borderBottom: "1px solid var(--hf-detail)",
+          }}
+          aria-label="Staff order and instrument names"
+        >
+          <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--hf-text-secondary)" }}>
+            Staves (top → bottom)
+          </div>
+          <ol
+            className="m-0 pl-4 text-[11px] leading-snug list-decimal"
+            style={{ color: "var(--hf-text-primary)" }}
+          >
+            {score.parts.map((p, i) => (
+              <li key={p.id}>
+                {p.name}
+                {i === 0 && score.parts.length > 1 ? " — input melody" : ""}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Part names aligned to each staff */}
+      {staffLabelsUseOverlay &&
+        staffLabelLayouts.map((layout, si) => {
+          const part = score.parts[si];
+          if (!part) return null;
+          const centerY = layout.top + layout.height / 2;
+          return (
+            <div
+              key={part.id}
+              className="absolute pointer-events-none z-[5] flex items-center gap-1 max-w-[min(160px,32vw)]"
+              style={{
+                left: 4,
+                top: centerY,
+                transform: "translateY(-50%)",
+              }}
+              title={
+                part.name +
+                (si === 0 && score.parts.length > 1 ? " — input melody" : "")
+              }
+            >
+              {si === 0 && score.parts.length > 1 ? (
+                <span
+                  className="shrink-0 rounded px-1 py-px text-[9px] font-medium leading-none"
+                  style={{
+                    backgroundColor: "var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  Input
+                </span>
+              ) : null}
+              <span
+                className="truncate font-body text-[11px] font-medium leading-tight"
+                style={{
+                  color: "var(--hf-text-primary)",
+                  textShadow:
+                    "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
+                }}
+              >
+                {part.name}
+              </span>
+            </div>
+          );
+        })}
 
       {/* Selection highlights */}
       {notePositions.length > 0 && (

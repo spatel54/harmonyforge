@@ -144,6 +144,48 @@ export function extractNotePositions(
   return positions;
 }
 
+/** Layout for aligning part name labels with each RiffScore staff (top/height in container coordinates). */
+export interface StaffLabelLayout {
+  top: number;
+  height: number;
+}
+
+/**
+ * Measure each `g.staff` group’s box relative to the editor container, in document order.
+ * Returns up to `partCount` entries; may be shorter if DOM is not ready or staff groups are missing.
+ */
+export function extractStaffLabelLayout(
+  container: HTMLElement,
+  partCount: number,
+): StaffLabelLayout[] {
+  if (partCount <= 0) return [];
+
+  const svg =
+    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
+    container.querySelector<SVGSVGElement>("svg");
+
+  if (!svg) return [];
+
+  const containerRect = container.getBoundingClientRect();
+  const staffGroups = svg.querySelectorAll("g.staff");
+  const n = Math.min(partCount, staffGroups.length);
+  const out: StaffLabelLayout[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const g = staffGroups[i];
+    if (!g) continue;
+    const rect = g.getBoundingClientRect();
+    if (rect.height < 4) continue;
+    out.push({
+      top: rect.top - containerRect.top + (container.scrollTop || 0),
+      height: rect.height,
+    });
+  }
+
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

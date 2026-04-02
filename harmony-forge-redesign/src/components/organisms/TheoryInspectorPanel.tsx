@@ -9,6 +9,7 @@ import { QuickReplyChips } from "@/components/molecules/QuickReplyChips";
 import { SuggestionCard } from "@/components/molecules/SuggestionCard";
 import type { ScoreCorrection, CorrectionStatus } from "@/lib/music/suggestionTypes";
 import type { NoteInsight } from "@/store/useTheoryInspectorStore";
+import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -135,12 +136,14 @@ export const TheoryInspectorPanel = React.forwardRef<
   ) => {
     const chatRef = React.useRef<HTMLDivElement>(null);
     const noteInspectorMode = true;
+    const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
 
-    React.useEffect(() => {
-      if (chatRef.current) {
-        chatRef.current.scrollTop = chatRef.current.scrollHeight;
-      }
-    }, [messages]);
+    // No dependency array: React Compiler / Turbopack can rewrite multi-entry effect deps and trigger
+    // "final argument changed size" errors. Scrolling after every paint is cheap for this small panel.
+    React.useLayoutEffect(() => {
+      const el = chatRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -246,19 +249,31 @@ export const TheoryInspectorPanel = React.forwardRef<
                     className="font-mono text-[10px] mb-[6px]"
                     style={{ color: "var(--hf-text-secondary)" }}
                   >
-                    Selected Note
+                    This note
                   </div>
                   <div className="text-[14px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
                     {noteInsight.noteLabel} ({noteInsight.voice})
                   </div>
-                  <div className="text-[11px] mt-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
+                  <div
+                    className="text-[11px] mt-[4px] leading-snug"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                    title={
+                      noteInsight.insightKind === "melody-guide"
+                        ? "Internal: melody-context"
+                        : noteInsight.inspectorMode === "origin-justifier"
+                          ? "Internal: origin-justifier — pitch still matches first generation"
+                          : noteInsight.inspectorMode === "harmonic-guide"
+                            ? "Internal: harmonic-guide — live score emphasis"
+                            : undefined
+                    }
+                  >
                     {noteInsight.insightKind === "melody-guide"
-                      ? "Melody · input pitch"
+                      ? `Input melody · chord moment ${noteInsight.slotIndex}`
                       : noteInsight.inspectorMode === "origin-justifier"
-                        ? `Slot ${noteInsight.slotIndex} · Origin Justifier`
+                        ? `Chord moment ${noteInsight.slotIndex} · still matches first generation`
                         : noteInsight.inspectorMode === "harmonic-guide"
-                          ? `Slot ${noteInsight.slotIndex} · Harmonic Guide`
-                          : `Slot ${noteInsight.slotIndex}`}
+                          ? `Chord moment ${noteInsight.slotIndex} · live score (edited or guide-only)`
+                          : `Chord moment ${noteInsight.slotIndex}`}
                   </div>
                   {(noteInsight.originalEnginePitch != null || noteInsight.userModifiedPitch) && (
                     <div
@@ -269,28 +284,81 @@ export const TheoryInspectorPanel = React.forwardRef<
                         color: "var(--hf-text-primary)",
                       }}
                     >
-                      <div className="font-mono text-[10px] mb-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
-                        Generated snapshot vs score (pitch)
+                      <div className="font-body text-[10px] font-medium mb-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
+                        First save vs what you see now
+                      </div>
+                      <div className="text-[10px] mb-[2px]" style={{ color: "var(--hf-text-secondary)" }}>
+                        Pitch when the score was first loaded vs current pitch.
                       </div>
                       <div>
                         {noteInsight.originalEnginePitch != null ? (
                           <>
-                            <span style={{ color: "var(--hf-text-secondary)" }}>Engine at load: </span>
+                            <span style={{ color: "var(--hf-text-secondary)" }}>At first load: </span>
                             <span className="font-medium">{noteInsight.originalEnginePitch}</span>
                           </>
                         ) : (
-                          <span style={{ color: "var(--hf-text-secondary)" }}>No engine snapshot for this note id</span>
+                          <span style={{ color: "var(--hf-text-secondary)" }}>No saved first pitch for this note.</span>
                         )}
                       </div>
                       <div className="mt-[4px]">
-                        <span style={{ color: "var(--hf-text-secondary)" }}>Score now: </span>
+                        <span style={{ color: "var(--hf-text-secondary)" }}>In the score now: </span>
                         <span className="font-medium">{noteInsight.currentPitch}</span>
                         {noteInsight.userModifiedPitch ? (
-                          <span style={{ color: "var(--hf-text-secondary)" }}> (edited)</span>
+                          <span style={{ color: "var(--hf-text-secondary)" }}> (you changed it)</span>
                         ) : null}
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Tutor summary (LLM) — first so readers get plain language before technical blocks */}
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                    Tutor summary
+                  </div>
+                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    Plain-language read of this note and the facts below.
+                  </div>
+                  <div className="whitespace-pre-wrap">
+                    {isStreaming
+                      ? "Generating summary…"
+                      : tutorEnabled
+                        ? (noteInsight.aiExplanation?.trim() ||
+                            "No summary yet. The boxes below still describe the score; turn on the AI tutor or wait for the response.")
+                        : "Add OPENAI_API_KEY to .env.local for an AI summary. The sections below still explain the score without the tutor."}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                    Ideas to try next
+                  </div>
+                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    Optional prompts to refine harmony or voice-leading—grounded in the facts when the tutor is on.
+                  </div>
+                  <div className="whitespace-pre-wrap">
+                    {!tutorEnabled
+                      ? "Enable the AI tutor (OPENAI_API_KEY) to get suggestions here."
+                      : isStreaming
+                        ? "…"
+                        : noteInsight.aiSuggestions?.trim()
+                          ? noteInsight.aiSuggestions
+                          : "No suggestions in this reply yet."}
+                  </div>
                 </div>
 
                 {noteInsight.engineOriginExplanation ? (
@@ -302,11 +370,11 @@ export const TheoryInspectorPanel = React.forwardRef<
                       color: "var(--hf-text-primary)",
                     }}
                   >
-                    <div
-                      className="font-mono text-[10px] mb-[6px]"
-                      style={{ color: "var(--hf-text-secondary)" }}
-                    >
-                      Origin Justifier (generation snapshot)
+                    <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                      What the tool first wrote
+                    </div>
+                    <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                      Frozen snapshot from when the score was generated (if we have it).
                     </div>
                     <div className="whitespace-pre-wrap">{noteInsight.engineOriginExplanation}</div>
                   </div>
@@ -320,13 +388,13 @@ export const TheoryInspectorPanel = React.forwardRef<
                     color: "var(--hf-text-primary)",
                   }}
                 >
-                  <div
-                    className="font-mono text-[10px] mb-[6px]"
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
+                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
                     {noteInsight.insightKind === "melody-guide"
-                      ? "Melody · pitch in context (live score)"
-                      : "Harmonic Guide (live score)"}
+                      ? "How this melody pitch fits the score now"
+                      : "How this note fits the score now"}
+                  </div>
+                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    Uses your current notation and other staves at this moment.
                   </div>
                   <div className="whitespace-pre-wrap">{noteInsight.currentPitchGuideExplanation}</div>
                 </div>
@@ -339,11 +407,11 @@ export const TheoryInspectorPanel = React.forwardRef<
                     color: "var(--hf-text-primary)",
                   }}
                 >
-                  <div
-                    className="font-mono text-[10px] mb-[6px]"
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
-                    Engine Evidence
+                  <div className="font-body text-[12px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                    Facts passed to the tutor
+                  </div>
+                  <div className="font-body text-[10px] mb-[6px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    Intervals, staff list, and checker lines—the AI is instructed to follow these.
                   </div>
                   <pre
                     className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
@@ -351,25 +419,6 @@ export const TheoryInspectorPanel = React.forwardRef<
                   >
                     {noteInsight.evidenceLines.join("\n")}
                   </pre>
-                </div>
-
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div
-                    className="font-mono text-[10px] mb-[6px]"
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
-                    AI Explanation
-                  </div>
-                  {isStreaming
-                    ? "Generating explanation..."
-                    : (noteInsight.aiExplanation ?? "No AI explanation available yet.")}
                 </div>
               </>
             ) : (
