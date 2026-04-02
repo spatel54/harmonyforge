@@ -8,6 +8,7 @@ import {
   type Genre,
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
+import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 interface TheoryInspectorRequestBody {
   persona: Persona;
@@ -15,6 +16,7 @@ interface TheoryInspectorRequestBody {
   userMessage: string;
   violationType?: ViolationKey;
   violationContext?: string;
+  theoryInspectorNoteMode?: TheoryInspectorMode;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
@@ -26,7 +28,14 @@ interface TheoryInspectorRequestBody {
  */
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as TheoryInspectorRequestBody;
-  const { persona, genre, userMessage, violationType, violationContext } = body;
+  const {
+    persona,
+    genre,
+    userMessage,
+    violationType,
+    violationContext,
+    theoryInspectorNoteMode,
+  } = body;
 
   // Validate required fields
   if (!persona || !genre || !userMessage) {
@@ -61,6 +70,7 @@ export async function POST(request: NextRequest) {
     taxonomySection,
     violationType,
     violationContext,
+    theoryInspectorNoteMode,
   });
 
   // Build conversation history (capped at last 10 exchanges)

@@ -2,7 +2,7 @@
  * Static RAG index for Taxonomy.md content.
  * Genre-filtered section retrieval for Theory Inspector prompts.
  *
- * Source: /home/yirenl2/projects/harmonyforge/Taxonomy.md
+ * Canonical lexicon: repo-root Taxonomy.md (keep strings aligned when editing).
  */
 
 export type ViolationKey =
@@ -29,72 +29,77 @@ const VIOLATION_ENTRIES: Record<ViolationKey, TaxonomyEntry> = {
     definition:
       'Two voices move in same direction to perfect fifth. Forbidden: perfect 5th "defines triadic root" and deprives voices of independence.',
     flagWhen: "Same two voices form perfect fifth in consecutive chords",
-    source: "Fux, Aldwell-Schachter",
+    source: "Aldwell & Schachter; Fux (counterpoint tradition)",
   },
   parallelOctaves: {
     term: "Parallel octaves",
     definition:
       'Two voices move in same direction to perfect octave. One part "duplicates pitch and motion of the other in different register."',
     flagWhen: "Same two voices form octave in consecutive chords",
-    source: "Aldwell-Schachter",
+    source: "Aldwell & Schachter",
   },
   rangeViolations: {
     term: "Range",
     definition:
-      "Soprano C4-G5; Alto G3-D5; Tenor C3-G4; Bass F2-D4.",
-    flagWhen: "Voice pitch falls outside standard SATB range",
-    source: "Standard SATB",
+      "Engine clamp (conventional choral SATB): Soprano C4–G5; Alto G3–D5; Tenor C3–G4; Bass F2–D4 (types.ts). Same bounds as typical vocal ranges in Aldwell & Schachter / Open Music Theory.",
+    flagWhen: "Voice pitch falls outside the Logic Core SATB range",
+    source: "Aldwell & Schachter; Open Music Theory; HarmonyForge engine/types.ts",
   },
   spacingViolations: {
     term: "Spacing",
     definition:
-      "Max one octave between adjacent upper voices; max twelfth between Tenor and Bass.",
+      "Engine: ≤ octave between Soprano–Alto and Alto–Tenor; ≤ twelfth between Tenor–Bass (constraints.ts). Textbooks allow a wider tenor–bass spread in some textures; the engine uses a fixed twelfth cap.",
     flagWhen:
       "Adjacent upper voices exceed one octave, or Tenor-Bass exceeds a twelfth",
-    source: "Standard SATB",
+    source: "Aldwell & Schachter; Open Music Theory; HarmonyForge engine/constraints.ts",
   },
   voiceOrderViolations: {
     term: "Voice crossing",
     definition:
       'Two voices exchange position (e.g., alto below tenor). "Soprano or bass line can become obscured." Least problematic when brief, inner voices only.',
     flagWhen: "Adjacent voices intersect",
-    source: "Aldwell-Schachter",
+    source: "Aldwell & Schachter",
   },
   voiceOverlapViolations: {
     term: "Voice overlap",
     definition:
       'Lower voice moves above prior upper-voice note, or upper below prior lower. "Melodic stepwise connection can be made between the two voices"; confusing in four-part vocal style.',
     flagWhen: "One voice exceeds the other's prior position",
-    source: "Aldwell-Schachter",
+    source: "Aldwell & Schachter",
   },
 };
 
 /** Genre sections from Taxonomy.md — raw text for LLM context injection */
 const GENRE_SECTIONS: Record<Genre, string> = {
-  classical: `## Classical & Functional Harmony (Axiomatic Core)
-Constraint-satisfaction ground truth. Sources: Fux (Counterpoint), Aldwell & Schachter (Harmony & Voice Leading), SchenkerGUIDE.
+  classical: `## Source spine and engine mapping (read first)
+- Open Music Theory (Gotham et al., OER): primary **pedagogical** framing for RAG (species→SATB→phrase model). Treatises stay authoritative for prohibitions.
+- Aldwell & Schachter, Harmony & Voice Leading: **hard SATB norms** implemented in Logic Core (constraints.ts, validateSATB.ts) and range clamps (types.ts).
+- Fux, Gradus ad Parnassum (Mann ed.): contrapuntal **lineage**; conjunct motion and contrary motion toward perfect consonances. Engine **motion sort** in solver.ts = sum of absolute MIDI motion only—a **parsimony proxy**, not species counterpoint.
+- Caplin, Classical Form (1998): sentence vs period vocabulary. **Not** parsed by primary engine/ pipeline; optional heuristic in chamber harmonize-core only. Do **not** claim Caplin analysis unless structural FACTs/metadata say so.
+
+## Classical & Functional Harmony (Axiomatic Core)
+Hard checks follow Aldwell & Schachter + Open Music Theory; Schenker depth: SchenkerGUIDE.
 
 ### Strict Voice-Leading (Red-Line Triggers)
-- Parallel fifths: Two voices move in same direction to perfect fifth. Forbidden. (Fux, Aldwell-Schachter)
-- Parallel octaves: Two voices move in same direction to perfect octave. (Aldwell-Schachter)
-- Hidden fifths/octaves: Perfect consonance approached by similar motion. (Fux, Aldwell-Schachter)
-- Voice crossing: Two voices exchange position. (Aldwell-Schachter)
-- Voice overlap: Lower voice moves above prior upper-voice note. (Aldwell-Schachter)
-- False relation: Chromatic contradiction split between different voices. (HarmonySolver)
+- Parallel fifths: Same-direction motion to perfect fifth; destroys independence (Aldwell & Schachter; Fux tradition).
+- Parallel octaves: Same-direction motion to octave; duplicates line identity (Aldwell & Schachter).
+- Hidden fifths/octaves: Similar motion into perfect consonance; Fux: contrary imperfect→perfect helps avoid concealed parallels (Aldwell & Schachter on outer voices).
+- Voice crossing / overlap: Registral clarity (Aldwell & Schachter).
+- False relation: Chromatic contradiction across voices (HarmonySolver taxonomy).
 
 ### Doubling Rules
-- Leading tone: Never double when part of V or VII. (Aldwell-Schachter)
-- Chord 7th: Must never be doubled. (Aldwell-Schachter)
-- Root-position triads: Double root most often. (Aldwell-Schachter, Fux)
-- Cadential 6/4: Bass is the best tone to double. (Aldwell-Schachter)
+- Leading tone: Never double when part of V or VII. (Aldwell & Schachter)
+- Chord 7th: Must never be doubled. (Aldwell & Schachter)
+- Root-position triads: Double root most often. (Aldwell & Schachter; Fux)
+- Cadential 6/4: Bass is the best tone to double. (Aldwell & Schachter)
 
 ### Cadence Rules
-- Perfect authentic cadence: V-I with soprano on scale degree 1. (Aldwell-Schachter)
-- Semicadence: Ends on V without resolving to I. (Aldwell-Schachter)
-- Phrygian cadence: iv6-V in minor. (Aldwell-Schachter)
+- Perfect authentic cadence: V-I with soprano on scale degree 1. (Aldwell & Schachter)
+- Semicadence: Ends on V without resolving to I. (Aldwell & Schachter)
+- Phrygian cadence: iv6-V in minor. (Aldwell & Schachter)
 
 ### Harmonic Syntax
-- Phrase model: T -> PD -> D -> T (Tonic -> Pre-dominant -> Dominant -> Tonic).
+- Phrase model: T -> PD -> D -> T (Open Music Theory; Aldwell & Schachter).
 - Backward progressions (D -> PD) are flagged.
 
 ### Schenkerian Hierarchy
@@ -103,11 +108,11 @@ Constraint-satisfaction ground truth. Sources: Fux (Counterpoint), Aldwell & Sch
 - Bassbrechung: Bass arpeggiation I-V-I. (SchenkerGUIDE)
 - Prolongation: Simple structures elaborated through time. (SchenkerGUIDE)
 
-### Algorithmic Constraints
-- Range: Soprano C4-G5; Alto G3-D5; Tenor C3-G4; Bass F2-D4.
-- Spacing: Max octave between adjacent upper voices; max twelfth between Tenor-Bass.
-- One direction: Not all four voices moving in same direction simultaneously.
-- Forbidden jumps: Restrict unnatural or overly wide melodic leaps.`,
+### Algorithmic constraints (engine + HarmonySolver)
+- Range: Engine clamp as in VIOLATION_ENTRIES (types.ts); pedagogy Aldwell & Schachter / OMT.
+- Spacing: Engine ≤ octave S–A, A–T; ≤ twelfth T–B (constraints.ts); textbook bass may be farther—engine is conservative.
+- Motion preference: solver.ts ranks voicings by lower total absolute motion (Fux/OMT **pedagogy**, not full species cost).
+- One direction / forbidden jumps / repeated function: HarmonySolver-style CSP notes in Taxonomy.`,
 
   jazz: `## Jazz & Blues Harmony
 Extended tertian harmony; chord-scale correlation. Sources: Open Music Theory.

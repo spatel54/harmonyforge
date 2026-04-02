@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
+import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
+import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
 export type Genre = "classical" | "jazz" | "pop";
@@ -21,15 +24,37 @@ export interface ValidationResult {
   valid: boolean;
 }
 
+export type NoteInsightKind =
+  | "harmony-with-provenance"
+  | "harmony-no-provenance"
+  | "melody-guide";
+
+export type { TheoryInspectorMode };
+
 export interface NoteInsight {
   noteId: string;
   noteLabel: string;
   voice: string;
   slotIndex: number;
+  /** Product mode: origin snapshot vs live harmonic guide vs melody-only context. */
+  inspectorMode: TheoryInspectorMode;
   source: "engine-trace" | "local-fallback";
+  /** Combined blocks for legacy consumers / search */
   deterministicExplanation: string;
   evidenceLines: string[];
   aiExplanation?: string;
+
+  insightKind: NoteInsightKind;
+  currentPitch: string;
+  /** Harmony note: pitch at generation; null if unknown / melody / user-added */
+  originalEnginePitch: string | null;
+  userModifiedPitch: boolean;
+  /** Block A: why the engine emitted originalEnginePitch (omit for melody-guide) */
+  engineOriginExplanation?: string;
+  /** Block B: how current pitch sits in the live score (pitch-only) */
+  currentPitchGuideExplanation: string;
+  /** When user changed pitch: FACT line for tutor */
+  pitchEditDeltaLine?: string;
 }
 
 export interface TheoryInspectorState {
@@ -64,6 +89,19 @@ export interface TheoryInspectorState {
 
   selectedNoteInsight: NoteInsight | null;
   setSelectedNoteInsight: (insight: NoteInsight | null) => void;
+
+  /** Harmony part note ids → pitch when generated score was first loaded */
+  generationBaselineHarmonyPitches: Record<string, string>;
+  /** Cached validate-satb-trace per slot at generation (SATB layouts only) */
+  generationBaselineSatbTrace: SlotTraceEntry[] | null;
+  /** Audited slots at baseline capture (same indexing as live scoreToAuditedSlots when structure unchanged) */
+  generationBaselineAuditedSlots: AuditedSlot[] | null;
+  setGenerationBaseline: (payload: {
+    harmonyNotePitches: Record<string, string>;
+    satbTrace: SlotTraceEntry[] | null;
+    baselineAuditedSlots: AuditedSlot[] | null;
+  }) => void;
+  clearGenerationBaseline: () => void;
 }
 
 export const useTheoryInspectorStore = create<TheoryInspectorState>(
@@ -105,5 +143,21 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     selectedNoteInsight: null,
     setSelectedNoteInsight: (selectedNoteInsight) => set({ selectedNoteInsight }),
+
+    generationBaselineHarmonyPitches: {},
+    generationBaselineSatbTrace: null,
+    generationBaselineAuditedSlots: null,
+    setGenerationBaseline: (payload) =>
+      set({
+        generationBaselineHarmonyPitches: payload.harmonyNotePitches,
+        generationBaselineSatbTrace: payload.satbTrace,
+        generationBaselineAuditedSlots: payload.baselineAuditedSlots,
+      }),
+    clearGenerationBaseline: () =>
+      set({
+        generationBaselineHarmonyPitches: {},
+        generationBaselineSatbTrace: null,
+        generationBaselineAuditedSlots: null,
+      }),
   }),
 );

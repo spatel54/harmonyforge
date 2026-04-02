@@ -1,6 +1,7 @@
 /**
  * HarmonyForge Logic Core — SATB constraint checks
- * Per Taxonomy.md §1.6: range, spacing, parallel fifths/octaves, voice crossing/overlap
+ * Pedagogical authority: Aldwell & Schachter, Harmony & Voice Leading (parallels, spacing, crossing, overlap).
+ * See Taxonomy.md §1.1 / §1.6 and source spine for Fux lineage vs this implementation.
  */
 
 import {

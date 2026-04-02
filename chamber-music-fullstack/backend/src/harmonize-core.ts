@@ -682,6 +682,11 @@ export async function POST(request: NextRequest) {
 // ============================================================================
 // ADVANCED FEATURES: HIERARCHICAL STRUCTURAL PLANNING
 // ============================================================================
+//
+// Caplin-style vocabulary (sentence, period, antecedent/consequent) is NOT fully implemented here.
+// This helper is a lightweight heuristic (fixed chunk length, alternating antecedent/consequent labels,
+// cadence hints)—useful for experimentation, not a substitute for William Caplin, Classical Form (1998)
+// analysis. Primary HarmonyForge Logic Core (repo engine/) does not depend on this path.
 
 function planStructuralHierarchy(
   melodyNotes: Note[],

@@ -159,7 +159,14 @@ function solve(
 ): SATBVoices[] | null {
   const result: SATBVoices[] = [];
 
-  /** Parsimonious voice-leading (HFLitReview): prefer common tones, then stepwise motion. Lower score = better. */
+  /**
+   * Candidate ordering heuristic (not a species-counterpoint cost function).
+   * Pedagogical lineage: Fux, *Gradus ad Parnassum* (Mann ed.) and Open Music Theory stress conjunct motion
+   * and linear independence; contrary motion toward perfect consonances avoids concealed parallels in strict
+   * counterpoint. This engine does **not** encode Fux interval arithmetic or species rules—it only ranks
+   * voicings by **sum of absolute MIDI semitone motion** across S/A/T/B vs the previous chord (parsimony proxy).
+   * Lower score = tried first during backtracking.
+   */
   function candidateMotionScore(prev: SATBVoices | null, curr: SATBVoices): number {
     if (!prev) return 0;
     const keys: (keyof SATBVoices)[] = ["soprano", "alto", "tenor", "bass"];

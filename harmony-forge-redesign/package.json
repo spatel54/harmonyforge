@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "eslint-config-next": "16.1.6",
     "patch-package": "^8.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.0.5"
   }
 }

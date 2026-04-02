@@ -69,6 +69,7 @@ export function useRiffScoreSync(
       rsScore,
       rsToHfRef.current,
       currentScore?.parts,
+      currentScore,
     );
 
     // Update Zustand without triggering a push back

@@ -4,6 +4,7 @@
  */
 
 import type { EditableScore, DurationType, Note as HfNote, Part, Measure as HfMeasure } from "./scoreTypes";
+import { getNoteById } from "./scoreUtils";
 import type { ReactNode } from "react";
 import type {
   Score as RsScore,
@@ -269,7 +270,11 @@ export function editableScoreToRsScore(score: EditableScore): RsScore {
 // RsScore -> EditableScore
 // ---------------------------------------------------------------------------
 
-function rsEventToHfNote(event: ScoreEvent, idMap: IdMap): HfNote | null {
+function rsEventToHfNote(
+  event: ScoreEvent,
+  idMap: IdMap,
+  previousScore?: EditableScore | null,
+): HfNote | null {
   if (event.isRest) {
     const restSourceId = event.notes[0]?.id ?? event.id;
     const hfId = idMap.get(restSourceId) ?? `n-${restSourceId}`;
@@ -293,13 +298,26 @@ function rsEventToHfNote(event: ScoreEvent, idMap: IdMap): HfNote | null {
   const dots = event.dotted ? 1 : 0;
   const tie = rsNote.tied ? "start" as const : undefined;
 
-  return { id: hfId, pitch, duration, dots, tie };
+  const base: HfNote = { id: hfId, pitch, duration, dots, tie };
+  if (previousScore) {
+    const prevHit = getNoteById(previousScore, hfId);
+    const og = prevHit?.note.originalGeneratedPitch;
+    if (typeof og === "string" && og.length > 0) {
+      return { ...base, originalGeneratedPitch: og };
+    }
+  }
+  return base;
 }
 
-function rsMeasureToHf(measure: RsMeasure, idMap: IdMap, index: number): HfMeasure {
+function rsMeasureToHf(
+  measure: RsMeasure,
+  idMap: IdMap,
+  index: number,
+  previousScore?: EditableScore | null,
+): HfMeasure {
   const notes: HfNote[] = [];
   for (const event of measure.events) {
-    const note = rsEventToHfNote(event, idMap);
+    const note = rsEventToHfNote(event, idMap, previousScore);
     if (note) notes.push(note);
   }
   return {
@@ -308,12 +326,18 @@ function rsMeasureToHf(measure: RsMeasure, idMap: IdMap, index: number): HfMeasu
   };
 }
 
-function rsStaffToHfPart(staff: RsStaff, partName: string, partId: string, idMap: IdMap): Part {
+function rsStaffToHfPart(
+  staff: RsStaff,
+  partName: string,
+  partId: string,
+  idMap: IdMap,
+  previousScore?: EditableScore | null,
+): Part {
   return {
     id: partId,
     name: partName,
     clef: staff.clef === "grand" ? "treble" : staff.clef,
-    measures: staff.measures.map((m, i) => rsMeasureToHf(m, idMap, i)),
+    measures: staff.measures.map((m, i) => rsMeasureToHf(m, idMap, i, previousScore)),
   };
 }
 
@@ -323,16 +347,18 @@ const DEFAULT_PART_IDS = ["soprano", "alto", "tenor", "bass"];
 /**
  * Convert a RiffScore Score object back into an EditableScore.
  * Uses the rsToHf ID map to preserve original note IDs where possible.
+ * When `previousScore` is set, copies `originalGeneratedPitch` onto notes whose ids survived the round-trip.
  */
 export function riffScoreToEditableScore(
   rsScore: RsScore,
   rsToHf: IdMap,
   originalParts?: Part[],
+  previousScore?: EditableScore | null,
 ): EditableScore {
   const parts = rsScore.staves.map((staff, i) => {
     const name = originalParts?.[i]?.name ?? DEFAULT_PART_NAMES[i] ?? `Part ${i + 1}`;
     const id = originalParts?.[i]?.id ?? DEFAULT_PART_IDS[i] ?? `part-${i}`;
-    return rsStaffToHfPart(staff, name, id, rsToHf);
+    return rsStaffToHfPart(staff, name, id, rsToHf, previousScore);
   });
 
   // Propagate key/time signature from the RiffScore score level

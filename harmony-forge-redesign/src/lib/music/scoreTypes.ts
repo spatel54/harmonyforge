@@ -22,6 +22,8 @@ export interface Note {
   id: string;
   pitch: string; // "C4", "F#5"
   duration: DurationType;
+  /** Pitch emitted when generated MusicXML was first loaded (harmony parts); not written to MusicXML. */
+  originalGeneratedPitch?: string;
   /** True when this is a notated rest. */
   isRest?: boolean;
   dots?: number;

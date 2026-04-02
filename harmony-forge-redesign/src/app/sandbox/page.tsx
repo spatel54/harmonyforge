@@ -31,12 +31,19 @@ import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPane
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
 import { useTheoryInspector } from "@/hooks/useTheoryInspector";
+import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
+import {
+  applyOriginalGeneratedPitches,
+  captureGenerationBaseline,
+} from "@/lib/music/theoryInspectorBaseline";
 import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const ENGINE_URL =
+  process.env.NEXT_PUBLIC_ENGINE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DURATION_TOOL_ORDER = [
   "duration-32nd",
   "duration-16th",
@@ -702,12 +709,26 @@ export default function TactileSandboxPage() {
       setScore(null);
       setSelection([]);
       clearCursor();
+      useTheoryInspectorStore.getState().clearGenerationBaseline();
       return;
     }
     const parsed = parseMusicXML(generatedMusicXML);
     setScore(parsed);
     setSelection([]);
     clearCursor();
+    queueMicrotask(() => {
+      const s = useScoreStore.getState().score;
+      if (!s) return;
+      void captureGenerationBaseline(s, ENGINE_URL).then((payload) => {
+        const stamped = applyOriginalGeneratedPitches(s, payload.harmonyNotePitches);
+        useScoreStore.getState().applyScore(stamped);
+        useTheoryInspectorStore.getState().setGenerationBaseline({
+          harmonyNotePitches: payload.harmonyNotePitches,
+          satbTrace: payload.satbTrace,
+          baselineAuditedSlots: payload.baselineAuditedSlots,
+        });
+      });
+    });
   }, [generatedMusicXML, setScore, setSelection, clearCursor]);
 
   const scoreForCanvas = score ?? null;

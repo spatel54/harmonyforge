@@ -18,7 +18,9 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 3. **Fix MusicXML output** — Preserve rhythm, variable parts (only selected instruments). **Additive harmonies**: melody stays as first part; user-selected instruments (flute, cello) are added as harmony parts.
 4. **Fix frontend display** — Document preview renders reliably; **Sandbox primary editor** is **RiffScore** (third-party notation UI) with `EditableScore` in Zustand as the app’s canonical model; bidirectional sync via adapter + `useRiffScoreSync`. Legacy VexFlow/OSMD paths remain referenced historically below; current MVP editing path is RiffScore-centric.
 5. **Variable parts** — Generator outputs melody + harmony parts only (e.g. melody + flute + cello = 3 parts). Soprano instruments map to Alto voice; Alto/Tenor/Bass map to their voices.
-6. **Explainability** — Theory Inspector treats the **deterministic engine** as ground truth: chat + highlights explain **generated harmony parts only** (not user melody); taxonomy text is RAG-style context; LLM is optional and must not invent rules beyond supplied context.
+6. **Explainability** — Theory Inspector treats the **deterministic engine** as ground truth for **generated** harmony parts; **pitch-centric** note explain uses deterministic FACTs (roster, vertical stack, cross-part intervals, motion) plus optional trace; chat + highlights explain violations on harmony; taxonomy is RAG-style context; LLM is optional and must not invent rules beyond supplied context. **Melody** clicks get pitch-in-context (no engine-origin block).
+7. **Source-transparent tutoring (2026-04)** — RAG lexicon (`Taxonomy.md`, `taxonomyIndex.ts`) maps **Fux**, **Aldwell & Schachter**, **Caplin**, and **Open Music Theory** to what the code actually does vs pedagogy-only claims. LLM system prompts (`prompts.ts`) require **brief citations** when stating rules (one best source per claim), **plain language first**, and **tight length** defaults so users learn without information overload.
+8. **Honest, non-sycophantic tutor (2026-04)** — Same `prompts.ts`: shared **`HONESTY_NO_SYCOPHANCY`** block for Auditor/Tutor/Stylist—no flattery or false agreement; **passing the checker ≠ musically ideal**; admit **thin context** and **gray areas**; **correct wrong premises** gently from facts; Stylist notes when a fix is **one option** or has **tradeoffs**.
 
 ---
 
@@ -29,13 +31,15 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 - **Product flow:** Upload → Document (preview + config) → Generate Harmonies → **Sandbox** with editable score, export, and optional playback.
 - **Engine contract:** Additive harmonies (melody part preserved; new parts are generated).
 - **Editor UX:** Modern notation editing (rest-complete measures, shortcuts, integrated toolbar) aligned with familiar editors (Noteflight/MuseScore-style goals).
-- **Theory Inspector:** Transparent “glass box” — explanations and inline highlights tied to **deterministic SATB rules** and taxonomy context; optional OpenAI only **augments** wording when `OPENAI_API_KEY` is configured; structured suggestions (`/api/theory-inspector/suggest`) require the key.
+- **Theory Inspector:** Transparent “glass box” — **pitch-centric** note explain: **Origin Justifier** (Mode A: current pitch still matches engine snapshot) vs **Harmonic Guide** (Mode B: edited or no baseline); staff roster + cross-part intervals so the tutor grounds copy in **input melody and every generated part** at the same beat (1–8+ staves). Explanations and highlights still tied to deterministic SATB validation where applicable; optional OpenAI augments wording; structured suggestions require the key. **Copy policy:** **`CITATION_AND_BREVITY`** (concise, one source per norm when citing theory) + **`HONESTY_NO_SYCOPHANCY`** (no praise theater; engine-valid ≠ necessarily “best”; admit limited facts; call style gray areas; don’t validate false theory claims).
 
 ### Approach (this arc)
 
 - **State:** `EditableScore` + Zustand (`useScoreStore`) remain the canonical score; **RiffScore** renders and captures edits; `riffscoreAdapter` + `normalizeScoreRests` keep measures rhythmically complete.
 - **Toolbar:** RiffScore’s public API did not expose custom toolbar slots — we **patch** `riffscore` (via `patch-package`) to add `ui.toolbarPlugins`, then mount HarmonyForge actions (palettes, undo/redo, transpose, XML export, etc.) inside the native toolbar.
-- **Inspector:** `useTheoryInspector` maps SATB slots to note IDs for **harmony parts only** (part index ≥ 1 when multiple parts exist); local checks mirror engine-style constraints for highlights; melody note clicks **do not** spam the chat (silent ignore). Violation cards and chips wired to real flows (`Explain more`, `Suggest fix`, `Show in score`).
+- **Inspector (dual-mode + data):** **Comparison gate** in `theoryInspectorMode.ts`: `resolveOriginalEnginePitch` prefers `Note.originalGeneratedPitch` then Zustand baseline map; `computeTheoryInspectorMode` → `origin-justifier` | `harmonic-guide` | `melody-context`. Baseline captured in `theoryInspectorBaseline.ts` on sandbox load; `applyOriginalGeneratedPitches` stamps harmony notes; RiffScore pull preserves provenance by note id; clipboard **extractNotes** strips provenance on paste. UI: `TheoryInspectorPanel` uses Origin Justifier / Harmonic Guide copy; slim Harmonic Guide card when pitch unchanged. API: `theoryInspectorNoteMode` on `/api/theory-inspector` + **`prompts.ts`**: **`CITATION_AND_BREVITY`**, **`HONESTY_NO_SYCOPHANCY`**, persona rules (Caplin guardrails; avoid bullet dumps unless asked).
+- **Inspector (multi-staff FACTs):** `noteExplainContext.ts` — `buildScorePartRosterLines`, `buildCrossPartIntervalFacts`, additive vertical lines labeled **input vs generated** with `part.name` and staff index; SATB FACT lines take optional `voiceStaffNames` and pairwise intervals from clicked voice to each other voice. **Note explain routing:** `scoreToAuditedSlots(score, { requireExactlyFourParts: true })` so **only exactly four parts** use the SATB slot path; **five or more staves** use full additive context (no hidden 5th–8th staff drop). **`runAudit`** still uses `scoreToAuditedSlots(score)` without that flag (first four mapped parts only until engine supports full multi-voice audit).
+- **Frontend tests:** `harmony-forge-redesign` — `vitest` + `npm run test` (`noteExplainContext.test.ts`).
 
 ### Steps completed in this arc (high level)
 
@@ -44,16 +48,70 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 | **Rests** | `normalizeScoreRests` in `scoreUtils`; `setScore`/`applyScore` normalize; RiffScore adapter preserves `isRest` both directions; `insertNote` can replace a rest slot. |
 | **Editor / toolbar** | Removed duplicate floating palette pattern; `toolbarPlugins` patch; palette visibility + styled plugin buttons; many functional plugin actions. |
 | **Stability** | Fixed React “getSnapshot / maximum update depth” by using **per-field** `useScoreStore` selectors in `RiffScoreEditor` (no object literal selector). |
-| **Theory Inspector** | `issueHighlights` in store; overlays in `RiffScoreEditor`; harmony-only suggestion context; deterministic note explain on harmony click when panel open; prompts tightened in `prompts.ts`. |
+| **Theory Inspector** | Dual-mode (`inspectorMode`, `theoryInspectorMode.ts`); `originalGeneratedPitch` on `Note`, sandbox stamp + RiffScore preserve; tutor `theoryInspectorNoteMode`; panel labels Origin Justifier / Harmonic Guide; **multi-part** roster + cross-part interval FACTs; `resolveSatbPartIndices` + `requireExactlyFourParts` for note-explain SATB gate; SATB FACTs show part names; vitest for `noteExplainContext`. **2026-04-02:** Source-aligned `Taxonomy.md` + `taxonomyIndex.ts` + `prompts.ts` (Fux / A&S / Caplin / OMT) with engine-mapping honesty; `engine/solver.ts` + `engine/constraints.ts` + `engine/types.ts` comments; chamber `harmonize-core.ts` Caplin disclaimer. **2026-04 (follow-up):** `prompts.ts` — `CITATION_AND_BREVITY` + **`HONESTY_NO_SYCOPHANCY`** (realistic, non-sycophantic Auditor/Tutor/Stylist). |
 | **Config** | `harmony-forge-redesign/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
 | **Ops** | Documented `make dev`; port-conflict cleanup for 3000/8000 when restarting. |
 
+### Context-Aware Theory Inspector — shipped detail (2026-04)
+
+**Objective (product):** Pitch-only transparency: Mode A explains **engine snapshot** (with trace-backed checks where available); Mode B explains **how the live pitch sits** against vertical sonority and neighbors. Relational FACTs cover same-beat stack and prev/next musical moments (SATB slot + additive barline neighbors).
+
+**Files (primary):** Repo-root `Taxonomy.md`, `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`, `harmony-forge-redesign/src/lib/music/theoryInspectorMode.ts`, `theoryInspectorBaseline.ts`, `theoryInspectorSlots.ts`, `noteExplainContext.ts`, `scoreTypes.ts` (`originalGeneratedPitch`), `riffscoreAdapter.ts`, `useRiffScoreSync.ts`, `scoreUtils.ts` (paste drops provenance), `useTheoryInspector.ts`, `useTheoryInspectorStore.ts`, `TheoryInspectorPanel.tsx`, `app/api/theory-inspector/route.ts`, `lib/ai/prompts.ts` (`CITATION_AND_BREVITY`, `HONESTY_NO_SYCOPHANCY`), `app/sandbox/page.tsx` (baseline + stamp), `vitest.config.ts`, `noteExplainContext.test.ts`.
+
+**Still thin vs aspirational copy:** Mode A “axiomatic” lines like “resolved the leading tone” are **not** fully supplied by the engine today — `validate-satb-trace` is **violation-oriented**; richer generative rationale remains a **future engine / ADR** item unless we add more client-side heuristics (e.g. chord-tone classification without Roman numerals).
+
+### Work completed (2026-04) — theory sources, engine honesty, tutor voice and tone
+
+This subsection records **everything shipped in this arc** so handover chats stay aligned.
+
+**A. End goal (unchanged)**  
+Same as **End Goal** above: full **Upload → Document → Sandbox** flow; additive harmonies; Theory Inspector as transparent tutor; optional LLM.
+
+**B. Approach taken**
+
+1. **Ground claims in real sources** — Used **NotebookLM** on the **HF LitReview** notebook to sanity-check paraphrases for Fux (*Gradus*, Mann ed.), Aldwell & Schachter (*Harmony and Voice Leading*), Caplin (*Classical Form*), and **Open Music Theory** (Gotham et al.).
+2. **Document what code actually does** — Added a **source spine and engine mapping** in `Taxonomy.md`: hard constraints ↔ `engine/constraints.ts` / `validate-satb-trace`; motion heuristic ↔ `engine/solver.ts` (L1 MIDI sum = **parsimony proxy**, not species counterpoint); Caplin vocabulary ↔ honesty (primary `engine/` path does **not** run full segmentation); chamber-only `planStructuralHierarchy` labeled a **heuristic sketch** in `chamber-music-fullstack/backend/src/harmonize-core.ts`.
+3. **Sync RAG strings** — `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts` classical section mirrors the spine; violation entries cite **A&S / OMT / engine files** for range and spacing.
+4. **LLM behavior** — `harmony-forge-redesign/src/lib/ai/prompts.ts`: shared **`CITATION_AND_BREVITY`**; Auditor/Tutor/Stylist tuned for **brief source tags** when stating rules, **plain language first**, **no citation stacking**, default **3–8 sentences** for typical replies; note modes updated; Caplin guardrails retained.
+5. **LLM honesty** — Same file: **`HONESTY_NO_SYCOPHANCY`** injected into all personas—no flattery; **constraint-satisfied ≠ musically ideal**; state when context/facts are **thin** or reference is **incomplete**; **gray areas** and **tradeoffs** (esp. Stylist); **correct wrong theory** from evidence, not agreeableness.
+6. **Engine comments** — `engine/solver.ts` (motion score), `engine/constraints.ts` (A&S authority), `engine/types.ts` (range pedagogy).
+
+**C. Steps done (checklist form)**
+
+- [x] HF LitReview / NotebookLM narrow queries for four corpora  
+- [x] `Taxonomy.md` — spine table, OMT backbone, Caplin honesty, §1.1 / §1.6 updates, source attribution table  
+- [x] `taxonomyIndex.ts` — GENRE_SECTIONS + VIOLATION_ENTRIES aligned  
+- [x] `prompts.ts` — source↔implementation + Caplin + **`CITATION_AND_BREVITY`** + **`HONESTY_NO_SYCOPHANCY`**  
+- [x] `engine/solver.ts`, `constraints.ts`, `types.ts` — comment honesty  
+- [x] `harmonize-core.ts` — `planStructuralHierarchy` disclaimer  
+- [x] `docs/plan.md`, `docs/progress.md`, `docs/context/system-map.md` — synced for theory/RAG narrative + honest/non-sycophantic tutor (`HONESTY_NO_SYCOPHANCY`)  
+- [x] `make test` + `harmony-forge-redesign && npm run test` passed after engine/taxonomy/prompt edits  
+
+**D. Learnings (compact)**
+
+- **OMT** = primary **pedagogical organization** for RAG; **A&S** = anchor for **hard** SATB rules in code; **Fux** = lineage for **smooth motion** (solver is only a proxy); **Caplin** = vocabulary only when facts support it.  
+- Tutor must **teach without flooding** — one source per theoretical claim in short answers.
+- Trust comes from **accuracy and limits**, not cheerleading—prompts explicitly forbid sycophancy.
+
 ### Current failures / work in progress
 
-1. **RiffScore playback assets:** Dev server logs show `GET /audio/piano/*.mp3` **404** — RiffScore’s sampler expects static audio under the Next app; samples are not wired or hosted yet, so built-in piano playback may be broken or silent.
-2. **LLM availability:** With no `OPENAI_API_KEY` in the running process, `GET /api/theory-inspector` returns `hasApiKey: false` — chat uses **fallback** text; streaming and `/api/theory-inspector/suggest` stay off until key is set in `harmony-forge-redesign/.env.local` and **dev server is restarted**.
-3. **Monorepo / Next warning:** Turbopack warns about **multiple lockfiles** (repo root vs `harmony-forge-redesign/`); harmless for dev but should be resolved (e.g. `turbopack.root` or lockfile consolidation) to avoid wrong workspace root inference.
-4. **Doc drift (legacy):** Older progress sections still mention View/Edit OSMD/VexFlow as the primary sandbox path; **current** sandbox editing is **RiffScore-first** — treat older bullets as historical unless marked current.
+**Primary pain (user-visible):**
+
+1. **RiffScore playback assets:** `GET /audio/piano/*.mp3` **404** in dev — built-in piano playback may be silent until samples are hosted under the Next app.
+
+2. **LLM availability:** Without `OPENAI_API_KEY` (and dev server restart), Theory Inspector uses **taxonomy fallback** only; full **cited, concise, non-sycophantic** tutor behavior (`CITATION_AND_BREVITY` + `HONESTY_NO_SYCOPHANCY`) requires the key.
+
+**Secondary / technical debt:**
+
+3. **Monorepo / Next warning:** Turbopack **multiple lockfiles** (repo root vs `harmony-forge-redesign/`); resolve via `turbopack.root` or lockfile consolidation.
+
+4. **Doc drift (legacy):** Older sections below may still read OSMD/VexFlow-first; **RiffScore-first** is current for editing.
+
+5. **Audit vs note explain on large scores:** `runAudit` uses **`scoreToAuditedSlots` without `requireExactlyFourParts`** — 5+ staves may audit a **four-part slice** while note explain lists **all** staves. Needs engine/API design.
+
+6. **Mode A narrative depth:** “Why this exact pitch” beyond violation trace still thin without **solver metadata** or richer client-side analysis.
+
+7. **Optional engine stretch (not done):** Fux-informed **motion penalties** (contrary motion, etc.) beyond L1 sum — deferred; comments document the gap.
 
 ---
 
@@ -201,8 +259,8 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Harmony-only inspector + transparency (same window):**
 - Highlights and structured suggest context scoped to **generated harmony parts** (not melody).
-- Melody note clicks: **no** inspector chat noise (silent).
-- Click harmony note with inspector open: deterministic explanation referencing engine SATB constraint categories.
+- Melody note clicks (updated 2026-04-02 follow-up): inspector open → **pitch in context** vs harmony at the same beat (no engine-origin block).
+- Click harmony note with inspector open: deterministic explanation referencing engine SATB constraint categories; **baseline** preserves original pitch vs user edits.
 - With `OPENAI_API_KEY` available: note click now also triggers a tutor LLM explanation grounded in deterministic evidence from the clicked slot and neighboring slot context.
 - `prompts.ts`: stricter “no invention” instructions for Auditor/Tutor/Stylist.
 
@@ -219,6 +277,14 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Env for LLM:**
 - Added `harmony-forge-redesign/.env.example` + `.env.local` template; `.gitignore` exception so `.env.example` is committed.
+
+## Session Log (2026-04-02 — Theory Inspector pitch duality)
+
+- **Baseline:** `captureGenerationBaseline` in `theoryInspectorBaseline.ts` (harmony `noteId` → pitch; optional `validate-satb-trace` + `AuditedSlot[]` when SATB-shaped). Wired from sandbox `generatedMusicXML` effect via `queueMicrotask` after `setScore`; cleared when XML cleared.
+- **Slots:** `scoreToAuditedSlots` moved to `theoryInspectorSlots.ts` for reuse.
+- **Explain:** `explainNotePitch` (alias `explainGeneratedNote`) — melody branch, additive fallback with baseline, SATB path uses cached trace + `originSatbContextLines` for engine-origin facts and live `buildSatbNoteContextLines` for current pitch; `buildPitchEditDeltaFact` when edited.
+- **UI:** `TheoryInspectorPanel` — comparison strip, Engine origin card, Current pitch card; header copy updated.
+- **Prompts:** Tutor rules in `prompts.ts` + `NOTE_EXPLAIN_TUTOR_BRIEF` for ENGINE ORIGIN vs CURRENT and pitch-only focus.
 
 ## Session Log (2026-04-03)
 

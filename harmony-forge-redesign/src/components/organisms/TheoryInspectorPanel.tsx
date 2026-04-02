@@ -186,9 +186,9 @@ export const TheoryInspectorPanel = React.forwardRef<
             <span
               className="font-body text-[10px] font-normal leading-tight truncate"
               style={{ color: "var(--hf-text-secondary)" }}
-              title="Click a harmony note to inspect why it was generated"
+              title="Click any note: harmony shows engine origin vs your edits; melody shows pitch in context"
             >
-              Click a harmony note to inspect it
+              Click any note — pitch explain (harmony + melody)
             </span>
           </div>
 
@@ -252,9 +252,65 @@ export const TheoryInspectorPanel = React.forwardRef<
                     {noteInsight.noteLabel} ({noteInsight.voice})
                   </div>
                   <div className="text-[11px] mt-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
-                    Slot {noteInsight.slotIndex} · {noteInsight.source}
+                    {noteInsight.insightKind === "melody-guide"
+                      ? "Melody · input pitch"
+                      : noteInsight.inspectorMode === "origin-justifier"
+                        ? `Slot ${noteInsight.slotIndex} · Origin Justifier`
+                        : noteInsight.inspectorMode === "harmonic-guide"
+                          ? `Slot ${noteInsight.slotIndex} · Harmonic Guide`
+                          : `Slot ${noteInsight.slotIndex}`}
                   </div>
+                  {(noteInsight.originalEnginePitch != null || noteInsight.userModifiedPitch) && (
+                    <div
+                      className="text-[11px] mt-[8px] rounded-[4px] px-[8px] py-[6px]"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--hf-accent) 12%, transparent)",
+                        border: "1px solid var(--hf-detail)",
+                        color: "var(--hf-text-primary)",
+                      }}
+                    >
+                      <div className="font-mono text-[10px] mb-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
+                        Generated snapshot vs score (pitch)
+                      </div>
+                      <div>
+                        {noteInsight.originalEnginePitch != null ? (
+                          <>
+                            <span style={{ color: "var(--hf-text-secondary)" }}>Engine at load: </span>
+                            <span className="font-medium">{noteInsight.originalEnginePitch}</span>
+                          </>
+                        ) : (
+                          <span style={{ color: "var(--hf-text-secondary)" }}>No engine snapshot for this note id</span>
+                        )}
+                      </div>
+                      <div className="mt-[4px]">
+                        <span style={{ color: "var(--hf-text-secondary)" }}>Score now: </span>
+                        <span className="font-medium">{noteInsight.currentPitch}</span>
+                        {noteInsight.userModifiedPitch ? (
+                          <span style={{ color: "var(--hf-text-secondary)" }}> (edited)</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {noteInsight.engineOriginExplanation ? (
+                  <div
+                    className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                    style={{
+                      backgroundColor: "var(--hf-bg)",
+                      border: "1px solid var(--hf-detail)",
+                      color: "var(--hf-text-primary)",
+                    }}
+                  >
+                    <div
+                      className="font-mono text-[10px] mb-[6px]"
+                      style={{ color: "var(--hf-text-secondary)" }}
+                    >
+                      Origin Justifier (generation snapshot)
+                    </div>
+                    <div className="whitespace-pre-wrap">{noteInsight.engineOriginExplanation}</div>
+                  </div>
+                ) : null}
 
                 <div
                   className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
@@ -268,9 +324,11 @@ export const TheoryInspectorPanel = React.forwardRef<
                     className="font-mono text-[10px] mb-[6px]"
                     style={{ color: "var(--hf-text-secondary)" }}
                   >
-                    Deterministic Explanation
+                    {noteInsight.insightKind === "melody-guide"
+                      ? "Melody · pitch in context (live score)"
+                      : "Harmonic Guide (live score)"}
                   </div>
-                  {noteInsight.deterministicExplanation}
+                  <div className="whitespace-pre-wrap">{noteInsight.currentPitchGuideExplanation}</div>
                 </div>
 
                 <div
@@ -323,7 +381,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                   color: "var(--hf-text-primary)",
                 }}
               >
-                Click a generated harmony note to see why it was chosen and which theory rules apply.
+                Open this panel and click a note in the score. Harmony lines show what the engine first wrote versus your current pitch; the melody shows how your input pitch sits against harmony at the same beat.
               </div>
             )
           ) : messages.map((msg) => {

@@ -172,7 +172,9 @@ export function extractNotes(score: EditableScore, noteIds: Set<string>): Note[]
     for (const measure of part.measures) {
       for (const note of measure.notes) {
         if (noteIds.has(note.id)) {
-          notes.push({ ...note, id: generateId("n") });
+          const copy: Note = { ...note, id: generateId("n") };
+          delete copy.originalGeneratedPitch;
+          notes.push(copy);
         }
       }
     }

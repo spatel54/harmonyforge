@@ -1,6 +1,6 @@
 # Plan
 
-> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox editing is **RiffScore-first** (`harmony-forge-redesign/`): `EditableScore` in Zustand syncs bidirectionally with RiffScore; rests normalized; **riffscore** extended via **`patch-package`** (`ui.toolbarPlugins`) for native-toolbar HarmonyForge actions. Document preview may still use parsed score / RiffScore preview. **Additive harmonies:** Engine adds harmony parts to melody. **API/CLI:** Partwise MusicXML 2.0; `make test-engine`. **Flow:** Upload → Document → Generate → Sandbox. Session persistence via sessionStorage; CORS via `CORS_ORIGIN`. **Theory Inspector:** `/api/theory-inspector` + `/api/theory-inspector/suggest`; harmony-only highlights + suggestions; deterministic engine-first explanations; optional OpenAI when `OPENAI_API_KEY` is set in `.env.local` (see `.env.example`). **Active gaps:** RiffScore `/audio/piano/*.mp3` 404s in dev; Turbopack multi-lockfile warning; verify LLM after env + restart.
+> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox editing is **RiffScore-first** (`harmony-forge-redesign/`): `EditableScore` in Zustand syncs bidirectionally with RiffScore; rests normalized; **riffscore** extended via **`patch-package`** (`ui.toolbarPlugins`) for native-toolbar HarmonyForge actions. Document preview may still use parsed score / RiffScore preview. **Additive harmonies:** Engine adds harmony parts to melody. **API/CLI:** Partwise MusicXML 2.0; `make test-engine`. **Flow:** Upload → Document → Generate → Sandbox. Session persistence via sessionStorage; CORS via `CORS_ORIGIN`. **Theory Inspector:** `/api/theory-inspector` + `/api/theory-inspector/suggest`; **Origin Justifier vs Harmonic Guide** (dual-mode); RAG from **`Taxonomy.md`** + **`taxonomyIndex.ts`** with **source spine** (Fux / Aldwell & Schachter / Caplin / Open Music Theory) mapped to **engine honesty** in docs + code comments; **`prompts.ts`** — **`CITATION_AND_BREVITY`** (short cited norms) + **`HONESTY_NO_SYCOPHANCY`** (non-sycophantic, realistic: no false praise, checker ≠ “best”, thin context admitted). `originalGeneratedPitch` on notes + baseline map; **staff roster + cross-part interval FACTs** in `noteExplainContext.ts`; note-explain SATB path only when **exactly four parts** (`requireExactlyFourParts`); optional OpenAI when `OPENAI_API_KEY` is set in `.env.local` (see `.env.example`). **Frontend unit tests:** `cd harmony-forge-redesign && npm run test` (vitest, `noteExplainContext`). **Active gaps:** RiffScore `/audio/piano/*.mp3` 404s in dev; Turbopack multi-lockfile warning; `runAudit` may still use four-staff slice on 5+ part scores vs full-staff note explain; verify LLM after env + restart; Mode A generative rationale still thin without solver metadata.
 >
 > **Milestones:** M3 (XAI Backend & Architecture) complete (19/19 closed). M4 (Frontend) consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) and now complete for MVP scope (audio, onboarding, inspector wiring). **M5 (User Study)** next.
 
@@ -81,21 +81,28 @@ Build order (from MVP scope):
    - [x] Auditor context wired via backend validation (`/api/validate-from-file`)
    - [x] Tutor chat wiring: Sandbox asks inspector API; replies render in panel
    - [x] Note-click explainability: clicking a generated harmony note triggers deterministic evidence + tutor LLM explanation (when API key is available)
+   - [x] Original vs current pitch: generation baseline (harmony note id → pitch at load) + optional cached `validate-satb-trace`; inspector **Engine origin** vs **current pitch** sections; melody clicks = pitch-in-context only; tutor must not attribute user-edited pitch to the engine
    - [x] Engine trace source of truth: `/api/validate-satb-trace` provides per-slot rule findings consumed by inspector highlights + note explainability
+   - [x] **Dual-mode Theory Inspector:** Origin Justifier vs Harmonic Guide (`inspectorMode`); `Note.originalGeneratedPitch` stamped on load + preserved across RiffScore sync; tutor API `theoryInspectorNoteMode`; SATB/additive FACT lines include next chord moment and barline neighbors; clipboard paste drops provenance
+   - [x] **Multi-part note context:** Staff roster (input vs generated names); cross-part interval FACTs to every other staff at the beat; SATB note-explain only when exactly four parts (`requireExactlyFourParts`); SATB FACTs use instrument/part names; scores with 5+ staves use full additive context (`npm run test` in `harmony-forge-redesign` for `noteExplainContext`)
    - [x] Stylist structured suggestion flow (`/api/theory-inspector/suggest`) with accept/reject + batch actions
    - [x] Grammarly-style inline suggestion ghost notes (accept/reject in-score)
    - [x] Note-level audit highlighting pipeline (red = deterministic violations, blue = theory nuance/warnings)
    - [x] Violation-card actions wired ("Explain more", "Suggest fix", "Show in score")
+   - [x] **Source-aligned taxonomy + prompts (HF LitReview / NotebookLM):** `Taxonomy.md` source spine and engine-mapping table (Fux → solver motion **proxy**; Aldwell & Schachter → `constraints.ts` / `validate-satb-trace`; Caplin vocabulary + **honesty** for primary `engine/` path; Open Music Theory as **primary RAG pedagogy**); mirrored in `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`; auditor/tutor/stylist rules in `prompts.ts` (implementation vs heuristic; Caplin guardrails); `engine/solver.ts` comment; `chamber-music-fullstack/.../harmonize-core.ts` disclaimer on `planStructuralHierarchy`
+   - [x] **Tutor output policy:** `prompts.ts` — `CITATION_AND_BREVITY` + persona tuning so LLM answers cite **one** appropriate source when stating theory norms, stay **down-to-earth and short** by default, and avoid citation overload (offline fallback unchanged).
+   - [x] **Honest tutor tone:** `prompts.ts` — `HONESTY_NO_SYCOPHANCY` for Auditor/Tutor/Stylist (no flattery; distinguish constraint pass vs musical quality; admit incomplete context; gray areas; correct wrong premises; Stylist tradeoffs / “one common fix”).
 
 4. **Supporting Features** *(M4 #79 — MVP by 3/27)*
    - [ ] Multi-clef & instrument transposition; multi-instrument selection
    - [x] Audio playback: rest-aware timing + measure-aware scheduling; pitch-safe filtering; transport stability
    - [x] Onboarding flow: guided first-time tour (Upload → Document → Generate → Sandbox) with localStorage completion flag
-  - [ ] Export: PDF + chord-chart path implemented; tablature deferred
+   - [ ] Export: PDF + chord-chart path implemented; tablature deferred
 
 ## Verification
 
 - `make test` — Backend unit and integration tests pass
+- `cd harmony-forge-redesign && npm run test` — Vitest (`noteExplainContext` and future frontend unit tests)
 - `make lint` — Backend ESLint passes
 - `make build` — Engine build plus Next production build pass
 - `make test-engine` — CLI runs engine on `input/月亮代表我的心.xml` → `output/月亮代表我的心_flute_cello.xml` (melody + flute + cello, major)

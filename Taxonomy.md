@@ -1,6 +1,6 @@
 # HarmonyForge Theory Lexicon — RAG Source for Theory Inspector
 
-> **Role**: This file is the canonical lexicon/taxonomy used by the Theory Inspector RAG pipeline. The Auditor detects violations; RAG retrieves from this document; the Tutor returns ante-hoc explanations. **Extracted from HFLitReview notebook sources** (Fux, Aldwell & Schachter, SchenkerGUIDE, Open Music Theory, HarmonySolver, SymPAC, gigging-musician transcripts).
+> **Role**: This file is the canonical lexicon/taxonomy used by the Theory Inspector RAG pipeline. The Auditor detects violations; RAG retrieves from this document; the Tutor returns ante-hoc explanations. **Open Music Theory** (Gotham et al., OER) is the **primary pedagogical backbone** for how explanations are organized (species → SATB → phrase model); **Aldwell & Schachter** and **Fux** remain authoritative for specific voice-leading claims. **Extracted from HFLitReview notebook sources** (Fux, Aldwell & Schachter, SchenkerGUIDE, Open Music Theory, HarmonySolver, SymPAC, gigging-musician transcripts).
 
 ---
 
@@ -15,21 +15,40 @@ User edit → Auditor detects violation → RAG retrieves genre-specific section
 
 ---
 
+## Source spine and engine mapping
+
+| Source | Conceptual role | Where implemented | Theory Inspector usage |
+|--------|-----------------|-------------------|------------------------|
+| **Johann Joseph Fux**, *Gradus ad Parnassum* (English ed. Alfred Mann) | Five-species counterpoint ladder; conjunct motion; **contrary motion** when approaching perfect consonances to reduce concealed parallels; melodic independence | **Heuristic only:** [`engine/solver.ts`](engine/solver.ts) ranks voicings by **sum of absolute MIDI motion** per voice (parsimony proxy—not species counterpoint or Fux interval arithmetic) | Tutor may cite Fux for *why* smooth motion matters; must **not** imply the engine runs full species exercises |
+| **Edward Aldwell & Carl Schachter**, *Harmony and Voice Leading* | Hard SATB norms: parallel perfect fifths/octaves/unisons; upper-voice spacing; voice crossing and overlap | [`engine/constraints.ts`](engine/constraints.ts), [`engine/validateSATB.ts`](engine/validateSATB.ts); vocal **range clamps** in [`engine/types.ts`](engine/types.ts) | Auditor/Tutor cite A&S for violations reported by deterministic checks / `validate-satb-trace` |
+| **William E. Caplin**, *Classical Form* (1998) | **Sentence:** presentation (basic idea + repetition) + continuation (fragmentation, faster harmonic rhythm toward cadence). **Period:** antecedent (weak cadence) + consequent (stronger cadence) | **Not** in the primary HarmonyForge **Logic Core** (`engine/`). Optional **heuristic** phrase/cadence sketch: [`chamber-music-fullstack/backend/src/harmonize-core.ts`](chamber-music-fullstack/backend/src/harmonize-core.ts) (`planStructuralHierarchy`) when that stack is used | Tutor uses Caplin **labels** only if the user message includes structural FACTs or metadata; otherwise describe full Caplin-style analysis as **aspirational** |
+| ***Open Music Theory*** (Gotham et al., OER) | Modular undergraduate pedagogy: Fux-style species → four-part SATB → phrase model (Tb–PD–D–Te) and cadence types | RAG strings in this file + [`harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`](harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts) → [`/api/theory-inspector`](harmony-forge-redesign/src/app/api/theory-inspector/route.ts) | **Default framing** for orderly explanations; tie engine checks to OMT’s rule lists while naming treatises for prohibitions |
+
+### Open Music Theory — pedagogical backbone
+
+*Open Music Theory* is an open, modular textbook: it progresses from **two-voice species** (after Fux) into **four-part SATB**, codifying spacing, ranges, doubling, parallels, and crossing. It uses a **phrase model** and **cadence taxonomy** (e.g., PAC, IAC, HC) for goal-directed harmony. For HarmonyForge, OMT is the **primary dataset** for RAG wording and structure; when a rule is a direct prohibition enforced in code, pair OMT exposition with **Aldwell & Schachter** (and **Fux** for contrapuntal lineage) as noted in the tables below.
+
+### Caplin — formal segmentation (vocabulary + honesty)
+
+Use Caplin’s terms **sentence** and **period** only when explaining **large-scale form** the user or system has actually signaled (e.g., explicit structural metadata, labeled phrases in the prompt, or documented chamber-backend heuristics). A **sentence** combines a presentation phrase with a continuation that often shortens material and **accelerates harmonic rhythm** before cadence. A **period** pairs **antecedent** and **consequent** with a characteristically **weaker-then-stronger** cadential pattern. The main sandbox **engine/** path does **not** currently emit Caplin parses; over-claiming segmentation erodes trust.
+
+---
+
 ## 1. Classical & Functional Harmony (Axiomatic Core)
 
-*Constraint-satisfaction ground truth. Sources: Fux (Counterpoint), Aldwell & Schachter (Harmony & Voice Leading), SchenkerGUIDE.*
+*Hard constraints and engine checks align with **Aldwell & Schachter** and contrapuntal tradition (**Fux**); RAG organization follows **Open Music Theory**. Schenkerian depth: SchenkerGUIDE.*
 
 ### 1.1 Strict Voice-Leading (Red-Line Triggers)
 
 | Term | Definition | Flag When | Source |
 |------|------------|----------|--------|
-| **Parallel fifths** | Two voices move in same direction to perfect fifth. Forbidden: perfect 5th "defines triadic root" and deprives voices of independence. | Same two voices form perfect fifth in consecutive chords | Fux, Aldwell-Schachter |
-| **Parallel octaves** | Two voices move in same direction to perfect octave. One part "duplicates pitch and motion of the other in different register." | Same two voices form octave in consecutive chords | Aldwell-Schachter |
-| **Parallel unisons** | Both voices on same pitch. "Individuality does not exist." | Any parallel unison | Aldwell-Schachter |
-| **Hidden fifths/octaves** | Perfect consonance approached by similar motion; "conceals actual parallels if intervals were filled in." Especially in outer voices when soprano leaps. | Outer voices move in similar motion to perfect 5th or 8ve | Fux, Aldwell-Schachter |
-| **Consecutive 5ths/8ves by contrary motion** | Two perfect intervals in same pair of voices; "tends to cause unwanted accents." | Best avoided in most cases | Aldwell-Schachter |
-| **Voice crossing** | Two voices exchange position (e.g., alto below tenor). "Soprano or bass line can become obscured." Least problematic when brief, inner voices only. | Adjacent voices intersect | Aldwell-Schachter |
-| **Voice overlap** | Lower voice moves above prior upper-voice note, or upper below prior lower. "Melodic stepwise connection can be made between the two voices"; confusing in four-part vocal style. | One voice exceeds the other's prior position | Aldwell-Schachter |
+| **Parallel fifths** | Two voices move in same direction to perfect fifth; destroys linear independence (A&S); contrapuntally roots the texture in the fifth (Fux tradition). | Same two voices form perfect fifth in consecutive chords | Aldwell & Schachter; Fux (counterpoint tradition) |
+| **Parallel octaves** | Two voices move in same direction to perfect octave; one part duplicates the other’s pitch and motion in another register (A&S). | Same two voices form octave in consecutive chords | Aldwell & Schachter |
+| **Parallel unisons** | Both voices on same pitch; destroys independence (A&S). | Any parallel unison | Aldwell & Schachter |
+| **Hidden fifths/octaves** | Perfect consonance approached by similar motion; conceals parallel perfect intervals (Fux: use **contrary motion** imperfect→perfect to avoid this effect); especially risky in outer voices when soprano leaps (A&S). | Outer voices move in similar motion to perfect 5th or 8ve | Fux; Aldwell & Schachter |
+| **Consecutive 5ths/8ves by contrary motion** | Two perfect intervals in same pair of voices; tends to produce unwanted accenting (A&S). | Best avoided in most cases | Aldwell & Schachter |
+| **Voice crossing** | Adjacent voices invert registral order; obscures outer lines (A&S). Least problematic when brief and inner-voice only. | Adjacent voices intersect | Aldwell & Schachter |
+| **Voice overlap** | Lower voice moves above the prior note of an upper voice (or the reverse); blurs line identity in choral SATB (A&S). | One voice exceeds the other's prior position | Aldwell & Schachter |
 | **False relation** | Chromatic contradiction split between different voices in adjacent chords. | Same pitch class as ♮ and ♭/♯ in close proximity | HarmonySolver |
 
 ### 1.2 Doubling Rules
@@ -73,15 +92,16 @@ User edit → Auditor detects violation → RAG retrieves genre-specific section
 | **Foreground (Vordergrund)** | Surface; score as written. | SchenkerGUIDE |
 | **Phrase fusion** | Pivot chords map local harmonies to deeper goals (e.g., I → IV reinterpretation). | — |
 
-### 1.6 Algorithmic Constraints (HarmonySolver / CSP)
+### 1.6 Algorithmic constraints (engine + HarmonySolver)
 
 | Constraint | Rule | Source |
 |------------|------|--------|
 | **One direction** | Not all four voices moving in same direction simultaneously. | HarmonySolver |
 | **Forbidden jumps** | Restrict unnatural or overly wide melodic leaps. | HarmonySolver |
 | **Repeated function** | Penalize two identical chords with same function sequentially. | HarmonySolver |
-| **Range** | Soprano C₄–G₅; Alto G₃–D₅; Tenor C₃–G₄; Bass F₂–D₄. | Standard SATB |
-| **Spacing** | Max one octave between adjacent upper voices; max twelfth between Tenor and Bass. | Standard SATB |
+| **Range** | **Engine clamp** (conventional choral SATB): Soprano C₄–G₅; Alto G₃–D₅; Tenor C₃–G₄; Bass F₂–D₄ (`engine/types.ts`). Same limits taught in A&S / OMT as typical vocal bounds. | Aldwell & Schachter; Open Music Theory; **implementation:** Logic Core |
+| **Spacing** | **Engine:** ≤ octave between S–A and A–T; ≤ **twelfth** between T–B (`engine/constraints.ts`, enforced in candidate generation). A&S stress tight upper spacing; bass may lie farther below in textbook scoring—the engine uses a fixed twelfth cap for blend. | Aldwell & Schachter; Open Music Theory; **implementation:** Logic Core |
+| **Motion preference** | **Engine heuristic:** prefer lower total absolute motion across voices between successive chords (`engine/solver.ts`). Pedagogical lineage: conjunct motion and independence (Fux; OMT)—**not** a full species-cost model. | Fux (pedagogy); Open Music Theory; **implementation:** Logic Core |
 
 ---
 
@@ -233,8 +253,9 @@ User edit → Auditor detects violation → RAG retrieves genre-specific section
 
 | Source | Content |
 |--------|---------|
-| Counterpoint, Fux (Alfred Mann) | Parallels, hidden fifths, clausula vera, doubling |
-| Aldwell & Schachter, Harmony & Voice Leading | Voice-leading rules, doubling, cadences, overlap |
+| Counterpoint, Fux (Alfred Mann ed.) | Species ladder; conjunct motion; contrary motion toward perfect consonances; clausula vera; doubling tradition |
+| Aldwell & Schachter, *Harmony & Voice Leading* | **Primary treatise** for parallel perfects, spacing, crossing, overlap, doubling, cadences |
+| William E. Caplin, *Classical Form* (1998) | Sentence vs period; presentation/continuation; cadential weak/strong pairing; fragmentation / harmonic acceleration (vocabulary—see engine mapping) |
+| Gotham et al., *Open Music Theory* (OER) | **Primary pedagogical RAG spine**; species→SATB pathway; phrase model; chord-scale and pop/jazz modules; post-tonal / set theory |
 | Pankhurst, SchenkerGUIDE | Ursatz, prolongation, structural levels |
-| Open Music Theory | Chord-scale theory, jazz, pop schemas, set theory |
-| HarmonySolver (Dajda et al.) | Algorithmic constraints |
+| HarmonySolver (Dajda et al.) | Additional CSP-style constraints |

@@ -1,6 +1,6 @@
 /**
  * HarmonyForge Logic Core — Shared types and pitch helpers
- * SATB ranges per Taxonomy.md §1.6
+ * SATB ranges: conventional choral clamps (Aldwell & Schachter / Open Music Theory pedagogy); see Taxonomy.md §1.6.
  */
 
 export type PitchClass =
