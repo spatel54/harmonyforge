@@ -16,8 +16,44 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 1. **Fix parsing** (backend + frontend) — MusicXML partwise/timewise, no DTD loading, correct pitch mapping.
 2. **Fix SATB solver** — Handle real melodies, non-chord tones, relaxed fallback when strict voice-leading fails.
 3. **Fix MusicXML output** — Preserve rhythm, variable parts (only selected instruments). **Additive harmonies**: melody stays as first part; user-selected instruments (flute, cello) are added as harmony parts.
-4. **Fix frontend display** — Document preview renders reliably; Sandbox is edit-first (VexFlow default) with OSMD fallback when VexFlow fails.
+4. **Fix frontend display** — Document preview renders reliably; **Sandbox primary editor** is **RiffScore** (third-party notation UI) with `EditableScore` in Zustand as the app’s canonical model; bidirectional sync via adapter + `useRiffScoreSync`. Legacy VexFlow/OSMD paths remain referenced historically below; current MVP editing path is RiffScore-centric.
 5. **Variable parts** — Generator outputs melody + harmony parts only (e.g. melody + flute + cello = 3 parts). Soprano instruments map to Alto voice; Alto/Tenor/Bass map to their voices.
+6. **Explainability** — Theory Inspector treats the **deterministic engine** as ground truth: chat + highlights explain **generated harmony parts only** (not user melody); taxonomy text is RAG-style context; LLM is optional and must not invent rules beyond supplied context.
+
+---
+
+## Consolidated status (2026-04) — end goal, approach, done work, active gaps
+
+### End goal (unchanged + clarified)
+
+- **Product flow:** Upload → Document (preview + config) → Generate Harmonies → **Sandbox** with editable score, export, and optional playback.
+- **Engine contract:** Additive harmonies (melody part preserved; new parts are generated).
+- **Editor UX:** Modern notation editing (rest-complete measures, shortcuts, integrated toolbar) aligned with familiar editors (Noteflight/MuseScore-style goals).
+- **Theory Inspector:** Transparent “glass box” — explanations and inline highlights tied to **deterministic SATB rules** and taxonomy context; optional OpenAI only **augments** wording when `OPENAI_API_KEY` is configured; structured suggestions (`/api/theory-inspector/suggest`) require the key.
+
+### Approach (this arc)
+
+- **State:** `EditableScore` + Zustand (`useScoreStore`) remain the canonical score; **RiffScore** renders and captures edits; `riffscoreAdapter` + `normalizeScoreRests` keep measures rhythmically complete.
+- **Toolbar:** RiffScore’s public API did not expose custom toolbar slots — we **patch** `riffscore` (via `patch-package`) to add `ui.toolbarPlugins`, then mount HarmonyForge actions (palettes, undo/redo, transpose, XML export, etc.) inside the native toolbar.
+- **Inspector:** `useTheoryInspector` maps SATB slots to note IDs for **harmony parts only** (part index ≥ 1 when multiple parts exist); local checks mirror engine-style constraints for highlights; melody note clicks **do not** spam the chat (silent ignore). Violation cards and chips wired to real flows (`Explain more`, `Suggest fix`, `Show in score`).
+
+### Steps completed in this arc (high level)
+
+| Area | What shipped |
+|------|----------------|
+| **Rests** | `normalizeScoreRests` in `scoreUtils`; `setScore`/`applyScore` normalize; RiffScore adapter preserves `isRest` both directions; `insertNote` can replace a rest slot. |
+| **Editor / toolbar** | Removed duplicate floating palette pattern; `toolbarPlugins` patch; palette visibility + styled plugin buttons; many functional plugin actions. |
+| **Stability** | Fixed React “getSnapshot / maximum update depth” by using **per-field** `useScoreStore` selectors in `RiffScoreEditor` (no object literal selector). |
+| **Theory Inspector** | `issueHighlights` in store; overlays in `RiffScoreEditor`; harmony-only suggestion context; deterministic note explain on harmony click when panel open; prompts tightened in `prompts.ts`. |
+| **Config** | `harmony-forge-redesign/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
+| **Ops** | Documented `make dev`; port-conflict cleanup for 3000/8000 when restarting. |
+
+### Current failures / work in progress
+
+1. **RiffScore playback assets:** Dev server logs show `GET /audio/piano/*.mp3` **404** — RiffScore’s sampler expects static audio under the Next app; samples are not wired or hosted yet, so built-in piano playback may be broken or silent.
+2. **LLM availability:** With no `OPENAI_API_KEY` in the running process, `GET /api/theory-inspector` returns `hasApiKey: false` — chat uses **fallback** text; streaming and `/api/theory-inspector/suggest` stay off until key is set in `harmony-forge-redesign/.env.local` and **dev server is restarted**.
+3. **Monorepo / Next warning:** Turbopack warns about **multiple lockfiles** (repo root vs `harmony-forge-redesign/`); harmless for dev but should be resolved (e.g. `turbopack.root` or lockfile consolidation) to avoid wrong workspace root inference.
+4. **Doc drift (legacy):** Older progress sections still mention View/Edit OSMD/VexFlow as the primary sandbox path; **current** sandbox editing is **RiffScore-first** — treat older bullets as historical unless marked current.
 
 ---
 
@@ -84,14 +120,16 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ## Current Focus
 
-**Issue #79 execution:** Remaining MVP tasks are implemented in code:
-1. **Audio playback reliability/correctness** — implemented with rest-safe + measure-aware scheduling and transport stability.
-2. **Onboarding flow** — implemented as first-time guided tour across the 3-step UX.
-3. **Theory Inspector configuration** — implemented via app API route with backend validation context and optional OpenAI mode.
+**Primary editor:** Sandbox notation is **RiffScore**-driven with Zustand-backed `EditableScore` sync — not the older VexFlow-first story (see **Consolidated status (2026-04)** above for truth).
 
-**Current limitation being worked:** The VexFlow edit renderer can still fail to show notation for some generated scores. Mitigation is now in place: `/sandbox` never goes blank because Edit mode overlays a safe OSMD preview when VexFlow does not produce note positions.
+**Active work / blockers:**
+1. **RiffScore sample URLs (404)** — wire or proxy `/audio/piano/*.mp3` (or disable sampler UI) so built-in playback matches user expectations.
+2. **OpenAI in dev** — ensure `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) live in `harmony-forge-redesign/.env.local` and restart `make dev`; verify `GET /api/theory-inspector` → `hasApiKey: true`.
+3. **Turbopack lockfile warning** — align Next workspace root (`turbopack.root` or single lockfile strategy).
 
-**Deferred:** Advanced Stylist auto-apply workflow (candidate edit application) remains post-MVP.
+**Still valuable from earlier milestones:** Onboarding, session persistence, engine on `:8000`, chord-chart export path, `usePlayback`-based app audio (where still used) — coexist with RiffScore’s internal playback.
+
+**Deferred:** JSON-based score deltas for backend sync; deeper “click any harmony note → full solver trace” beyond current deterministic slot messages.
 
 ---
 
@@ -128,6 +166,63 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 - Confirmed arrival on `/sandbox` with generated arrangement metadata (`Violin, Flute`) and visible notation.
 - Re-validated core interactions on generated score: first edit enables Undo, inspector query returns (`POST /api/theory-inspector` `200`), playback Play↔Pause works, and Export modal contains Chord Chart option.
 - Current state aligns with `docs/plan.md` verification flow for MVP path (Upload → Document config → Generate → Sandbox).
+
+## Session Log (2026-04-01)
+
+**Note editor parity pass (Noteflight/MuseScore baseline):**
+- Added measure-rest normalization in the editable score pipeline: underfilled measures auto-populate with rests; overfilled measures now trim trailing filler rests first (prevents rest-padding overflow after note insertion).
+- Fixed RiffScore adapter round-trip for rests: HF -> RiffScore marks true rest events (`isRest`, `pitch: null`), and RiffScore -> HF restores rest notes instead of dropping them.
+- Upgraded `/sandbox` with a modern quick-toolbar above the editor:
+  - Undo/Redo
+  - Duration palette (whole -> 32nd)
+  - Insert Rest, Tie toggle
+  - Sharp/Flat/Natural accidental buttons
+  - Play/Pause + Stop transport controls
+  - Shortcut help toggle
+- Expanded keyboard ergonomics to match common notation workflows:
+  - Cmd/Ctrl+C/X/V clipboard operations
+  - Cmd/Ctrl+A select all notes
+  - Cmd/Ctrl+Y redo
+  - `N` arms note input (quarter default)
+  - `0` inserts rest at cursor, or converts selected notes to rests
+  - `?` toggles inline shortcut cheat sheet
+- Build verification: `npm run build` in `harmony-forge-redesign` passes.
+
+## Session Log (2026-04-02)
+
+**Theory Inspector reliability + Grammarly-like highlighting pass:**
+- Fixed inspector interaction wiring in `/sandbox`: violation card actions now trigger real flows (`Explain more` -> tutor chat, `Suggest fix` -> stylist suggestions).
+- Added note-level SATB issue mapping in `useTheoryInspector`: local per-slot rule checks now produce `issueHighlights` with severity (`error`/`warning`) tied to real `noteId`s.
+- Implemented "Show in score" behavior via chips: re-runs audit and applies inline note highlights.
+- Added `ScoreIssueHighlight` model and Zustand state (`issueHighlights`) in `useTheoryInspectorStore`.
+- Wired issue highlights through `sandbox/page.tsx` -> `ScoreCanvas` -> `RiffScoreEditor`.
+- Added in-score Grammarly-style issue overlays in `RiffScoreEditor` (red for errors, blue for nuance/warnings) alongside ghost-note suggestion overlays.
+- Build + type validation: `npm run build` passes after inspector/highlight changes.
+
+**Harmony-only inspector + transparency (same window):**
+- Highlights and structured suggest context scoped to **generated harmony parts** (not melody).
+- Melody note clicks: **no** inspector chat noise (silent).
+- Click harmony note with inspector open: deterministic explanation referencing engine SATB constraint categories.
+- With `OPENAI_API_KEY` available: note click now also triggers a tutor LLM explanation grounded in deterministic evidence from the clicked slot and neighboring slot context.
+- `prompts.ts`: stricter “no invention” instructions for Auditor/Tutor/Stylist.
+
+**Centralized theory-rule constants (2026-04-02):**
+- Added `src/lib/music/theoryRules.ts` as a shared SATB-rules module for inspector-side range + spacing thresholds.
+- `useTheoryInspector` now reads these constants for both highlight detection and deterministic note explainability text.
+
+**Base-next-step: engine explainability trace (2026-04-02):**
+- Added backend endpoint `POST /api/validate-satb-trace` in `engine/server.ts`.
+- Added `validateSATBSequenceWithTrace` in `engine/validateSATB.ts` returning per-slot findings (rule, severity, involved voices, message) alongside HER metrics.
+- Rewired `useTheoryInspector.runAudit` to use engine trace as the primary source for in-score highlights; local checks remain fallback only if engine trace is unreachable.
+- Rewired `useTheoryInspector.explainGeneratedNote` to use slot findings from engine trace for deterministic note reasoning + LLM grounding payload.
+- Added an Inspector `Engine Evidence` card (raw trace lines) per clicked harmony note so users can inspect source findings directly.
+
+**Env for LLM:**
+- Added `harmony-forge-redesign/.env.example` + `.env.local` template; `.gitignore` exception so `.env.example` is committed.
+
+## Session Log (2026-04-03)
+
+**Documentation sync:** Consolidated end goal, approach, completed work, and **active failures** into `docs/progress.md` (this file). Refreshed `docs/plan.md` (current-status paragraph, **2g.8** RiffScore/patch-package checkbox, LLM verification step). Updated `docs/context/system-map.md` (implementation blurb, mermaid sandbox subgraph → RiffScore + Zustand loop, component table, data-flow steps 6–7, fixed `Taxonomy.md` run-on sentence).
 
 ---
 
@@ -485,23 +580,29 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ## Next Steps
 
-**MVP by 3/27 (M4 #79):** Core tasks completed. **M5 (User Study & Evaluation):** ready to transition.
+**MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-0. **Fix sandbox blank canvas regression** — `/sandbox` shell loads but notation does not render under current edit-first path (active blocker).
+**Immediate (2026-04 — see Consolidated status):**
+1. **RiffScore playback samples** — Serve or proxy `/audio/piano/*.mp3` (or disable built-in sampler UX) so piano playback is not 404/no-op.
+2. **LLM in dev** — `OPENAI_API_KEY` in `harmony-forge-redesign/.env.local`; restart `make dev`; confirm `GET /api/theory-inspector` → `hasApiKey: true`.
+3. **Turbopack / lockfiles** — Resolve multi-lockfile warning (e.g. `turbopack.root` or single-lockfile layout).
+
+**Deferred:** JSON-based score deltas for backend sync (Theory Inspector integration).
+
+**Historical (completed — pre–RiffScore-primary era may reference OSMD/VexFlow toggles):**
 1. ~~**Fix Next.js dev server**~~ — Resolved: run `npm install` in `harmony-forge-redesign/`
 2. ~~**Render MusicXML in ScoreCanvas**~~ — Done: parseMusicXML, VexFlowScore, useScoreStore
 3. ~~**Selection + active tool**~~ — Done: useToolStore, ScorePalette onToolSelect, Escape/click to clear
 4. ~~**Wire Edit tools**~~ — Done: Undo, Redo, Cut, Copy, Paste, Delete
 5. ~~**Enable direct note manipulation**~~ — Done: duration/pitch/articulation/dynamics/measure/score tools
-6. ~~**Document page preview**~~ — Done: parse uploaded MusicXML, VexFlowScore in ScorePreviewPanel; namespace-tolerant parser
-7. ~~**Fix "Could not parse file or no melody found"**~~ — Done (Phase 14): Switched partwise parser to fast-xml-parser
-8. ~~**Resolve VexFlow TickMismatch**~~ — Done (2g.1): Fixed 4 beats per measure; pad per measure; prefer OSMD when musicXML exists for reliable display (blank canvas fix)
-9. ~~**Re-enable VexFlow edit tools**~~ — Done: Edit mode toggle (View/Edit) in SandboxActionBar; Edit uses VexFlow for note tools
-10. ~~**Fix audio playback**~~ — Done: rest-aware/measure-aware scheduling + stable transport + pitch filtering.
-11. **Optional: reduce frontend lint debt** — Remaining `harmony-forge-redesign` lint errors are outside the restored MVP path
-12. ~~**Optional: improve sandbox metadata**~~ — Done: Playback bar uses `sourceFileName` and `extractMusicXMLMetadata` for title/subtitle
-13. ~~**Connect Theory Inspector**~~ — Done for MVP: inspector API route + backend validation context + optional OpenAI fallback mode.
-14. **JSON-based score deltas** — State sync with backend (deferred to Theory Inspector integration)
+6. ~~**Document page preview**~~ — Done: parse uploaded MusicXML, ScorePreviewPanel; namespace-tolerant parser
+7. ~~**Fix "Could not parse file or no melody found"**~~ — Done: partwise parser → fast-xml-parser
+8. ~~**Resolve VexFlow TickMismatch**~~ — Done (2g.1 era): measure padding; OSMD when `musicXML` for reliable display
+9. ~~**Sandbox View/Edit + VexFlow tools**~~ — Done historically; **current primary editor is RiffScore** (see Consolidated status).
+10. ~~**App-level audio (`usePlayback`)**~~ — Done: rest-aware/measure-aware scheduling; coexists with RiffScore internal playback (separate concern).
+11. **Optional: reduce frontend lint debt** — Remaining `harmony-forge-redesign` lint errors may be outside hot path
+12. ~~**Sandbox metadata**~~ — Done: playback bar `sourceFileName` + `extractMusicXMLMetadata`
+13. ~~**Theory Inspector wiring**~~ — Done: routes + validation context + optional OpenAI; **harmony-only** highlights and suggest path refined in 2026-04-02.
 
 ---
 
@@ -517,9 +618,9 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-03-09):**
-- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score and working audio playback (Noteflight/MuseScore-style). Engine **adds** harmonies (melody + flute + cello = 3 parts), not replacement.
-- **Approach:** Additive harmonies; partwise MusicXML 2.0 (MuseScore/OSMD); variable parts. **Edit-first** rendering in sandbox (VexFlow default) with OSMD fallback path. Session persistence for Sandbox. CORS via `CORS_ORIGIN`.
-- **Current status:** #79 MVP items implemented (audio hardened, onboarding added, Theory Inspector wired), but active regression remains: blank notation canvas on `/sandbox` in browser QA.
-- **Key files:** `usePlayback.ts`, `playbackUtils.ts` (scoreToScheduledNotes, scheduledNotesToSeconds), `ScoreCanvas.tsx` (render-path + fallback), `VexFlowScore.tsx` (editable render path), `sandbox/page.tsx` (edit-first wiring), `useUploadStore.ts` (sessionStorage restore), `engine/server.ts` (CORS_ORIGIN).
-- **Run:** `make dev-clean && make dev` → http://localhost:3000. `make test-engine` → CLI test (supports `-i`, `-o`, `--mood`, `--instruments`).
+**Handover template (2026-04):**
+- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, export, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement.
+- **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`patch-package`** on `riffscore` for `ui.toolbarPlugins`. Theory Inspector: deterministic engine + taxonomy context; **harmony-only** in-score UX; optional OpenAI via `.env.local`.
+- **Current status / failures:** (1) RiffScore `/audio/piano/*.mp3` **404** in dev, (2) LLM off until `OPENAI_API_KEY` + restart, (3) Turbopack multi-lockfile warning, (4) older doc bullets may still describe OSMD/VexFlow-first sandbox — use **Consolidated status (2026-04)** as source of truth.
+- **Key files:** `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `scoreUtils.ts` (rests), `patches/riffscore+*.patch`, `useTheoryInspector.ts`, `useTheoryInspectorStore.ts`, `inspectorTypes.ts`, `prompts.ts`, `ScoreCanvas.tsx`, `sandbox/page.tsx`, `.env.example`.
+- **Run:** `make dev-clean && make dev` → http://localhost:3000 (Next) + engine on :8000. `make test-engine` for CLI.

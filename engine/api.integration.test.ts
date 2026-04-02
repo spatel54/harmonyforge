@@ -1,5 +1,5 @@
 import { generateSATB } from "./solver.js";
-import { validateSATBSequence } from "./validateSATB.js";
+import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB.js";
 import type { LeadSheet } from "./types.js";
 
 describe("API integration", () => {
@@ -72,5 +72,18 @@ describe("POST /api/validate-satb equivalent", () => {
     expect(result.totalSlots).toBe(2);
     expect(result.valid).toBe(true);
     expect(result.her).toBe(0);
+  });
+
+  it("returns per-slot trace for explainability", () => {
+    const slots = [
+      { soprano: "C5", alto: "A4", tenor: "F4", bass: "F3" },
+      { soprano: "D5", alto: "B4", tenor: "G4", bass: "F3" },
+    ];
+    const result = validateSATBSequenceWithTrace(slots);
+    expect(result.totalSlots).toBe(2);
+    expect(Array.isArray(result.trace)).toBe(true);
+    expect(result.trace.length).toBe(2);
+    expect(result.trace[0]).toHaveProperty("slotIndex", 0);
+    expect(result.trace[0]).toHaveProperty("findings");
   });
 });

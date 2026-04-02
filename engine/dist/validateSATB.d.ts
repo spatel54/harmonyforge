@@ -19,8 +19,24 @@ export interface ValidationResult {
     her: number;
     valid: boolean;
 }
+type TraceVoiceKey = keyof SATBVoices;
+export interface SlotFinding {
+    rule: "range" | "spacing" | "voiceOrder" | "parallelFifth" | "parallelOctave" | "voiceOverlap";
+    severity: "error" | "warning";
+    voices: TraceVoiceKey[];
+    message: string;
+}
+export interface SlotTrace {
+    slotIndex: number;
+    findings: SlotFinding[];
+}
+export interface ValidationTraceResult extends ValidationResult {
+    trace: SlotTrace[];
+}
 /**
  * Validate a sequence of SATB voices and return violation counts.
  * HER = slotsWithAnyViolation / totalSlots (per HFLitReview: frequency of theoretically invalid notes).
  */
 export declare function validateSATBSequence(slots: SATBVoices[]): ValidationResult;
+export declare function validateSATBSequenceWithTrace(slots: SATBVoices[]): ValidationTraceResult;
+export {};

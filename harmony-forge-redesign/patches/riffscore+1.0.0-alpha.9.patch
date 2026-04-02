@@ -1,0 +1,118 @@
+diff --git a/node_modules/riffscore/dist/index.d.ts b/node_modules/riffscore/dist/index.d.ts
+index 1ca537c..ee2d0eb 100644
+--- a/node_modules/riffscore/dist/index.d.ts
++++ b/node_modules/riffscore/dist/index.d.ts
+@@ -243,6 +243,19 @@ interface RiffScoreConfig {
+         theme?: ThemeName;
+         showBackground?: boolean;
+         showScoreTitle?: boolean;
++        toolbarPlugins?: Array<{
++            id?: string;
++            label: string;
++            title?: string;
++            icon?: ReactNode;
++            onClick?: () => void;
++            showLabel?: boolean;
++            isActive?: boolean;
++            disabled?: boolean;
++            isEmphasized?: boolean;
++            isDashed?: boolean;
++            className?: string;
++        }>;
+     };
+     interaction: {
+         isEnabled: boolean;
+@@ -313,8 +326,21 @@ interface ScoreEditorContentProps {
+     showScoreTitle?: boolean;
+     enableKeyboard?: boolean;
+     enablePlayback?: boolean;
++    toolbarPlugins?: Array<{
++        id?: string;
++        label: string;
++        title?: string;
++        icon?: ReactNode;
++        onClick?: () => void;
++        showLabel?: boolean;
++        isActive?: boolean;
++        disabled?: boolean;
++        isEmphasized?: boolean;
++        isDashed?: boolean;
++        className?: string;
++    }>;
+ }
+-declare const ScoreEditorContent: ({ scale, label, showToolbar, showBackground, showScoreTitle, enableKeyboard, enablePlayback, }: ScoreEditorContentProps) => react_jsx_runtime.JSX.Element;
++declare const ScoreEditorContent: ({ scale, label, showToolbar, showBackground, showScoreTitle, enableKeyboard, enablePlayback, toolbarPlugins, }: ScoreEditorContentProps) => react_jsx_runtime.JSX.Element;
+ declare const ScoreEditor: ({ scale, label, initialData, }: {
+     scale?: number;
+     label?: string;
+diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
+index fc71835..f0f0bba 100644
+--- a/node_modules/riffscore/dist/index.mjs
++++ b/node_modules/riffscore/dist/index.mjs
+@@ -18035,7 +18035,8 @@ var Toolbar = forwardRef(
+     selectedInstrument,
+     onInstrumentChange,
+     samplerLoaded,
+-    onEscape
++    onEscape,
++    toolbarPlugins = []
+   }, ref) => {
+     var _a, _b, _c;
+     const { theme: _theme } = useTheme();
+@@ -18184,6 +18185,26 @@ var Toolbar = forwardRef(
+                 }
+               )
+             ] }),
++            toolbarPlugins.length > 0 && /* @__PURE__ */ jsx(Divider_default, {}),
++            toolbarPlugins.length > 0 && toolbarPlugins.map((plugin, idx) => /* @__PURE__ */ jsx(
++              ToolbarButton_default,
++              {
++                onClick: plugin.onClick,
++                label: plugin.label || `Plugin ${idx + 1}`,
++                title: plugin.title || plugin.label || `Plugin ${idx + 1}`,
++                icon: plugin.icon || /* @__PURE__ */ jsx(Settings, { size: 16 }),
++                showLabel: !!plugin.showLabel,
++                isActive: !!plugin.isActive,
++                disabled: !!plugin.disabled,
++                isEmphasized: !!plugin.isEmphasized,
++                isDashed: !!plugin.isDashed,
++                className: plugin.className || "",
++                preventFocus: true,
++                height: TOP_ROW_HEIGHT,
++                variant: "ghost"
++              },
++              plugin.id || `plugin-${idx}`
++            )),
+             /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
+             /* @__PURE__ */ jsx(
+               ToolbarButton_default,
+@@ -23937,7 +23958,8 @@ var ScoreEditorContent = ({
+   showBackground = true,
+   showScoreTitle = true,
+   enableKeyboard = true,
+-  enablePlayback = true
++  enablePlayback = true,
++  toolbarPlugins = []
+ }) => {
+   const { theme } = useTheme();
+   const scoreLogic = useScoreContext();
+@@ -24153,7 +24175,8 @@ var ScoreEditorContent = ({
+             samplerLoaded,
+             errorMsg,
+             onToggleHelp: () => setShowHelp(true),
+-            onEscape: handleEscape
++            onEscape: handleEscape,
++            toolbarPlugins
+           }
+         ),
+         showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
+@@ -24266,7 +24289,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+             showToolbar: config.ui.showToolbar,
+             showBackground: config.ui.showBackground,
+             enableKeyboard: config.interaction.enableKeyboard,
+-            enablePlayback: config.interaction.enablePlayback
++            enablePlayback: config.interaction.enablePlayback,
++            toolbarPlugins: config.ui.toolbarPlugins || []
+           }
+         ) }) })
+       ]

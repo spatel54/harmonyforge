@@ -9,17 +9,88 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import type {
+  NoteInsight,
   ValidationResult,
   ValidationViolations,
 } from "@/store/useTheoryInspectorStore";
 import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { getNoteById } from "@/lib/music/scoreUtils";
+import {
+  buildAdditiveNoteContextLines,
+  buildSatbNoteContextLines,
+} from "@/lib/music/noteExplainContext";
 import type { ScoreCorrection, LLMCorrection } from "@/lib/music/suggestionTypes";
+import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import { SATB_RULES, isVoiceInRange, type VoiceKey } from "@/lib/music/theoryRules";
 
 const ENGINE_URL =
   typeof window !== "undefined"
     ? (process.env.NEXT_PUBLIC_ENGINE_URL ?? "http://localhost:8000")
     : "http://localhost:8000";
+
+/** Tutor: plain language, grounded in score + checker facts. */
+const NOTE_EXPLAIN_TUTOR_BRIEF =
+  "Write for a curious musician who is not a theory student. Answer only: why did the tool pick THIS note on THIS instrument line at THIS moment? " +
+  "The SCORE FACTS block is computed from the user’s actual notation (melody + other staves at the same time, and neighbors on the clicked staff). Treat it as authoritative: explain the clicked pitch in relation to those melody and harmony snapshots and the intervals they imply. " +
+  "When a statement follows directly from a FACT line, state it plainly—do not soften with ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
+  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts; if missing, say only what the listed pitches and intervals establish. " +
+  "Do not lecture on four-part writing as a system. Short paragraphs, no acronym soup, 2–5 paragraphs max.";
+
+function voiceLayman(voice: VoiceKey): string {
+  switch (voice) {
+    case "soprano":
+      return "the highest harmony line (often near the tune)";
+    case "alto":
+      return "the upper-middle harmony line";
+    case "tenor":
+      return "the lower-middle harmony line";
+    case "bass":
+      return "the lowest harmony line (the bottom of the chord)";
+    default:
+      return voice;
+  }
+}
+
+function laymanFromFinding(f: TraceFinding): string {
+  switch (f.rule) {
+    case "parallelFifth":
+      return "Two parts moved the same way and landed on another fifth—many tools flag that as a weak, hollow repeat.";
+    case "parallelOctave":
+      return "Two parts moved the same way and landed on another octave—often feels too doubled or empty.";
+    case "range":
+      return "This line’s pitch is outside the comfortable high/low band the generator expects for that role.";
+    case "spacing":
+      return "Two harmony lines are stacked farther apart than the spacing rule allows.";
+    case "voiceOrder":
+      return "The lines don’t stack cleanly from high to low at this moment (they cross in a way the checker dislikes).";
+    case "voiceOverlap":
+      return "Moving into this chord, one part jumps in a way that awkwardly crosses another part’s previous note.";
+    default:
+      return f.message;
+  }
+}
+
+function buildLaymanChordExplanation(
+  pitch: string,
+  voice: VoiceKey,
+  noteFindings: TraceFinding[],
+): string {
+  const role = voiceLayman(voice);
+  if (noteFindings.length === 0) {
+    return (
+      `The generator picked ${pitch} for ${role} here because it completes the chord HarmonyForge is building at this instant together with the other three notes. ` +
+      `For this moment nothing in the automatic checks complained: each line is in a sensible pitch range, the lines aren’t absurdly far apart, they stack high-to-low without crossing, ` +
+      `and the motion from the previous chord didn’t trigger the usual “both lines slid the same way into a bad interval” patterns for your line.`
+    );
+  }
+  const plain = noteFindings.map(laymanFromFinding);
+  const serious = noteFindings.some((f) => f.severity === "error");
+  return (
+    `The generator still placed ${pitch} on ${role} here, but the checker is ${serious ? "calling this out as a real issue" : "nudging that something is borderline"}: ` +
+    `${plain.join(" ")} ` +
+    `So the “why” is: the tool chose this pitch to fill out the harmony, but this line (or how it combines with its neighbors) breaks one of those automatic good-harmony habits—not because the letter name is forbidden on its own.`
+  );
+}
 
 function timestamp(): string {
   return new Date().toLocaleTimeString("en-US", {
@@ -32,16 +103,44 @@ function msgId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
+type VoiceMap = Record<VoiceKey, string>;
+type VoiceNoteMap = Record<VoiceKey, string | null>;
+
+interface AuditedSlot {
+  voices: VoiceMap;
+  noteIds: VoiceNoteMap;
+}
+
+interface TraceFinding {
+  rule:
+    | "range"
+    | "spacing"
+    | "voiceOrder"
+    | "parallelFifth"
+    | "parallelOctave"
+    | "voiceOverlap";
+  severity: "error" | "warning";
+  voices: VoiceKey[];
+  message: string;
+}
+
+interface SlotTrace {
+  slotIndex: number;
+  findings: TraceFinding[];
+}
+
+interface ValidationTraceResult extends ValidationResult {
+  trace: SlotTrace[];
+}
+
 /**
- * Convert an EditableScore with 4 SATB parts into the slot format
- * expected by POST /api/validate-satb.
- *
- * Returns null if the score doesn't have exactly 4 parts or if parts
- * can't be mapped to SATB voices.
+ * Convert an EditableScore with SATB parts into:
+ * - API slots for backend validation
+ * - local slots with note IDs for inline highlight mapping
  */
-function scoreToSlots(
+function scoreToAuditedSlots(
   score: EditableScore,
-): Array<{ voices: { soprano: string; alto: string; tenor: string; bass: string } }> | null {
+): { apiSlots: Array<{ voices: VoiceMap }>; auditedSlots: AuditedSlot[] } | null {
   if (score.parts.length < 4) return null;
 
   // Try to match parts by name (case-insensitive), fall back to order
@@ -73,9 +172,8 @@ function scoreToSlots(
     bPart.measures.length,
   );
 
-  const slots: Array<{
-    voices: { soprano: string; alto: string; tenor: string; bass: string };
-  }> = [];
+  const apiSlots: Array<{ voices: VoiceMap }> = [];
+  const auditedSlots: AuditedSlot[] = [];
 
   for (let m = 0; m < measureCount; m++) {
     const sNotes = sPart.measures[m]?.notes ?? [];
@@ -92,18 +190,264 @@ function scoreToSlots(
     );
 
     for (let n = 0; n < noteCount; n++) {
-      const soprano = sNotes[n]?.pitch ?? sNotes[sNotes.length - 1]?.pitch;
-      const alto = aNotes[n]?.pitch ?? aNotes[aNotes.length - 1]?.pitch;
-      const tenor = tNotes[n]?.pitch ?? tNotes[tNotes.length - 1]?.pitch;
-      const bass = bNotes[n]?.pitch ?? bNotes[bNotes.length - 1]?.pitch;
+      const sRef = sNotes[n] ?? sNotes[sNotes.length - 1];
+      const aRef = aNotes[n] ?? aNotes[aNotes.length - 1];
+      const tRef = tNotes[n] ?? tNotes[tNotes.length - 1];
+      const bRef = bNotes[n] ?? bNotes[bNotes.length - 1];
+
+      const soprano = sRef?.pitch;
+      const alto = aRef?.pitch;
+      const tenor = tRef?.pitch;
+      const bass = bRef?.pitch;
 
       if (soprano && alto && tenor && bass) {
-        slots.push({ voices: { soprano, alto, tenor, bass } });
+        const voices: VoiceMap = { soprano, alto, tenor, bass };
+        const noteIds: VoiceNoteMap = {
+          soprano: sRef?.id ?? null,
+          alto: aRef?.id ?? null,
+          tenor: tRef?.id ?? null,
+          bass: bRef?.id ?? null,
+        };
+        apiSlots.push({ voices });
+        auditedSlots.push({ voices, noteIds });
       }
     }
   }
 
-  return slots.length > 0 ? slots : null;
+  return apiSlots.length > 0 ? { apiSlots, auditedSlots } : null;
+}
+
+const VOICE_KEYS: VoiceKey[] = ["soprano", "alto", "tenor", "bass"];
+const STEP_SEMITONES: Record<string, number> = {
+  C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11,
+};
+
+function pitchToMidi(pitch: string): number {
+  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  if (!m) return 60;
+  const step = m[1] ?? "C";
+  const octNum = parseInt(m[3] ?? "4", 10);
+  let semitones = (STEP_SEMITONES[step] ?? 0) + (octNum - 4) * 12;
+  if (m[2] === "#") semitones += 1;
+  if (m[2] === "b") semitones -= 1;
+  return 60 + semitones;
+}
+
+function intervalSemitones(a: number, b: number): number {
+  return Math.abs(a - b) % 12;
+}
+
+function motionDirection(from: number, to: number): number {
+  if (to > from) return 1;
+  if (to < from) return -1;
+  return 0;
+}
+
+function pushHighlights(
+  target: ScoreIssueHighlight[],
+  slot: AuditedSlot,
+  voices: VoiceKey[],
+  label: string,
+  severity: "error" | "warning",
+) {
+  for (const voice of voices) {
+    const noteId = slot.noteIds[voice];
+    if (!noteId) continue;
+    target.push({
+      noteId,
+      label,
+      severity,
+      detail: `${label} in ${voice}`,
+    });
+  }
+}
+
+function dedupeHighlights(highlights: ScoreIssueHighlight[]): ScoreIssueHighlight[] {
+  const byNote = new Map<string, ScoreIssueHighlight>();
+  for (const h of highlights) {
+    const prev = byNote.get(h.noteId);
+    if (!prev) {
+      byNote.set(h.noteId, h);
+      continue;
+    }
+    if (prev.severity === "warning" && h.severity === "error") {
+      byNote.set(h.noteId, h);
+    }
+  }
+  return [...byNote.values()];
+}
+
+function getHarmonyPartIds(score: EditableScore): Set<string> {
+  if (score.parts.length <= 1) {
+    return new Set(score.parts.map((p) => p.id));
+  }
+  // Additive harmonies: part 0 is user melody input, remaining parts are generated.
+  return new Set(score.parts.slice(1).map((p) => p.id));
+}
+
+function isHarmonyPart(score: EditableScore, partId: string): boolean {
+  return getHarmonyPartIds(score).has(partId);
+}
+
+/**
+ * When the score is not 4-part SATB-aligned (e.g. melody + one or two harmony instruments),
+ * we cannot build vertical S/A/T/B slots. Still show a useful inspector card for the clicked note.
+ */
+function buildFallbackNoteInsight(
+  score: EditableScore,
+  noteId: string,
+  partId: string,
+): NoteInsight | null {
+  const found = getNoteById(score, noteId);
+  if (!found) return null;
+  const partIdx = score.parts.findIndex((p) => p.id === partId);
+  const part = score.parts[partIdx];
+  const partName = part?.name ?? partId;
+  const n = score.parts.length;
+  const pitchLabel = found.note.isRest ? "a rest" : found.note.pitch;
+  const scoreFacts = buildAdditiveNoteContextLines(
+    score,
+    found.measureIdx,
+    found.noteIdx,
+    partId,
+  );
+  return {
+    noteId,
+    noteLabel: found.note.isRest ? "(rest)" : found.note.pitch,
+    voice: `harmony line — ${partName}`,
+    slotIndex: found.measureIdx + 1,
+    source: "local-fallback",
+    deterministicExplanation:
+      `This is ${pitchLabel} on your “${partName}” harmony track (measure ${found.measureIdx + 1}, beat ${found.noteIdx + 1}). ` +
+      `HarmonyForge put it there to support your melody at that moment—the generator is trying to add notes that belong with what you’re playing in the other staves.\n\n` +
+      `This score only has ${n} part line(s) in the editor. The deep “chord-by-chord” checker that compares four matched voices at once needs a full four-line layout; ` +
+      `with fewer lines we can’t automatically line up “this click” with that four-note snapshot, so the card can’t spell out the same rule-by-rule story you’d get in a four-part view. ` +
+      `The harmony engine underneath still uses those habits when it invents notes; we’re just not showing the step-by-step proof for this layout.` +
+      (scoreFacts.length > 0 ? `\n\n${scoreFacts.join("\n")}` : ""),
+    evidenceLines: [
+      "=== SCORE FACTS (measured from the score) ===",
+      ...scoreFacts,
+      "---",
+      `Part: ${partName} (${n} part score — no four-line chord snapshot for this click)`,
+      `Measure ${found.measureIdx + 1}, beat ${found.noteIdx + 1} · ${found.note.isRest ? "rest" : found.note.pitch}`,
+    ],
+  };
+}
+
+function detectIssueHighlights(auditedSlots: AuditedSlot[]): ScoreIssueHighlight[] {
+  const highlights: ScoreIssueHighlight[] = [];
+  const pairs: Array<[VoiceKey, VoiceKey]> = [
+    ["soprano", "alto"],
+    ["soprano", "tenor"],
+    ["soprano", "bass"],
+    ["alto", "tenor"],
+    ["alto", "bass"],
+    ["tenor", "bass"],
+  ];
+
+  for (let i = 0; i < auditedSlots.length; i++) {
+    const curr = auditedSlots[i];
+    const currMidi: Record<VoiceKey, number> = {
+      soprano: pitchToMidi(curr.voices.soprano),
+      alto: pitchToMidi(curr.voices.alto),
+      tenor: pitchToMidi(curr.voices.tenor),
+      bass: pitchToMidi(curr.voices.bass),
+    };
+
+    if (!isVoiceInRange("soprano", currMidi.soprano)) {
+      pushHighlights(highlights, curr, ["soprano"], "Range violation", "error");
+    }
+    if (!isVoiceInRange("alto", currMidi.alto)) {
+      pushHighlights(highlights, curr, ["alto"], "Range violation", "error");
+    }
+    if (!isVoiceInRange("tenor", currMidi.tenor)) {
+      pushHighlights(highlights, curr, ["tenor"], "Range violation", "error");
+    }
+    if (!isVoiceInRange("bass", currMidi.bass)) {
+      pushHighlights(highlights, curr, ["bass"], "Range violation", "error");
+    }
+
+    if (currMidi.soprano - currMidi.alto > SATB_RULES.maxSpacing.sopranoAlto) {
+      pushHighlights(highlights, curr, ["soprano", "alto"], "Spacing violation", "warning");
+    }
+    if (currMidi.alto - currMidi.tenor > SATB_RULES.maxSpacing.altoTenor) {
+      pushHighlights(highlights, curr, ["alto", "tenor"], "Spacing violation", "warning");
+    }
+    if (currMidi.tenor - currMidi.bass > SATB_RULES.maxSpacing.tenorBass) {
+      pushHighlights(highlights, curr, ["tenor", "bass"], "Spacing violation", "warning");
+    }
+
+    if (!(currMidi.soprano >= currMidi.alto && currMidi.alto >= currMidi.tenor && currMidi.tenor >= currMidi.bass)) {
+      pushHighlights(highlights, curr, VOICE_KEYS, "Voice order violation", "error");
+    }
+
+    if (i === 0) continue;
+    const prev = auditedSlots[i - 1];
+    const prevMidi: Record<VoiceKey, number> = {
+      soprano: pitchToMidi(prev.voices.soprano),
+      alto: pitchToMidi(prev.voices.alto),
+      tenor: pitchToMidi(prev.voices.tenor),
+      bass: pitchToMidi(prev.voices.bass),
+    };
+
+    for (const [v1, v2] of pairs) {
+      const prevInterval = intervalSemitones(prevMidi[v1], prevMidi[v2]);
+      const currInterval = intervalSemitones(currMidi[v1], currMidi[v2]);
+      const d1 = motionDirection(prevMidi[v1], currMidi[v1]);
+      const d2 = motionDirection(prevMidi[v2], currMidi[v2]);
+      const parallelMotion = d1 === d2 && d1 !== 0;
+      if (!parallelMotion) continue;
+
+      if (prevInterval === 7 && currInterval === 7) {
+        pushHighlights(highlights, curr, [v1, v2], "Parallel fifth", "error");
+      }
+      if (prevInterval === 0 && currInterval === 0) {
+        pushHighlights(highlights, curr, [v1, v2], "Parallel octave", "error");
+      }
+    }
+
+    for (let upper = 0; upper < 4; upper++) {
+      for (let lower = upper + 1; lower < 4; lower++) {
+        const upperVoice = VOICE_KEYS[upper];
+        const lowerVoice = VOICE_KEYS[lower];
+        if (currMidi[lowerVoice] > prevMidi[upperVoice] || currMidi[upperVoice] < prevMidi[lowerVoice]) {
+          pushHighlights(highlights, curr, [upperVoice, lowerVoice], "Voice overlap", "warning");
+        }
+      }
+    }
+  }
+
+  return dedupeHighlights(highlights);
+}
+
+function findingsToHighlights(
+  score: EditableScore,
+  auditedSlots: AuditedSlot[],
+  trace: SlotTrace[],
+): ScoreIssueHighlight[] {
+  const highlights: ScoreIssueHighlight[] = [];
+  const harmonyPartIds = getHarmonyPartIds(score);
+
+  for (const slotTrace of trace) {
+    const slot = auditedSlots[slotTrace.slotIndex];
+    if (!slot) continue;
+    for (const finding of slotTrace.findings) {
+      for (const voice of finding.voices) {
+        const noteId = slot.noteIds[voice];
+        if (!noteId) continue;
+        const found = getNoteById(score, noteId);
+        if (!found || !harmonyPartIds.has(found.part.id)) continue;
+        highlights.push({
+          noteId,
+          label: finding.message,
+          severity: finding.severity,
+          detail: `${finding.rule} at slot ${slotTrace.slotIndex + 1}`,
+        });
+      }
+    }
+  }
+
+  return dedupeHighlights(highlights);
 }
 
 /**
@@ -274,22 +618,26 @@ export function useTheoryInspector() {
    */
   const runAudit = useCallback(
     async (score: EditableScore) => {
-      const slots = scoreToSlots(score);
-      if (!slots) return;
+      const slotData = scoreToAuditedSlots(score);
+      if (!slotData) return;
 
       try {
-        const response = await fetch(`${ENGINE_URL}/api/validate-satb`, {
+        const response = await fetch(`${ENGINE_URL}/api/validate-satb-trace`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slots }),
+          body: JSON.stringify({ slots: slotData.apiSlots }),
         });
 
         if (!response.ok) return;
 
-        const result = (await response.json()) as ValidationResult;
+        const result = (await response.json()) as ValidationTraceResult;
         store.setLastValidation(result);
+        store.setIssueHighlights(
+          findingsToHighlights(score, slotData.auditedSlots, result.trace ?? []),
+        );
 
         if (result.valid) {
+          store.clearIssueHighlights();
           store.addMessage({
             id: msgId("sys"),
             type: "system",
@@ -330,7 +678,13 @@ export function useTheoryInspector() {
           chips: ["Explain violations", "Suggest fixes", "Show in score"],
         });
       } catch {
-        // Engine not reachable — silently skip audit
+        // Engine trace not reachable — fallback to local deterministic highlight checks.
+        const harmonyPartIds = getHarmonyPartIds(score);
+        const localHighlights = detectIssueHighlights(slotData.auditedSlots).filter((h) => {
+          const found = getNoteById(score, h.noteId);
+          return found ? harmonyPartIds.has(found.part.id) : false;
+        });
+        store.setIssueHighlights(localHighlights);
       }
     },
     [store],
@@ -367,7 +721,9 @@ export function useTheoryInspector() {
         noteIndex: number;
       }> = [];
 
+      const harmonyPartIds = getHarmonyPartIds(score);
       for (const part of score.parts) {
+        if (!harmonyPartIds.has(part.id)) continue;
         for (let mIdx = 0; mIdx < part.measures.length; mIdx++) {
           const measure = part.measures[mIdx];
           for (let nIdx = 0; nIdx < measure.notes.length; nIdx++) {
@@ -488,6 +844,16 @@ export function useTheoryInspector() {
   const handleChipClick = useCallback(
     (chip: string, score?: EditableScore | null) => {
       const lower = chip.toLowerCase();
+      if (lower.includes("show in score") && score) {
+        runAudit(score);
+        store.addMessage({
+          id: msgId("sys"),
+          type: "system",
+          content: "Highlighted current voice-leading issues in the score.",
+          timestamp: timestamp(),
+        });
+        return;
+      }
       if (lower.includes("explain") || lower.includes("why")) {
         store.setPersona("tutor");
         sendMessage(chip);
@@ -508,7 +874,298 @@ export function useTheoryInspector() {
         sendMessage(chip);
       }
     },
-    [store, sendMessage, requestSuggestion],
+    [store, sendMessage, requestSuggestion, runAudit],
+  );
+
+  const explainGeneratedNote = useCallback(
+    async (score: EditableScore, noteId: string, partId: string) => {
+      if (!isHarmonyPart(score, partId)) {
+        return;
+      }
+      if (store.isStreaming) return;
+
+      const slotData = scoreToAuditedSlots(score);
+      if (!slotData) {
+        const fallback = buildFallbackNoteInsight(score, noteId, partId);
+        if (fallback) {
+          store.setSelectedNoteInsight(fallback);
+          const key = useTheoryInspectorStore.getState().hasApiKey;
+          if (key) {
+            store.setIsStreaming(true);
+            try {
+              const evidence = fallback.evidenceLines.join("\n");
+              const response = await fetch("/api/theory-inspector", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  persona: "tutor",
+                  genre: store.genre,
+                  userMessage: `${NOTE_EXPLAIN_TUTOR_BRIEF}\n\n${evidence}`,
+                  violationContext: evidence,
+                }),
+              });
+              if (!response.ok) {
+                const data = (await response.json()) as { error?: string };
+                throw new Error(data.error ?? `HTTP ${response.status}`);
+              }
+              const contentType = response.headers.get("Content-Type") ?? "";
+              if (contentType.includes("application/json")) {
+                const data = (await response.json()) as { content?: string };
+                store.setSelectedNoteInsight({
+                  ...fallback,
+                  aiExplanation: data.content ?? "",
+                });
+              } else {
+                const reader = response.body?.getReader();
+                if (reader) {
+                  const decoder = new TextDecoder();
+                  let accumulated = "";
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    accumulated += decoder.decode(value, { stream: true });
+                    store.setSelectedNoteInsight({
+                      ...fallback,
+                      aiExplanation: accumulated,
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Unknown error";
+              store.setSelectedNoteInsight({
+                ...fallback,
+                aiExplanation: `Could not generate AI explanation: ${msg}`,
+              });
+            } finally {
+              store.setIsStreaming(false);
+              store.setStreamingMessageId(null);
+            }
+          }
+        }
+        return;
+      }
+
+      const slotIndex = slotData.auditedSlots.findIndex((slot) =>
+        VOICE_KEYS.some((voice) => slot.noteIds[voice] === noteId),
+      );
+      if (slotIndex < 0) {
+        const fallback = buildFallbackNoteInsight(score, noteId, partId);
+        if (fallback) {
+          store.setSelectedNoteInsight(fallback);
+          const key = useTheoryInspectorStore.getState().hasApiKey;
+          if (key) {
+            store.setIsStreaming(true);
+            try {
+              const evidence =
+                fallback.evidenceLines.join("\n") +
+                "\n(Internal: clicked note did not match the four-line chord snapshot—treat as a single-line harmony note.)";
+              const response = await fetch("/api/theory-inspector", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  persona: "tutor",
+                  genre: store.genre,
+                  userMessage: `${NOTE_EXPLAIN_TUTOR_BRIEF}\n\n${evidence}`,
+                  violationContext: evidence,
+                }),
+              });
+              if (response.ok) {
+                const contentType = response.headers.get("Content-Type") ?? "";
+                if (contentType.includes("application/json")) {
+                  const data = (await response.json()) as { content?: string };
+                  store.setSelectedNoteInsight({
+                    ...fallback,
+                    aiExplanation: data.content ?? "",
+                  });
+                } else {
+                  const reader = response.body?.getReader();
+                  if (reader) {
+                    const decoder = new TextDecoder();
+                    let accumulated = "";
+                    while (true) {
+                      const { done, value } = await reader.read();
+                      if (done) break;
+                      accumulated += decoder.decode(value, { stream: true });
+                      store.setSelectedNoteInsight({
+                        ...fallback,
+                        aiExplanation: accumulated,
+                      });
+                    }
+                  }
+                }
+              }
+            } catch {
+              /* keep deterministic only */
+            } finally {
+              store.setIsStreaming(false);
+              store.setStreamingMessageId(null);
+            }
+          }
+        }
+        return;
+      }
+
+      const slot = slotData.auditedSlots[slotIndex];
+      const voice = VOICE_KEYS.find((v) => slot.noteIds[v] === noteId);
+      if (!voice) return;
+      let slotFindings: TraceFinding[] = [];
+      try {
+        const traceResponse = await fetch(`${ENGINE_URL}/api/validate-satb-trace`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slots: slotData.apiSlots }),
+        });
+        if (traceResponse.ok) {
+          const traceResult = (await traceResponse.json()) as ValidationTraceResult;
+          const slotTrace = traceResult.trace.find((t) => t.slotIndex === slotIndex);
+          slotFindings = slotTrace?.findings ?? [];
+        }
+      } catch {
+        // Continue with local fallback if trace endpoint is not reachable.
+      }
+
+      if (slotFindings.length === 0) {
+        const currMidi: Record<VoiceKey, number> = {
+          soprano: pitchToMidi(slot.voices.soprano),
+          alto: pitchToMidi(slot.voices.alto),
+          tenor: pitchToMidi(slot.voices.tenor),
+          bass: pitchToMidi(slot.voices.bass),
+        };
+        if (!isVoiceInRange("soprano", currMidi.soprano)) {
+          slotFindings.push({
+            rule: "range",
+            severity: "error",
+            voices: ["soprano"],
+            message: "soprano out of SATB range",
+          });
+        }
+        if (!isVoiceInRange("alto", currMidi.alto)) {
+          slotFindings.push({
+            rule: "range",
+            severity: "error",
+            voices: ["alto"],
+            message: "alto out of SATB range",
+          });
+        }
+        if (!isVoiceInRange("tenor", currMidi.tenor)) {
+          slotFindings.push({
+            rule: "range",
+            severity: "error",
+            voices: ["tenor"],
+            message: "tenor out of SATB range",
+          });
+        }
+        if (!isVoiceInRange("bass", currMidi.bass)) {
+          slotFindings.push({
+            rule: "range",
+            severity: "error",
+            voices: ["bass"],
+            message: "bass out of SATB range",
+          });
+        }
+      }
+
+      const noteFindings = slotFindings.filter((f) => f.voices.includes(voice));
+      const sourceTag = slotFindings.length > 0 ? "engine trace" : "local fallback";
+      const scoreFacts = buildSatbNoteContextLines(slotData.auditedSlots, slotIndex, voice);
+      const evidenceLines = [
+        "=== SCORE FACTS (melody + vertical sonority + motion) ===",
+        ...scoreFacts,
+        "=== ENGINE / CHECKER ===",
+        `Chord moment ${slotIndex + 1} · your line: ${slot.voices[voice]} (${voiceLayman(voice)})`,
+        `Full chord (high → low): ${slot.voices.soprano} · ${slot.voices.alto} · ${slot.voices.tenor} · ${slot.voices.bass}`,
+        ...(slotFindings.length > 0
+          ? slotFindings.map(
+              (f) =>
+                `• ${f.severity === "error" ? "Issue" : "Heads-up"}: ${laymanFromFinding(f)}`,
+            )
+          : ["• No automatic issues reported for this chord moment."]),
+      ];
+
+      const nextInsight: NoteInsight = {
+        noteId,
+        noteLabel: slot.voices[voice],
+        voice,
+        slotIndex: slotIndex + 1,
+        source: sourceTag === "engine trace" ? "engine-trace" : "local-fallback",
+        deterministicExplanation: `${buildLaymanChordExplanation(
+          slot.voices[voice],
+          voice,
+          noteFindings,
+        )}${scoreFacts.length > 0 ? `\n\n${scoreFacts.join("\n")}` : ""}`,
+        evidenceLines,
+      };
+      store.setSelectedNoteInsight(nextInsight);
+
+      if (!useTheoryInspectorStore.getState().hasApiKey) return;
+
+      store.setIsStreaming(true);
+      store.setStreamingMessageId(null);
+
+      const evidence = [
+        "=== SCORE FACTS (authoritative) ===",
+        ...scoreFacts,
+        "",
+        "=== CHECKER (this line) ===",
+        `Clicked note: ${slot.voices[voice]} on ${voiceLayman(voice)}`,
+        `Chord moment #${slotIndex + 1} — the four generator lines at once: ${slot.voices.soprano}, ${slot.voices.alto}, ${slot.voices.tenor}, ${slot.voices.bass}`,
+        noteFindings.length > 0
+          ? `What the checker says about this line: ${noteFindings.map(laymanFromFinding).join(" ")}`
+          : "What the checker says about this line: nothing flagged for this note.",
+      ].join("\n\n");
+
+      try {
+        const response = await fetch("/api/theory-inspector", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            persona: "tutor",
+            genre: store.genre,
+            userMessage: `${NOTE_EXPLAIN_TUTOR_BRIEF}\n\n${evidence}`,
+            violationContext: evidence,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error ?? `HTTP ${response.status}`);
+        }
+
+        const contentType = response.headers.get("Content-Type") ?? "";
+        if (contentType.includes("application/json")) {
+          const data = (await response.json()) as { content?: string };
+          store.setSelectedNoteInsight({
+            ...nextInsight,
+            aiExplanation: data.content ?? "Could not generate note explanation.",
+          });
+        } else {
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error("No response body");
+          const decoder = new TextDecoder();
+          let accumulated = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            accumulated += decoder.decode(value, { stream: true });
+            store.setSelectedNoteInsight({
+              ...nextInsight,
+              aiExplanation: accumulated,
+            });
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        store.setSelectedNoteInsight({
+          ...nextInsight,
+          aiExplanation: `Could not generate AI note explanation: ${message}`,
+        });
+      } finally {
+        store.setIsStreaming(false);
+        store.setStreamingMessageId(null);
+      }
+    },
+    [store],
   );
 
   return {
@@ -524,6 +1181,9 @@ export function useTheoryInspector() {
     runAudit,
     handleChipClick,
     requestSuggestion,
+    issueHighlights: store.issueHighlights,
+    selectedNoteInsight: store.selectedNoteInsight,
+    explainGeneratedNote,
     clearMessages: store.clearMessages,
   };
 }

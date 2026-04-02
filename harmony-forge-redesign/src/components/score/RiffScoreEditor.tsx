@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useTheme as useNextTheme } from "next-themes";
+import { SlidersHorizontal } from "lucide-react";
 import "riffscore/styles.css";
 import type { MusicEditorAPI, Selection as RsSelection } from "riffscore";
 import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
+import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
+import { useScoreStore } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import { editableScoreToRiffConfig } from "@/lib/music/riffscoreAdapter";
+import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
+import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import { extractNotePositions } from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
@@ -24,31 +29,77 @@ export interface RiffScoreEditorProps {
   className?: string;
   selection?: NoteSelection[];
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
+  noteInspectionEnabled?: boolean;
   visiblePartIds?: Set<string>;
   onScoreChange?: (score: EditableScore) => void;
   onError?: (err: Error) => void;
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
+  issueHighlights?: ScoreIssueHighlight[];
 }
+
+const TOOLBAR_PALETTES = [
+  "SCORE",
+  "EDIT",
+  "DURATION",
+  "PITCH",
+  "TEXT",
+  "MEASURE",
+  "DYNAMICS",
+  "ARTICULATION",
+  "PLAYBACK",
+] as const;
+
+type ToolbarPalette = (typeof TOOLBAR_PALETTES)[number];
+
+const PALETTE_LABELS: Record<ToolbarPalette, string[]> = {
+  SCORE: ["File Menu", "Library", "Keyboard Shortcuts"],
+  EDIT: ["Undo", "Redo"],
+  DURATION: ["Whole", "Half", "Quarter", "Eighth", "16th", "32nd", "64th", "Dotted Note", "Tie (T)", "Toggle Input Mode"],
+  PITCH: ["Flat", "Natural", "Sharp"],
+  TEXT: [],
+  MEASURE: ["Treble", "Bass", "Alto", "Tenor", "Add Measure", "Remove Measure", "Toggle Pickup"],
+  DYNAMICS: [],
+  ARTICULATION: [],
+  PLAYBACK: ["Play"],
+};
+
+const PALETTE_SHORT_LABELS: Record<ToolbarPalette, string> = {
+  SCORE: "Sc",
+  EDIT: "Ed",
+  DURATION: "Du",
+  PITCH: "Pi",
+  TEXT: "Tx",
+  MEASURE: "Ms",
+  DYNAMICS: "Dy",
+  ARTICULATION: "Ar",
+  PLAYBACK: "Pb",
+};
 
 export function RiffScoreEditor({
   score,
   className,
   selection = [],
   onNoteClick,
+  noteInspectionEnabled = false,
   visiblePartIds,
   onScoreChange,
   onError,
   pendingCorrections,
   onAcceptCorrection,
   onRejectCorrection,
+  issueHighlights = [],
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
   const [instanceId] = useState(() => `hf-score-${Date.now()}`);
   const [notePositions, setNotePositions] = useState<NotePosition[]>([]);
   const [isReady, setIsReady] = useState(false);
+  const [showPaletteMenu, setShowPaletteMenu] = useState(false);
+  const [visiblePalettes, setVisiblePalettes] = useState<Set<ToolbarPalette>>(
+    () => new Set(TOOLBAR_PALETTES),
+  );
   const prevScoreRef = useRef<EditableScore | null>(null);
 
   // visiblePartIds is reserved for future per-staff visibility toggling in RiffScore
@@ -56,14 +107,252 @@ export function RiffScoreEditor({
 
   const { resolvedTheme } = useNextTheme();
   const rsTheme = resolvedTheme === "dark" ? "DARK" as const : "LIGHT" as const;
+  const applyScore = useScoreStore((s) => s.applyScore);
+  const undo = useScoreStore((s) => s.undo);
+  const redo = useScoreStore((s) => s.redo);
+  const canUndo = useScoreStore((s) => s.canUndo);
+  const canRedo = useScoreStore((s) => s.canRedo);
 
   const { pushToRiffScore, rsToHf } = useRiffScoreSync(apiRef, score);
+  const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
+  const hasSelection = selectedNoteIds.size > 0;
+
+  const downloadXml = () => {
+    if (!score) return;
+    const blob = new Blob([scoreToMusicXML(score)], { type: "application/xml" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = "harmony-forge-score.xml";
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+  };
+
+  const applyOnSelection = (transform: (current: EditableScore, noteIds: Set<string>) => EditableScore) => {
+    if (!score || !hasSelection) return;
+    const next = transform(score, selectedNoteIds);
+    applyScore(next);
+  };
+
+  const toggleSelectedRests = () => {
+    if (!score || !hasSelection) return;
+    const next = cloneScore(score);
+    for (const part of next.parts) {
+      for (const measure of part.measures) {
+        for (const note of measure.notes) {
+          if (!selectedNoteIds.has(note.id)) continue;
+          note.isRest = !note.isRest;
+          if (note.isRest) note.pitch = "B4";
+          else if (!note.pitch.match(/^[A-G](#|b)?\d+$/)) note.pitch = "C4";
+        }
+      }
+    }
+    applyScore(next);
+  };
+
+  const toolbarPlugins = useMemo(
+    () => {
+      const plugins: Array<{
+        id: string;
+        label: string;
+        title: string;
+        icon: ReactNode;
+        onClick: () => void;
+        showLabel?: boolean;
+        isActive?: boolean;
+        disabled?: boolean;
+        isEmphasized?: boolean;
+        isDashed?: boolean;
+        className?: string;
+      }> = [
+        {
+          id: "hf-palettes",
+          label: "Palettes",
+          title: "Choose visible toolbar palettes",
+          icon: <SlidersHorizontal size={16} />,
+          isActive: showPaletteMenu,
+          className: "hf-plugin-btn hf-plugin-btn--menu",
+          onClick: () => setShowPaletteMenu((open) => !open),
+        },
+        {
+          id: "hf-palettes-all",
+          label: "All",
+          title: "Show all built-in toolbar palettes",
+          icon: <span className="text-[10px] font-semibold">ALL</span>,
+          isDashed: visiblePalettes.size !== TOOLBAR_PALETTES.length,
+          className: "hf-plugin-btn hf-plugin-btn--all",
+          onClick: () => setVisiblePalettes(new Set(TOOLBAR_PALETTES)),
+        },
+      ];
+
+      TOOLBAR_PALETTES.forEach((palette) => {
+        const hasBuiltInControls = PALETTE_LABELS[palette].length > 0;
+        const isVisible = visiblePalettes.has(palette);
+        plugins.push({
+          id: `hf-palette-${palette.toLowerCase()}`,
+          label: palette,
+          title: hasBuiltInControls
+            ? `${isVisible ? "Hide" : "Show"} ${palette} palette controls`
+            : `${palette} has no built-in RiffScore controls yet`,
+          icon: (
+            <span className="text-[10px] font-semibold">
+              {PALETTE_SHORT_LABELS[palette]}
+            </span>
+          ),
+          isActive: hasBuiltInControls && isVisible,
+          isEmphasized: !hasBuiltInControls,
+          isDashed: !hasBuiltInControls,
+          className: hasBuiltInControls
+            ? "hf-plugin-btn hf-plugin-btn--palette"
+            : "hf-plugin-btn hf-plugin-btn--unsupported",
+          onClick: hasBuiltInControls
+            ? () => togglePalette(palette)
+            : () => setShowPaletteMenu(true),
+        });
+      });
+
+      plugins.push(
+        {
+          id: "hf-action-undo",
+          label: "Undo",
+          title: "Undo last edit",
+          icon: <span className="text-[10px] font-semibold">UN</span>,
+          disabled: !canUndo,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: undo,
+        },
+        {
+          id: "hf-action-redo",
+          label: "Redo",
+          title: "Redo last edit",
+          icon: <span className="text-[10px] font-semibold">RE</span>,
+          disabled: !canRedo,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: redo,
+        },
+        {
+          id: "hf-action-transpose-up",
+          label: "Transpose +1",
+          title: "Transpose selected notes up one semitone",
+          icon: <span className="text-[10px] font-semibold">+1</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 1)),
+        },
+        {
+          id: "hf-action-transpose-down",
+          label: "Transpose -1",
+          title: "Transpose selected notes down one semitone",
+          icon: <span className="text-[10px] font-semibold">-1</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -1)),
+        },
+        {
+          id: "hf-action-octave-up",
+          label: "Octave +",
+          title: "Transpose selected notes up one octave",
+          icon: <span className="text-[10px] font-semibold">8+</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 12)),
+        },
+        {
+          id: "hf-action-octave-down",
+          label: "Octave -",
+          title: "Transpose selected notes down one octave",
+          icon: <span className="text-[10px] font-semibold">8-</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -12)),
+        },
+        {
+          id: "hf-action-dot-toggle",
+          label: "Toggle Dot",
+          title: "Toggle dotted rhythm on selected notes",
+          icon: <span className="text-[10px] font-semibold">DOT</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => toggleNoteDots(current, ids)),
+        },
+        {
+          id: "hf-action-rest-toggle",
+          label: "Toggle Rest",
+          title: "Toggle selected notes between note/rest",
+          icon: <span className="text-[10px] font-semibold">RST</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: toggleSelectedRests,
+        },
+        {
+          id: "hf-action-dyn-p",
+          label: "Set p",
+          title: "Set selected note dynamics to piano (p)",
+          icon: <span className="text-[10px] font-semibold">p</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "p")),
+        },
+        {
+          id: "hf-action-dyn-f",
+          label: "Set f",
+          title: "Set selected note dynamics to forte (f)",
+          icon: <span className="text-[10px] font-semibold">f</span>,
+          disabled: !hasSelection,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "f")),
+        },
+        {
+          id: "hf-action-export-xml",
+          label: "XML",
+          title: "Download MusicXML",
+          icon: <span className="text-[10px] font-semibold">XML</span>,
+          disabled: !score,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: downloadXml,
+        },
+        {
+          id: "hf-action-print",
+          label: "Print",
+          title: "Print current score",
+          icon: <span className="text-[10px] font-semibold">PRN</span>,
+          disabled: !score,
+          className: "hf-plugin-btn hf-plugin-btn--action",
+          onClick: () => window.print(),
+        },
+      );
+
+      return plugins;
+    },
+    [visiblePalettes, showPaletteMenu, canUndo, canRedo, hasSelection, score, undo, redo, selectedNoteIds],
+  );
 
   // Build config from score, passing current theme
   const config = useMemo(
-    () => score ? editableScoreToRiffConfig(score, { theme: rsTheme }) : undefined,
-    [score, rsTheme],
+    () => score ? editableScoreToRiffConfig(score, { theme: rsTheme, toolbarPlugins }) : undefined,
+    [score, rsTheme, toolbarPlugins],
   );
+
+  const hiddenPaletteSelectors = useMemo(() => {
+    const hiddenLabels = TOOLBAR_PALETTES
+      .filter((palette) => !visiblePalettes.has(palette))
+      .flatMap((palette) => PALETTE_LABELS[palette]);
+    return hiddenLabels
+      .map((label) => label.replace(/"/g, '\\"'))
+      .map((label) => [
+        `.riff-ControlGroup:has(.riff-ToolbarButton[aria-label="${label}"])`,
+        `.riff-ToolbarButton[aria-label="${label}"]`,
+      ].join(", "))
+      .join(", ");
+  }, [visiblePalettes]);
+
+  function togglePalette(palette: ToolbarPalette) {
+    setVisiblePalettes((prev) => {
+      const next = new Set(prev);
+      if (next.has(palette)) next.delete(palette);
+      else next.add(palette);
+      return next;
+    });
+  }
 
   // Acquire the API handle once RiffScore mounts
   useEffect(() => {
@@ -147,6 +436,20 @@ export function RiffScoreEditor({
 
       // Map RiffScore selection back to HF NoteSelection
       const hfNoteId = rsToHf.get(first.noteId) ?? first.noteId;
+      const found = getNoteById(score, hfNoteId);
+      if (found) {
+        onNoteClick(
+          {
+            partId: found.part.id,
+            measureIndex: found.measureIdx,
+            noteIndex: found.noteIdx,
+            noteId: hfNoteId,
+          },
+          false,
+        );
+        return;
+      }
+
       const part = score.parts[first.staffIndex];
       if (!part) return;
 
@@ -222,7 +525,67 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-ScoreCanvas {
           background: transparent !important;
         }
+        .riffscore-hf-wrapper .hf-palette-menu {
+          position: absolute;
+          right: 8px;
+          top: 44px;
+          z-index: 40;
+          background: var(--hf-bg);
+          border: 1px solid var(--hf-detail);
+          border-radius: 8px;
+          padding: 6px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          min-width: 180px;
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn {
+          border-color: color-mix(in srgb, var(--hf-detail, rgba(255,255,255,0.2)) 75%, transparent);
+          transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn .riff-ToolbarButton__icon {
+          opacity: 0.85;
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn:hover:not(:disabled) {
+          border-color: var(--hf-accent, #ffb300);
+          background: color-mix(in srgb, var(--hf-accent, #ffb300) 14%, transparent);
+          transform: translateY(-1px);
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn.riff-ToolbarButton--active {
+          border-color: var(--hf-accent, #ffb300);
+          background: color-mix(in srgb, var(--hf-accent, #ffb300) 22%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--hf-accent, #ffb300) 42%, transparent);
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn--unsupported {
+          border-color: color-mix(in srgb, #f97316 50%, var(--hf-detail, rgba(255,255,255,0.2)));
+          background: color-mix(in srgb, #f97316 8%, transparent);
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn--menu.riff-ToolbarButton--active {
+          background: color-mix(in srgb, #0ea5e9 18%, transparent);
+          border-color: color-mix(in srgb, #0ea5e9 60%, var(--hf-detail, rgba(255,255,255,0.2)));
+        }
+        ${hiddenPaletteSelectors ? `${hiddenPaletteSelectors} { display: none !important; }` : ""}
       `}</style>
+      {showPaletteMenu && (
+        <div className="hf-palette-menu">
+          {TOOLBAR_PALETTES.map((palette) => (
+            <label
+              key={palette}
+              className="flex items-center gap-2 py-1 text-xs"
+              style={{ color: "var(--hf-text-primary)" }}
+            >
+              <input
+                type="checkbox"
+                checked={visiblePalettes.has(palette)}
+                disabled={PALETTE_LABELS[palette].length === 0}
+                onChange={() => togglePalette(palette)}
+              />
+              {palette}
+              {PALETTE_LABELS[palette].length === 0 && (
+                <span style={{ color: "var(--hf-text-secondary)" }}>(builtin N/A)</span>
+              )}
+            </label>
+          ))}
+        </div>
+      )}
       <RiffScoreComponent
         id={instanceId}
         config={config}
@@ -250,6 +613,34 @@ export function RiffScoreEditor({
         </div>
       )}
 
+      {noteInspectionEnabled && notePositions.length > 0 && onNoteClick && (
+        <div className="absolute inset-0 z-10">
+          {notePositions.map((pos) => (
+            <button
+              key={`inspect-${pos.selection.noteId}`}
+              type="button"
+              aria-label={`Inspect note ${pos.selection.noteId}`}
+              className="absolute cursor-pointer"
+              style={{
+                left: pos.x - 8,
+                top: pos.y - 10,
+                width: Math.max(pos.w + 16, 20),
+                height: Math.max(pos.h + 16, 24),
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                margin: 0,
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNoteClick(pos.selection, e.shiftKey);
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Ghost note correction overlays */}
       {pendingCorrections && pendingCorrections.length > 0 && (
         <RiffScoreSuggestionOverlay
@@ -259,6 +650,32 @@ export function RiffScoreEditor({
           onAccept={onAcceptCorrection}
           onReject={onRejectCorrection}
         />
+      )}
+
+      {/* Theory issue highlights (Grammarly-style nuance/error tinting) */}
+      {issueHighlights.length > 0 && notePositions.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none">
+          {issueHighlights.map((highlight) => {
+            const pos = notePositions.find((p) => p.selection.noteId === highlight.noteId);
+            if (!pos) return null;
+            const isError = highlight.severity === "error";
+            return (
+              <div
+                key={`${highlight.noteId}-${highlight.label}`}
+                className="absolute rounded-sm"
+                style={{
+                  left: pos.x - 2,
+                  top: pos.y - 2,
+                  width: pos.w + 4,
+                  height: pos.h + 6,
+                  backgroundColor: isError ? "rgba(239, 68, 68, 0.18)" : "rgba(37, 99, 235, 0.16)",
+                  borderBottom: `2px dashed ${isError ? "#ef4444" : "#2563eb"}`,
+                }}
+                aria-hidden="true"
+              />
+            );
+          })}
+        </div>
       )}
     </div>
   );

@@ -1,15 +1,15 @@
 # System Map
 
-> **Implementation status:** Logic Core (engine/) complete. Generate Harmonies flow wired: Document → API → Sandbox. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **Output:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **Parser:** MusicXML partwise via fast-xml-parser (no DTD), plus frontend instrument-aware clef/transposition handling for common transposing instruments. **Display:** reliability-first notation (View = OSMD) with Edit mode fallback path (VexFlow + automatic safe preview when edit renderer fails); session persistence (sessionStorage); CORS via `CORS_ORIGIN`. **Audio playback:** hardened (rest-aware + measure-aware scheduling). **Onboarding:** first-time 3-step guided tour. **Theory Inspector:** wired via `/api/theory-inspector` with backend validation context, optional OpenAI fallback mode, and red/blue measure highlight suggestions. **Export:** chord-chart text export endpoint added (`/api/export-chord-chart`) alongside existing export modalities. **CLI:** `make test-engine` with `-i`, `-o`, `--mood`, `--instruments`. See `@progress.md`.
+> **Implementation status:** Logic Core (`engine/`) complete. Flow: Document → `POST /api/generate-from-file` → Sandbox. **Additive harmonies** preserved in output. **Sandbox editor (current):** **RiffScore** in `harmony-forge-redesign/` with **`EditableScore`** in Zustand; `riffscoreAdapter` + `useRiffScoreSync` + `normalizeScoreRests`. **RiffScore forkless extension:** `patch-package` applies `patches/riffscore+*.patch` (`ui.toolbarPlugins`, plugin button state props). **Legacy:** VexFlow/OSMD paths still exist in repo history and some preview surfaces; **primary editing path is RiffScore.** **Theory Inspector:** `/api/theory-inspector`, `/api/theory-inspector/suggest`; explains **harmony parts only**; inline highlights + ghost suggestions; OpenAI optional via `OPENAI_API_KEY` in `.env.local` (see `.env.example`). **Known dev gap:** RiffScore requests `/audio/piano/*.mp3` → **404** until assets are served. **CLI:** `make test-engine`. See `@progress.md` consolidated 2026-04 section.
 
 ## Overview
 
 HarmonyForge is a three-stage Glass Box architecture for symbolic music arrangement.
 
 **Repository layout:**
-- `harmony-forge-redesign/` — Tactile Sandbox frontend (Next.js); design system, Theory Inspector UI, Score Canvas
+- `harmony-forge-redesign/` — Tactile Sandbox frontend (Next.js); RiffScore-based score editor, Theory Inspector UI, `patch-package` for `riffscore`
 - `docs/` — Plan, progress, ADRs, context
-- `Taxonomy.md` — RAG lexicon for Theory Inspector It replaces probabilistic AI with deterministic constraint-satisfaction logic and an explainable Theory Inspector.
+- `Taxonomy.md` — RAG lexicon for Theory Inspector; it replaces probabilistic AI with deterministic constraint-satisfaction logic and an explainable Theory Inspector.
 
 ```mermaid
 flowchart TB
@@ -24,7 +24,8 @@ flowchart TB
 
     subgraph sandbox [Tactile Sandbox]
         UI[React/Next.js UI]
-        VexFlow[VexFlow / OpenSheetMusicDisplay]
+        RiffScore[RiffScore Editor]
+        Zustand[Zustand EditableScore]
         Edits[User Edits]
     end
 
@@ -43,8 +44,10 @@ flowchart TB
     LeadSheet --> Solver
     Solver --> SATB
     SATB --> UI
-    UI --> VexFlow
-    VexFlow --> Edits
+    UI --> RiffScore
+    RiffScore --> Zustand
+    Zustand --> RiffScore
+    RiffScore --> Edits
     Edits --> Auditor
     Auditor --> Tutor
     Auditor --> Stylist
@@ -58,8 +61,8 @@ flowchart TB
 | Component | Role | Tech |
 |-----------|------|------|
 | **Logic Core** | Deterministic constraint-satisfaction solver; generates valid SATB from lead sheet; variable parts (selected instruments only) | Node.js, TypeScript |
-| **Tactile Sandbox** | Interactive notation editor; direct manipulation, Edit-Authority. **Display:** edit-first VexFlow (no View/Edit toggle), with OSMD fallback if VexFlow render path fails. Session persistence for Sandbox. **Audio:** usePlayback + Tone.js (rest-aware and measure-aware scheduling). **Onboarding:** first-time guided tour across `/`, `/document`, `/sandbox`. **Lives in** `harmony-forge-redesign/` | Next 16, React 19, Tailwind, OSMD, VexFlow, Tone, Zustand |
-| **Theory Inspector** | Inspector API route receives user query + score context, calls backend validator, and returns explanation/suggestions. Uses OpenAI when key exists; deterministic fallback otherwise. | Next.js API route, backend validator, optional OpenAI API |
+| **Tactile Sandbox** | **RiffScore**-centric notation editor; `EditableScore` ↔ RiffScore sync; rest normalization; native toolbar plugins (patched `riffscore`). Session persistence; onboarding tour. **Note:** RiffScore built-in playback may 404 on `/audio/piano/*.mp3` until static assets exist. **Lives in** `harmony-forge-redesign/` | Next 16, React 19, Tailwind, RiffScore, Zustand, patch-package |
+| **Theory Inspector** | Chat + chips; SATB audit via engine; **harmony-only** highlights and suggest context; deterministic explanations; OpenAI when `OPENAI_API_KEY` set (else fallback). | Next.js API routes, `Taxonomy.md` context, `POST /api/validate-satb`, optional OpenAI |
 
 ## Data Flow
 
@@ -68,8 +71,8 @@ flowchart TB
 3. **Parse & normalize**: Backend converts to canonical format (ParsedScore); extracts melody, `melodyPartName`, key, chords (or infers chords using mood). fast-xml-parser for score-partwise (avoids DTD loading).
 4. **Generation**: Backend solver processes ParsedScore + config (mood affects chord inference) → outputs valid SATB. **Additive harmonies:** melody stays as Part 1; selected instruments (flute, cello) added as harmony parts (Alto, Bass voices).
 5. **Output**: Backend returns **partwise MusicXML 2.0** (melody + harmony parts, MuseScore/OSMD compatible) for Tactile Sandbox / note editor.
-6. **Frontend**: MusicXML → edit-first VexFlow rendering in Sandbox, with OSMD fallback path when VexFlow fails. Session persistence for generatedMusicXML; CORS configurable. Sandbox playback bar uses `sourceFileName`; audio via usePlayback (Tone.js) with rest-aware + measure-aware scheduling.
-7. **Explainability**: Natural-language query from Sandbox → `/api/theory-inspector` → optional backend validation context (`/api/validate-from-file`) → OpenAI response when configured, else fallback explanation.
+6. **Frontend (Sandbox):** Generated MusicXML → parsed → `EditableScore` → **RiffScore** display/edit; changes pulled back into Zustand. Session persistence for `generatedMusicXML`; CORS configurable.
+7. **Explainability:** User query or chip → `/api/theory-inspector` (optional stream) with taxonomy context; SATB audit via `NEXT_PUBLIC_ENGINE_URL` + `/api/validate-satb`; structured fixes via `/api/theory-inspector/suggest` when API key present; in-score highlights for **generated harmonies** only.
 8. **Export**: MusicXML, PDF, chord charts, tablature.
 
 ## Entry Points

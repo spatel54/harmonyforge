@@ -1,11 +1,11 @@
 import React from "react";
 import { Music, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SandboxContextMenu } from "./SandboxContextMenu";
 import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
+import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
@@ -14,8 +14,6 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   score?: EditableScore | null;
   /** Called when user clicks on canvas background (e.g. to clear selection) */
   onCanvasClick?: () => void;
-  /** Called when user clicks on empty staff area (for note placement). Receives partId, measureIndex, noteIndex. */
-  onStaffClick?: (partId: string, measureIndex: number, noteIndex: number) => void;
   /** Current selection for highlight */
   selection?: NoteSelection[];
   /** Called when user clicks a note */
@@ -26,8 +24,10 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
+  issueHighlights?: ScoreIssueHighlight[];
   /** Called when the score changes from within the editor (RiffScore user edits) */
   onScoreChange?: (score: EditableScore) => void;
+  noteInspectionEnabled?: boolean;
 }
 
 /**
@@ -40,14 +40,15 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       showViolations = false,
       score = null,
       onCanvasClick,
-      onStaffClick,
       selection = [],
       onNoteClick,
       visiblePartIds,
       pendingCorrections,
       onAcceptCorrection,
       onRejectCorrection,
+      issueHighlights,
       onScoreChange,
+      noteInspectionEnabled = false,
       className,
       ...props
     },
@@ -372,11 +373,11 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={onAcceptCorrection}
               onRejectCorrection={onRejectCorrection}
+              issueHighlights={issueHighlights}
+              noteInspectionEnabled={noteInspectionEnabled}
             />
           </div>
         )}
-
-        <SandboxContextMenu />
       </div>
     );
   },

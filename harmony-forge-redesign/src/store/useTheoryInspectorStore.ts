@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
+import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 
 export type Persona = "auditor" | "tutor" | "stylist";
 export type Genre = "classical" | "jazz" | "pop";
@@ -18,6 +19,17 @@ export interface ValidationResult {
   totalSlots: number;
   her: number;
   valid: boolean;
+}
+
+export interface NoteInsight {
+  noteId: string;
+  noteLabel: string;
+  voice: string;
+  slotIndex: number;
+  source: "engine-trace" | "local-fallback";
+  deterministicExplanation: string;
+  evidenceLines: string[];
+  aiExplanation?: string;
 }
 
 export interface TheoryInspectorState {
@@ -45,6 +57,13 @@ export interface TheoryInspectorState {
 
   hasApiKey: boolean;
   setHasApiKey: (v: boolean) => void;
+
+  issueHighlights: ScoreIssueHighlight[];
+  setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
+  clearIssueHighlights: () => void;
+
+  selectedNoteInsight: NoteInsight | null;
+  setSelectedNoteInsight: (insight: NoteInsight | null) => void;
 }
 
 export const useTheoryInspectorStore = create<TheoryInspectorState>(
@@ -79,5 +98,12 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     hasApiKey: false,
     setHasApiKey: (hasApiKey) => set({ hasApiKey }),
+
+    issueHighlights: [],
+    setIssueHighlights: (issueHighlights) => set({ issueHighlights }),
+    clearIssueHighlights: () => set({ issueHighlights: [] }),
+
+    selectedNoteInsight: null,
+    setSelectedNoteInsight: (selectedNoteInsight) => set({ selectedNoteInsight }),
   }),
 );

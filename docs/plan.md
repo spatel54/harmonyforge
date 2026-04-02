@@ -1,6 +1,6 @@
 # Plan
 
-> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox feature scope complete (2a–2d, 2f, 2g): MusicXML render, selection/edit tooling, Document preview, Generate flow, variable-part generation, and keyboard-first note input conventions. **Additive harmonies:** Engine adds harmony parts to melody (melody + flute + cello = 3 parts). **API/CLI:** Partwise MusicXML 2.0 (MuseScore/OSMD compatible). **CLI:** `make test-engine`; supports `-i`, `-o`, `--mood`, `--instruments`. **End-to-end flow:** Upload → Document → Generate → Sandbox. **Display model:** reliability-first View mode (OSMD) with Edit mode fallback path and safety overlay while VexFlow edit renderer stabilizes. Session persistence via sessionStorage; CORS configurable via `CORS_ORIGIN`. **Audio playback:** stabilized (rest-aware timing, measure-aware scheduling, chord-safe transport). **Theory Inspector:** wired to `/api/theory-inspector` with validation context + OpenAI optional fallback mode and measure highlights (red/blue) returned to canvas.
+> **Current status:** Logic Core complete (1.1–1.9). Tactile Sandbox editing is **RiffScore-first** (`harmony-forge-redesign/`): `EditableScore` in Zustand syncs bidirectionally with RiffScore; rests normalized; **riffscore** extended via **`patch-package`** (`ui.toolbarPlugins`) for native-toolbar HarmonyForge actions. Document preview may still use parsed score / RiffScore preview. **Additive harmonies:** Engine adds harmony parts to melody. **API/CLI:** Partwise MusicXML 2.0; `make test-engine`. **Flow:** Upload → Document → Generate → Sandbox. Session persistence via sessionStorage; CORS via `CORS_ORIGIN`. **Theory Inspector:** `/api/theory-inspector` + `/api/theory-inspector/suggest`; harmony-only highlights + suggestions; deterministic engine-first explanations; optional OpenAI when `OPENAI_API_KEY` is set in `.env.local` (see `.env.example`). **Active gaps:** RiffScore `/audio/piano/*.mp3` 404s in dev; Turbopack multi-lockfile warning; verify LLM after env + restart.
 >
 > **Milestones:** M3 (XAI Backend & Architecture) complete (19/19 closed). M4 (Frontend) consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) and now complete for MVP scope (audio, onboarding, inspector wiring). **M5 (User Study)** next.
 
@@ -71,13 +71,21 @@ Build order (from MVP scope):
      - [x] **2g.3** Keyboard shortcuts: A–G for pitch (setPitchByLetter), 1–6 for duration, ↑/↓ semitone, Ctrl+↑/↓ octave.
      - [x] **2g.4** Action bar: SandboxActionBar with Undo, Redo, Delete always visible (Noteflight pattern).
      - [x] **2g.5** Voice lanes: activePartId tracks selected part for insertion; part isolation for bounded edits.
+   - [x] **2g.6** Rest-complete measures + rest-preserving round-trip: score normalization now fills incomplete measures with rests and trims trailing filler rests on overfill; RiffScore adapter preserves rest events both directions.
+   - [x] **2g.7** Modern editing affordances: compact quick-toolbar in `/sandbox` (duration palette, rest insertion, tie toggle, accidental buttons, transport controls) plus expanded keyboard set (Cmd/Ctrl+C/X/V/A, Cmd/Ctrl+Y redo, `N` note-input arm, `0` rest insertion/convert selection, `?` shortcut help).
+   - [x] **2g.8** RiffScore as primary sandbox editor: `patch-package` patch adds `ui.toolbarPlugins` to native toolbar; Zustand sync (`useRiffScoreSync`); stable store selectors to avoid React snapshot loops; `.env.example` / `.env.local` for OpenAI + engine URLs.
    - [ ] JSON-based score deltas for state sync with backend (deferred to Theory Inspector Phase 3)
 
 3. **Theory Inspector (Explainability)** — LLM-powered validation *(M4 #79 MVP wiring complete)*
    - [x] Inspector API route wired (`/api/theory-inspector`) with graceful fallback
    - [x] Auditor context wired via backend validation (`/api/validate-from-file`)
    - [x] Tutor chat wiring: Sandbox asks inspector API; replies render in panel
-   - [ ] Stylist: structured candidate-edit application flow (post-MVP)
+   - [x] Note-click explainability: clicking a generated harmony note triggers deterministic evidence + tutor LLM explanation (when API key is available)
+   - [x] Engine trace source of truth: `/api/validate-satb-trace` provides per-slot rule findings consumed by inspector highlights + note explainability
+   - [x] Stylist structured suggestion flow (`/api/theory-inspector/suggest`) with accept/reject + batch actions
+   - [x] Grammarly-style inline suggestion ghost notes (accept/reject in-score)
+   - [x] Note-level audit highlighting pipeline (red = deterministic violations, blue = theory nuance/warnings)
+   - [x] Violation-card actions wired ("Explain more", "Suggest fix", "Show in score")
 
 4. **Supporting Features** *(M4 #79 — MVP by 3/27)*
    - [ ] Multi-clef & instrument transposition; multi-instrument selection
@@ -93,4 +101,5 @@ Build order (from MVP scope):
 - `make test-engine` — CLI runs engine on `input/月亮代表我的心.xml` → `output/月亮代表我的心_flute_cello.xml` (melody + flute + cello, major)
 - Manual: Upload `月亮代表我的心.xml` → preview on `/document` → configure mood + instruments → Generate Harmonies → land on `/sandbox` with 3 parts (Violin, Flute, Cello)
 - **File pipeline**: `POST /api/generate-from-file` returns `200` with partwise MusicXML (additive harmonies)
+- **LLM (optional):** Copy `harmony-forge-redesign/.env.example` → `.env.local`, set `OPENAI_API_KEY`, restart `make dev`; `curl http://localhost:3000/api/theory-inspector` should report `"hasApiKey":true`
 - **Known active limitation (2026-03-24):** VexFlow edit renderer still fails to produce visible notation for some generated scores; Sandbox now auto-falls back to safe OSMD preview in Edit mode to avoid blank-canvas regressions while preserving app usability.

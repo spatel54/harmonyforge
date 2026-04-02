@@ -7,12 +7,41 @@
 import type { EditableScore, Note, Measure, Part } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
 
+/** Fallback when part name is generic SATB (engine default labels). */
 const PART_CLEFS: Record<string, string> = {
   P1: "treble",
   P2: "treble",
   P3: "treble",
   P4: "bass",
 };
+
+/**
+ * Clef from instrument / part name (checked before P1–P4 defaults so additive
+ * scores with Viola / Cello / Bassoon on P2+ get correct clefs).
+ */
+function clefFromInstrumentName(partName?: string): string | null {
+  if (!partName) return null;
+  const n = partName.toLowerCase();
+  if (n.includes("tenor sax")) return "treble";
+  if (n.includes("viola")) return "alto";
+  if (
+    n.includes("cello") ||
+    n.includes("violoncello") ||
+    n.includes("bassoon") ||
+    n.includes("fagot") ||
+    n.includes("contrabassoon") ||
+    n.includes("trombone") ||
+    n.includes("tuba") ||
+    n.includes("double bass") ||
+    n.includes("contrabass")
+  ) {
+    return "bass";
+  }
+  if (n.includes("bass voice")) return "bass";
+  if (n.trim() === "bass") return "bass";
+  if (n.includes("tenor voice")) return "tenor";
+  return null;
+}
 
 /** MusicXML type (whole, half, quarter, etc.) → VexFlow duration */
 const TYPE_TO_DURATION: Record<string, "w" | "h" | "q" | "8" | "16" | "32"> = {
@@ -276,18 +305,10 @@ function inferClef(
   totalParts: number,
   partName?: string,
 ): string {
+  const fromName = clefFromInstrumentName(partName);
+  if (fromName) return fromName;
   if (PART_CLEFS[partId]) return PART_CLEFS[partId];
   const normalized = (partName ?? "").toLowerCase();
-  if (
-    normalized.includes("cello") ||
-    normalized.includes("bass") ||
-    normalized.includes("trombone") ||
-    normalized.includes("fagot") ||
-    normalized.includes("bassoon")
-  ) {
-    return "bass";
-  }
-  if (normalized.includes("viola")) return "alto";
   if (normalized.includes("tenor")) return "tenor";
   if (totalParts >= 4 && partIndex === totalParts - 1) return "bass";
   return "treble";

@@ -206,6 +206,36 @@ function splitEventsByMeasure(events, totalMeasures, beatsPerMeasure) {
     }
     return measures;
 }
+/** MusicXML clef from part display name (align with frontend musicxmlParser). */
+function clefXmlForPart(partName, voice) {
+    const n = partName.toLowerCase();
+    if (n.includes("tenor sax"))
+        return { sign: "G", line: 2 };
+    if (n.includes("viola"))
+        return { sign: "C", line: 3 };
+    if (n.includes("cello") ||
+        n.includes("violoncello") ||
+        n.includes("bassoon") ||
+        n.includes("fagot") ||
+        n.includes("contrabassoon") ||
+        n.includes("trombone") ||
+        n.includes("tuba") ||
+        n.includes("double bass") ||
+        n.includes("contrabass")) {
+        return { sign: "F", line: 4 };
+    }
+    if (n.includes("bass voice") || n.trim() === "bass")
+        return { sign: "F", line: 4 };
+    if (n.includes("tenor voice"))
+        return { sign: "C", line: 4 };
+    if (voice === "Bass")
+        return { sign: "F", line: 4 };
+    if (voice === "Tenor")
+        return { sign: "G", line: 2 };
+    if (voice === "Alto")
+        return { sign: "G", line: 2 };
+    return { sign: "G", line: 2 };
+}
 function measureContentXML(segments, beatsPerMeasure) {
     const sorted = [...segments].sort((a, b) => a.startBeat - b.startBeat);
     const xml = [];
@@ -222,9 +252,11 @@ function measureContentXML(segments, beatsPerMeasure) {
         xml.push(noteXML(undefined, trailing));
     return xml.join("\n");
 }
-function attributesXML(partId, voice, source, beatsPerMeasure, beatType) {
-    const clefSign = voice === "Bass" ? "F" : "G";
-    const clefLine = voice === "Bass" ? 4 : 2;
+function attributesXML(partId, voice, partName, source, beatsPerMeasure, beatType) {
+    const clef = clefXmlForPart(partName, voice);
+    const octaveEl = clef.octaveChange != null
+        ? `\n    <clef-octave-change>${clef.octaveChange}</clef-octave-change>`
+        : "";
     const fifths = source ? tonicToFifths(source.key.tonic, source.key.mode) : 0;
     const mode = source?.key.mode ?? "major";
     return `<attributes>
@@ -238,8 +270,8 @@ function attributesXML(partId, voice, source, beatsPerMeasure, beatType) {
     <beat-type>${beatType}</beat-type>
   </time>
   <clef>
-    <sign>${clefSign}</sign>
-    <line>${clefLine}</line>
+    <sign>${clef.sign}</sign>
+    <line>${clef.line}</line>${octaveEl}
   </clef>
 </attributes>`;
 }
@@ -314,7 +346,7 @@ export function satbToMusicXML(result, instruments, source, options) {
     if (format === "partwise") {
         const parts = partIds.map((id, i) => {
             const measureEls = Array.from({ length: totalMeasures }, (_, mIdx) => {
-                const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], source, beatsPerMeasure, beatType)}\n` : "";
+                const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
                 const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
                 return `  <measure number="${mIdx + 1}">
 ${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
@@ -339,7 +371,7 @@ ${parts.join("\n")}
     }
     const measures = Array.from({ length: totalMeasures }, (_, mIdx) => {
         const partEls = partIds.map((id, i) => {
-            const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], source, beatsPerMeasure, beatType)}\n` : "";
+            const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
             const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
             return `  <part id="${id}">
 ${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}

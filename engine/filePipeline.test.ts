@@ -162,6 +162,33 @@ describe("File pipeline", () => {
     expect(fluteIdx).toBeLessThan(celloIdx);
   });
 
+  it("satbToMusicXML emits alto/bass clefs for viola, cello, bassoon (not all treble)", () => {
+    const parsed: ParsedScore = {
+      key: { tonic: "C", mode: "major" },
+      melody: [{ pitch: "C5", beat: 0 }],
+      melodyPartName: "Violin I",
+    };
+    const withChords = ensureChords(parsed);
+    const result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+    expect(result).not.toBeNull();
+    const xml = satbToMusicXML(
+      result!,
+      { Alto: ["Viola"], Tenor: ["Cello"], Bass: ["Bassoon"] } as Record<string, string[]>,
+      withChords,
+      { format: "partwise", additiveHarmonies: true },
+    );
+    const partBodies = [...xml.matchAll(/<part id="P\d+">([\s\S]*?)<\/part>/g)].map((m) => m[1]);
+    expect(partBodies.length).toBe(4);
+    expect(partBodies[0]).toMatch(/<sign>G<\/sign>\s*\n\s*<line>2<\/line>/);
+    expect(partBodies[1]).toMatch(/<sign>C<\/sign>\s*\n\s*<line>3<\/line>/);
+    expect(partBodies[2]).toMatch(/<sign>F<\/sign>\s*\n\s*<line>4<\/line>/);
+    expect(partBodies[3]).toMatch(/<sign>F<\/sign>\s*\n\s*<line>4<\/line>/);
+  });
+
   it("satbToMusicXML gives unique parts when multiple instruments share voice range (Flute+Violin soprano)", () => {
     const parsed: ParsedScore = {
       key: { tonic: "C", mode: "major" },

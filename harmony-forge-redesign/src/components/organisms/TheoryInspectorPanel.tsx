@@ -1,17 +1,18 @@
 "use client";
 
 import React from "react";
-import { Plus, Timer, X, SendHorizontal } from "lucide-react";
+import { X, SendHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatBubble } from "@/components/molecules/ChatBubble";
 import { ViolationCard } from "@/components/molecules/ViolationCard";
 import { QuickReplyChips } from "@/components/molecules/QuickReplyChips";
 import { SuggestionCard } from "@/components/molecules/SuggestionCard";
 import type { ScoreCorrection, CorrectionStatus } from "@/lib/music/suggestionTypes";
+import type { NoteInsight } from "@/store/useTheoryInspectorStore";
 
 export interface TheoryInspectorMessage {
   id: string;
-  type: "system" | "user" | "ai" | "violation" | "divider" | "chips" | "suggestion";
+  type: "system" | "user" | "ai" | "violation" | "divider" | "chips" | "suggestion" | "evidence";
   content?: string;
   timestamp?: string;
   violationType?: string;
@@ -21,8 +22,10 @@ export interface TheoryInspectorMessage {
 
 export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivElement> {
   messages?: TheoryInspectorMessage[];
+  noteInsight?: NoteInsight | null;
   inputValue?: string;
   isStreaming?: boolean;
+  debugStatus?: string;
   onInputChange?: (value: string) => void;
   onSend?: () => void;
   onChipClick?: (chip: string) => void;
@@ -109,15 +112,15 @@ export const TheoryInspectorPanel = React.forwardRef<
   (
     {
       messages = DEFAULT_MESSAGES,
+      noteInsight,
       inputValue = "",
       isStreaming = false,
+      debugStatus,
       onInputChange,
       onSend,
       onChipClick,
       onExplainMore,
       onSuggestFix,
-      onNewChat,
-      onHistory,
       onClose,
       suggestionBatches,
       correctionStatuses = {},
@@ -131,6 +134,7 @@ export const TheoryInspectorPanel = React.forwardRef<
     ref,
   ) => {
     const chatRef = React.useRef<HTMLDivElement>(null);
+    const noteInspectorMode = true;
 
     React.useEffect(() => {
       if (chatRef.current) {
@@ -161,7 +165,7 @@ export const TheoryInspectorPanel = React.forwardRef<
           borderLeft: "1px solid var(--hf-detail)",
         }}
         role="complementary"
-        aria-label="Theory Inspector — explains and suggests; you decide"
+        aria-label="Theory Inspector — note explainability"
         {...props}
       >
         {/* ── Panel Header — Node 99E9J ──────────────────────
@@ -171,7 +175,7 @@ export const TheoryInspectorPanel = React.forwardRef<
           className="flex items-center gap-[8px] w-full min-h-[52px] py-[6px] px-[12px] shrink-0"
           style={{ backgroundColor: "var(--hf-surface)" }}
         >
-          {/* Title block: Theory Inspector + subtitle (AI as explainer/suggestor) */}
+          {/* Title block */}
           <div className="flex flex-col justify-center gap-[1px] min-w-0">
             <span
               className="font-serif text-[16px] font-normal leading-none"
@@ -182,46 +186,14 @@ export const TheoryInspectorPanel = React.forwardRef<
             <span
               className="font-body text-[10px] font-normal leading-tight truncate"
               style={{ color: "var(--hf-text-secondary)" }}
-              title="AI explains and suggests; you have final say"
+              title="Click a harmony note to inspect why it was generated"
             >
-              Explains and suggests — you decide
+              Click a harmony note to inspect it
             </span>
           </div>
 
           {/* Spacer — fills remaining width */}
           <div className="flex-1" aria-hidden="true" />
-
-          {/* newChatBtn — plus icon */}
-          <button
-            type="button"
-            onClick={onNewChat}
-            aria-label="New chat"
-            className={headerIconBtn}
-            style={{ backgroundColor: "#00000030" }}
-          >
-            <Plus
-              className="w-[14px] h-[14px]"
-              strokeWidth={2}
-              style={{ color: "var(--neutral-50)" }}
-              aria-hidden="true"
-            />
-          </button>
-
-          {/* historyBtn — timer icon */}
-          <button
-            type="button"
-            onClick={onHistory}
-            aria-label="Chat history"
-            className={headerIconBtn}
-            style={{ backgroundColor: "#00000030" }}
-          >
-            <Timer
-              className="w-[14px] h-[14px]"
-              strokeWidth={2}
-              style={{ color: "var(--neutral-50)" }}
-              aria-hidden="true"
-            />
-          </button>
 
           {/* CloseBtn — x icon */}
           <button
@@ -239,6 +211,18 @@ export const TheoryInspectorPanel = React.forwardRef<
             />
           </button>
         </div>
+        {debugStatus && (
+          <div
+            className="px-[12px] py-[6px] font-mono text-[10px] leading-tight shrink-0"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--hf-accent) 10%, transparent)",
+              borderBottom: "1px solid var(--hf-detail)",
+              color: "var(--hf-text-primary)",
+            }}
+          >
+            {debugStatus}
+          </div>
+        )}
 
         {/* ── Chat Area — Node ra6HT ───────────────────────── */}
         <div
@@ -246,9 +230,103 @@ export const TheoryInspectorPanel = React.forwardRef<
           className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
           role="log"
           aria-live="polite"
-          aria-label="Theory Inspector conversation"
+          aria-label="Theory Inspector note details"
         >
-          {messages.map((msg) => {
+          {noteInspectorMode ? (
+            noteInsight ? (
+              <>
+                <div
+                  className="rounded-[6px] p-[12px]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                  }}
+                >
+                  <div
+                    className="font-mono text-[10px] mb-[6px]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    Selected Note
+                  </div>
+                  <div className="text-[14px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
+                    {noteInsight.noteLabel} ({noteInsight.voice})
+                  </div>
+                  <div className="text-[11px] mt-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
+                    Slot {noteInsight.slotIndex} · {noteInsight.source}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div
+                    className="font-mono text-[10px] mb-[6px]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    Deterministic Explanation
+                  </div>
+                  {noteInsight.deterministicExplanation}
+                </div>
+
+                <div
+                  className="rounded-[6px] p-[10px] text-[11px] leading-[1.45]"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--hf-accent) 8%, transparent)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div
+                    className="font-mono text-[10px] mb-[6px]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    Engine Evidence
+                  </div>
+                  <pre
+                    className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
+                    style={{ color: "var(--hf-text-primary)" }}
+                  >
+                    {noteInsight.evidenceLines.join("\n")}
+                  </pre>
+                </div>
+
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div
+                    className="font-mono text-[10px] mb-[6px]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    AI Explanation
+                  </div>
+                  {isStreaming
+                    ? "Generating explanation..."
+                    : (noteInsight.aiExplanation ?? "No AI explanation available yet.")}
+                </div>
+              </>
+            ) : (
+              <div
+                className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                style={{
+                  backgroundColor: "var(--hf-bg)",
+                  border: "1px solid var(--hf-detail)",
+                  color: "var(--hf-text-primary)",
+                }}
+              >
+                Click a generated harmony note to see why it was chosen and which theory rules apply.
+              </div>
+            )
+          ) : messages.map((msg) => {
             switch (msg.type) {
               case "divider":
                 return (
@@ -315,6 +393,31 @@ export const TheoryInspectorPanel = React.forwardRef<
                     onChipClick={onChipClick}
                   />
                 );
+              case "evidence":
+                return (
+                  <div
+                    key={msg.id}
+                    className="rounded-[6px] p-[10px] text-[11px] leading-[1.45]"
+                    style={{
+                      backgroundColor: "color-mix(in srgb, var(--hf-accent) 8%, transparent)",
+                      border: "1px solid var(--hf-detail)",
+                      color: "var(--hf-text-primary)",
+                    }}
+                  >
+                    <div
+                      className="font-mono text-[10px] mb-[6px]"
+                      style={{ color: "var(--hf-text-secondary)" }}
+                    >
+                      Engine Evidence
+                    </div>
+                    <pre
+                      className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
+                      style={{ color: "var(--hf-text-primary)" }}
+                    >
+                      {msg.content ?? ""}
+                    </pre>
+                  </div>
+                );
               case "suggestion": {
                 const batchId = msg.suggestionBatchId;
                 const batch = batchId ? suggestionBatches?.get(batchId) : undefined;
@@ -339,7 +442,7 @@ export const TheoryInspectorPanel = React.forwardRef<
           })}
 
           {/* Streaming typing indicator */}
-          {isStreaming && (
+          {!noteInspectorMode && isStreaming && (
             <div
               className="flex items-center gap-[4px] px-[12px] py-[6px]"
               aria-label="AI is typing"
@@ -361,53 +464,49 @@ export const TheoryInspectorPanel = React.forwardRef<
           )}
         </div>
 
-        {/* ── Chat Input Bar — Node CaIdi ──────────────────────
-            h:60  gap:8  pad:[0,12]  ai:center
-            fill:$sonata-bg  stroke top:1 $sonata-detail          */}
-        <div
-          className="flex items-center gap-[8px] w-full h-[60px] px-[12px] shrink-0"
-          style={{
-            backgroundColor: "var(--hf-bg)",
-            borderTop: "1px solid var(--hf-detail)",
-          }}
-        >
-          {/* inputField — fill_container h:36 pad:[0,12] fill:$neutral-50 stroke:$sonata-detail r:4 */}
+        {!noteInspectorMode && (
           <div
-            className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
+            className="flex items-center gap-[8px] w-full h-[60px] px-[12px] shrink-0"
             style={{
-              backgroundColor: "var(--hf-panel-bg)",
-              border: "1px solid var(--hf-detail)",
+              backgroundColor: "var(--hf-bg)",
+              borderTop: "1px solid var(--hf-detail)",
             }}
           >
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => onInputChange?.(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isStreaming ? "Generating…" : "Ask about harmony, voice-leading…"}
+            <div
+              className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
+              style={{
+                backgroundColor: "var(--hf-panel-bg)",
+                border: "1px solid var(--hf-detail)",
+              }}
+            >
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => onInputChange?.(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isStreaming ? "Generating…" : "Ask about harmony, voice-leading…"}
+                disabled={isStreaming}
+                className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
+                style={{ color: "var(--hf-text-primary)" }}
+                aria-label="Ask a theory question"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={onSend}
               disabled={isStreaming}
-              className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
-              style={{ color: "var(--hf-text-primary)" }}
-              aria-label="Ask a theory question"
-            />
+              aria-label="Send message"
+              className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+              style={{ backgroundColor: "var(--hf-surface)" }}
+            >
+              <SendHorizontal
+                className="w-[14px] h-[14px] text-white"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            </button>
           </div>
-
-          {/* sendBtn — 36×36 r:4 fill:$sonata-surface */}
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={isStreaming}
-            aria-label="Send message"
-            className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
-            style={{ backgroundColor: "var(--hf-surface)" }}
-          >
-            <SendHorizontal
-              className="w-[14px] h-[14px] text-white"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </button>
-        </div>
+        )}
       </div>
     );
   },

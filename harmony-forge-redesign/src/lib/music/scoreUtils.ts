@@ -62,6 +62,71 @@ export function parseMeasureBeats(timeSignature?: string): number {
   return (num * 4) / den;
 }
 
+const BEAT_UNITS = 8; // 1 quarter note = 8 units (smallest supported duration: 1/32 = 1 unit)
+const REST_BREAKDOWN: Array<{ duration: DurationType; units: number }> = [
+  { duration: "w", units: 32 },
+  { duration: "h", units: 16 },
+  { duration: "q", units: 8 },
+  { duration: "8", units: 4 },
+  { duration: "16", units: 2 },
+  { duration: "32", units: 1 },
+];
+
+function beatsToUnits(beats: number): number {
+  return Math.max(0, Math.round(beats * BEAT_UNITS));
+}
+
+function makeRestNotes(units: number): Note[] {
+  const rests: Note[] = [];
+  let remaining = Math.max(0, units);
+  for (const option of REST_BREAKDOWN) {
+    while (remaining >= option.units) {
+      rests.push({
+        id: generateId("n"),
+        pitch: "B4",
+        duration: option.duration,
+        isRest: true,
+      });
+      remaining -= option.units;
+    }
+  }
+  return rests;
+}
+
+/**
+ * Ensure every measure is rhythmically complete by appending rests when underfilled.
+ * Mirrors notation-editor behavior (e.g. MuseScore/Noteflight) where empty remaining
+ * duration in a measure is represented as rests.
+ */
+export function normalizeScoreRests(score: EditableScore): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      const measureBeats = parseMeasureBeats(measure.timeSignature);
+      const measureUnits = beatsToUnits(measureBeats);
+      let usedUnits = beatsToUnits(
+        measure.notes.reduce((sum, note) => sum + noteBeats(note), 0),
+      );
+
+      // If overfilled, preferentially remove trailing rests first.
+      while (
+        usedUnits > measureUnits &&
+        measure.notes.length > 0 &&
+        measure.notes[measure.notes.length - 1]?.isRest
+      ) {
+        const removed = measure.notes.pop();
+        if (!removed) break;
+        usedUnits -= beatsToUnits(noteBeats(removed));
+      }
+
+      if (usedUnits >= measureUnits) continue;
+      const fillRests = makeRestNotes(measureUnits - usedUnits);
+      if (fillRests.length > 0) measure.notes.push(...fillRests);
+    }
+  }
+  return next;
+}
+
 export function getInsertIndexAtBeat(measure: Measure, beat: number): number {
   if (!measure.notes.length) return 0;
   let cursor = 0;
@@ -262,7 +327,14 @@ export function insertNote(
     articulations: note.articulations,
     dynamics: note.dynamics,
   };
-  measure.notes.splice(Math.min(noteIndex, measure.notes.length), 0, newNote);
+  const clampedIndex = Math.min(noteIndex, measure.notes.length);
+  if (measure.notes[clampedIndex]?.isRest) {
+    // Modern notation UX: typing into a rest slot replaces it, then normalization
+    // restores trailing rests as needed.
+    measure.notes.splice(clampedIndex, 1, newNote);
+  } else {
+    measure.notes.splice(clampedIndex, 0, newNote);
+  }
   return next;
 }
 

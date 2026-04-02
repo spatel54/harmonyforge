@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EditableScore, Note } from "@/lib/music/scoreTypes";
-import { cloneScore, deleteNotes } from "@/lib/music/scoreUtils";
+import { cloneScore, deleteNotes, normalizeScoreRests } from "@/lib/music/scoreUtils";
 import { generateId } from "@/lib/music/scoreTypes";
 
 export interface NoteSelection {
@@ -47,15 +47,17 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
     else next.add(partId);
     set({ visibleParts: next });
   },
-  setScore: (score) =>
+  setScore: (score) => {
+    const normalized = score ? normalizeScoreRests(score) : null;
     set({
-      score,
-      history: score ? [cloneScore(score)] : [],
-      historyIndex: score ? 0 : -1,
+      score: normalized,
+      history: normalized ? [cloneScore(normalized)] : [],
+      historyIndex: normalized ? 0 : -1,
       canUndo: false,
       canRedo: false,
-      visibleParts: score ? new Set(score.parts.map((p) => p.id)) : new Set(),
-    }),
+      visibleParts: normalized ? new Set(normalized.parts.map((p) => p.id)) : new Set(),
+    });
+  },
   pushState: () => {
     const { score } = get();
     if (!score) return;
@@ -103,12 +105,13 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   applyScore: (nextScore: EditableScore) => {
     const { score } = get();
     if (!score) return;
+    const normalized = normalizeScoreRests(nextScore);
     const { history, historyIndex } = get();
     const trimmed = history.slice(0, historyIndex + 1);
-    trimmed.push(cloneScore(nextScore));
+    trimmed.push(cloneScore(normalized));
     if (trimmed.length > MAX_HISTORY) trimmed.shift();
     set({
-      score: nextScore,
+      score: normalized,
       history: trimmed,
       historyIndex: trimmed.length - 1,
       canUndo: trimmed.length > 1,

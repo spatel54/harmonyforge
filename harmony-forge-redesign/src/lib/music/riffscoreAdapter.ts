@@ -4,6 +4,7 @@
  */
 
 import type { EditableScore, DurationType, Note as HfNote, Part, Measure as HfMeasure } from "./scoreTypes";
+import type { ReactNode } from "react";
 import type {
   Score as RsScore,
   Staff as RsStaff,
@@ -163,13 +164,14 @@ export function buildIdMap(hfScore: EditableScore, rsScore: RsScore): { hfToRs: 
 // ---------------------------------------------------------------------------
 
 function hfNoteToRsEvent(note: HfNote): ScoreEvent {
+  const isRest = Boolean(note.isRest);
   const { accidental } = parsePitch(note.pitch);
   const rsNote: RsNote = {
     id: `rs-${note.id}`,
-    pitch: note.pitch,
-    accidental: accidental,
-    tied: note.tie === "start" || note.tie === "continue",
-    isRest: false,
+    pitch: isRest ? null : note.pitch,
+    accidental: isRest ? null : accidental,
+    tied: !isRest && (note.tie === "start" || note.tie === "continue"),
+    isRest,
   };
 
   return {
@@ -177,7 +179,7 @@ function hfNoteToRsEvent(note: HfNote): ScoreEvent {
     duration: hfDurationToRs(note.duration),
     dotted: (note.dots ?? 0) > 0,
     notes: [rsNote],
-    isRest: false,
+    isRest,
   };
 }
 
@@ -203,7 +205,23 @@ function hfPartToRsStaff(part: Part): RsStaff {
  */
 export function editableScoreToRiffConfig(
   score: EditableScore,
-  options?: { theme?: "DARK" | "LIGHT"; scale?: number },
+  options?: {
+    theme?: "DARK" | "LIGHT";
+    scale?: number;
+    toolbarPlugins?: Array<{
+      id?: string;
+      label: string;
+      title?: string;
+      icon?: ReactNode;
+      onClick?: () => void;
+      showLabel?: boolean;
+      isActive?: boolean;
+      disabled?: boolean;
+      isEmphasized?: boolean;
+      isDashed?: boolean;
+      className?: string;
+    }>;
+  },
 ): Partial<RiffScoreConfig> {
   const firstMeasure = score.parts[0]?.measures[0];
   const timeSignature = firstMeasure?.timeSignature ?? "4/4";
@@ -216,6 +234,7 @@ export function editableScoreToRiffConfig(
       theme: options?.theme ?? "DARK",
       showBackground: false,
       showScoreTitle: false,
+      toolbarPlugins: options?.toolbarPlugins ?? [],
     },
     interaction: {
       isEnabled: true,
@@ -251,7 +270,18 @@ export function editableScoreToRsScore(score: EditableScore): RsScore {
 // ---------------------------------------------------------------------------
 
 function rsEventToHfNote(event: ScoreEvent, idMap: IdMap): HfNote | null {
-  if (event.isRest || event.notes.length === 0) return null;
+  if (event.isRest) {
+    const restSourceId = event.notes[0]?.id ?? event.id;
+    const hfId = idMap.get(restSourceId) ?? `n-${restSourceId}`;
+    return {
+      id: hfId,
+      pitch: "B4",
+      duration: rsDurationToHf(event.duration),
+      dots: event.dotted ? 1 : 0,
+      isRest: true,
+    };
+  }
+  if (event.notes.length === 0) return null;
   const rsNote = event.notes[0];
   if (!rsNote.pitch) return null;
 

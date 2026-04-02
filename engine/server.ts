@@ -16,7 +16,7 @@ import { parseMIDI } from "./parsers/midiParser.js";
 import { parseMXL } from "./parsers/mxlParser.js";
 import { ensureChords } from "./chordInference.js";
 import { satbToMusicXML } from "./satbToMusicXML.js";
-import { validateSATBSequence } from "./validateSATB.js";
+import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB.js";
 
 const app = express();
 const PORT = 8000;
@@ -319,6 +319,48 @@ app.post("/api/validate-satb", (req, res) => {
   }
 
   const result = validateSATBSequence(slots);
+  res.json(result);
+});
+
+/** Validate SATB with per-slot explainability trace for inspector UX. */
+app.post("/api/validate-satb-trace", (req, res) => {
+  const body = req.body as {
+    leadSheet?: LeadSheet;
+    slots?: Array<{ voices: SATBVoices }>;
+  };
+  let slots: SATBVoices[];
+
+  if (body.leadSheet && validateLeadSheet(body.leadSheet)) {
+    const result = generateSATB(body.leadSheet);
+    if (!result) {
+      res.status(422).json({ error: "Could not generate SATB from lead sheet" });
+      return;
+    }
+    slots = result.slots.map((s) => s.voices);
+  } else if (body.slots && Array.isArray(body.slots)) {
+    const valid = body.slots.every(
+      (s) =>
+        s &&
+        typeof s === "object" &&
+        typeof s.voices === "object" &&
+        typeof s.voices.soprano === "string" &&
+        typeof s.voices.alto === "string" &&
+        typeof s.voices.tenor === "string" &&
+        typeof s.voices.bass === "string"
+    );
+    if (!valid) {
+      res.status(400).json({ error: "Invalid slots format; each slot needs voices { soprano, alto, tenor, bass }" });
+      return;
+    }
+    slots = body.slots.map((s) => s.voices);
+  } else {
+    res.status(400).json({
+      error: "Provide leadSheet (key, chords, melody?) or slots (array of { voices })",
+    });
+    return;
+  }
+
+  const result = validateSATBSequenceWithTrace(slots);
   res.json(result);
 });
 
