@@ -9,7 +9,7 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import {
-  isExplanationLevel,
+  resolveExplanationLevel,
   type ExplanationLevel,
 } from "@/lib/ai/explanationLevel";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
@@ -55,16 +55,7 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-
-  if (apiKey && !isExplanationLevel(body.explanationLevel)) {
-    return NextResponse.json(
-      {
-        error:
-          "Missing or invalid explanationLevel (expected beginner | intermediate | professional).",
-      },
-      { status: 400 },
-    );
-  }
+  const explanationLevel = resolveExplanationLevel(body.explanationLevel);
 
   // --- Fallback mode: no API key ---
   if (!apiKey) {
@@ -90,7 +81,7 @@ export async function POST(request: NextRequest) {
     violationContext,
     scoreSelectionContext: scoreSelectionContext ?? violationContext,
     theoryInspectorNoteMode,
-    explanationLevel: body.explanationLevel,
+    explanationLevel,
   });
 
   // Build conversation history (capped at last 10 exchanges)

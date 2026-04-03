@@ -3,6 +3,32 @@
  */
 
 import type { EditableScore } from "./scoreTypes";
+import { riffQuantsForMeasure } from "./playbackScrub";
+
+function measureGlobalQuantStart(score: EditableScore, measureIndex: number): number {
+  let q = 0;
+  for (let i = 0; i < measureIndex; i++) {
+    q += riffQuantsForMeasure(score, i);
+  }
+  return q;
+}
+
+/** Minimal `<harmony>` for chord symbols (root + generic major kind). */
+function naiveHarmonyXml(symbol: string): string {
+  const m = symbol.trim().match(/^([A-Ga-g])([#b♯♭]?)/);
+  const step = (m?.[1] ?? "C").toUpperCase();
+  let alter = 0;
+  const acc = m?.[2];
+  if (acc === "#" || acc === "♯") alter = 1;
+  if (acc === "b" || acc === "♭") alter = -1;
+  const alterEl = alter !== 0 ? `\n      <root-alter>${alter}</root-alter>` : "";
+  return `    <harmony>
+      <root>
+        <root-step>${step}</root-step>${alterEl}
+      </root>
+      <kind>major</kind>
+    </harmony>`;
+}
 
 function esc(s: string): string {
   return s
@@ -46,6 +72,12 @@ export function scoreToMusicXML(score: EditableScore): string {
   const maxMeasures = Math.max(...score.parts.map((p) => p.measures.length), 1);
 
   for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
+    const qStart = measureGlobalQuantStart(score, mIdx);
+    const harmonyPrefix = (score.chords ?? [])
+      .filter((c) => c.quant === qStart)
+      .map((c) => naiveHarmonyXml(c.symbol))
+      .join("\n");
+
     const partEls = score.parts
       .map((p, pIdx) => {
         const measure = p.measures[mIdx];
@@ -72,13 +104,15 @@ export function scoreToMusicXML(score: EditableScore): string {
   </note>`;
           })
           .join("\n");
-        const content =
+        const notesBlock =
           noteEls ||
           `    <note>
     <rest/>
     <duration>4</duration>
     <type>quarter</type>
   </note>`;
+        const harmonyBlock = pIdx === 0 && harmonyPrefix ? `${harmonyPrefix}\n` : "";
+        const content = `${harmonyBlock}${notesBlock}`;
         return `  <part id="P${pIdx + 1}">
 ${content}
   </part>`;

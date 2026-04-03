@@ -242,9 +242,13 @@ export function editableScoreToRiffConfig(
       enableKeyboard: true,
       enablePlayback: true,
     },
+    chord: {
+      display: { notation: "letter", useSymbols: true },
+      playback: { enabled: true, velocity: 52 },
+    },
     score: {
       title: "",
-      bpm: 120,
+      bpm: score.bpm ?? 120,
       timeSignature,
       keySignature,
       staves: score.parts.map(hfPartToRsStaff),
@@ -257,13 +261,21 @@ export function editableScoreToRiffConfig(
  */
 export function editableScoreToRsScore(score: EditableScore): RsScore {
   const firstMeasure = score.parts[0]?.measures[0];
-  return {
+  const rs: RsScore = {
     title: "",
     timeSignature: firstMeasure?.timeSignature ?? "4/4",
     keySignature: hfKeySigToRs(firstMeasure?.keySignature),
-    bpm: 120,
+    bpm: score.bpm ?? 120,
     staves: score.parts.map(hfPartToRsStaff),
   };
+  if (score.chords?.length) {
+    rs.chordTrack = score.chords.map((c) => ({
+      id: c.id,
+      quant: c.quant,
+      symbol: c.symbol,
+    }));
+  }
+  return rs;
 }
 
 // ---------------------------------------------------------------------------
@@ -370,5 +382,20 @@ export function riffScoreToEditableScore(
     }
   }
 
-  return { parts, divisions: 1 };
+  const next: EditableScore = { parts, divisions: 1 };
+  if (rsScore.chordTrack?.length) {
+    next.chords = rsScore.chordTrack.map((c) => ({
+      id: c.id,
+      quant: c.quant,
+      symbol: c.symbol,
+    }));
+  } else if (previousScore?.chords?.length) {
+    next.chords = previousScore.chords.map((c) => ({ ...c }));
+  }
+  if (typeof rsScore.bpm === "number" && Number.isFinite(rsScore.bpm) && rsScore.bpm > 0) {
+    next.bpm = rsScore.bpm;
+  } else if (previousScore?.bpm !== undefined) {
+    next.bpm = previousScore.bpm;
+  }
+  return next;
 }

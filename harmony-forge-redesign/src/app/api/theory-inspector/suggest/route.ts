@@ -7,7 +7,7 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import {
-  isExplanationLevel,
+  resolveExplanationLevel,
   type ExplanationLevel,
 } from "@/lib/ai/explanationLevel";
 import {
@@ -66,15 +66,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!isExplanationLevel(body.explanationLevel)) {
-    return NextResponse.json(
-      {
-        error:
-          "Missing or invalid explanationLevel (expected beginner | intermediate | professional).",
-      },
-      { status: 400 },
-    );
-  }
+  const explanationLevel = resolveExplanationLevel(body.explanationLevel);
 
   const suggestionExplanationMode: SuggestionExplanationMode =
     isSuggestionExplanationMode(body.suggestionExplanationMode)
@@ -89,7 +81,7 @@ export async function POST(request: NextRequest) {
     violationType,
     violationContext,
     scoreContext,
-    explanationLevel: body.explanationLevel,
+    explanationLevel,
     suggestionExplanationMode,
   });
 

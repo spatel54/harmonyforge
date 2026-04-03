@@ -47,6 +47,10 @@ import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { StudyLogExportBar } from "@/components/study/StudyLogExportBar";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
+import {
+  RiffScoreSessionContext,
+  type RiffScoreSessionHandles,
+} from "@/context/RiffScoreSessionContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const ENGINE_URL =
@@ -60,18 +64,30 @@ const DURATION_TOOL_ORDER = [
   "duration-whole",
 ] as const;
 
-/**
- * TactileSandboxPage
- * Focused notation workflow:
- * - fast note input + editing shortcuts
- * - compact tool strip for core operations
- * - inspector panel for theory feedback
- */
-export default function TactileSandboxPage() {
+function TactileSandboxPageInner({
+  onRiffScoreSessionReady,
+}: {
+  onRiffScoreSessionReady: (session: RiffScoreSessionHandles) => void;
+}) {
+  const riffSessionRef = React.useRef<RiffScoreSessionHandles | null>(null);
+  const handleRiffScoreSessionReady = React.useCallback(
+    (session: RiffScoreSessionHandles) => {
+      riffSessionRef.current = session;
+      onRiffScoreSessionReady(session);
+    },
+    [onRiffScoreSessionReady],
+  );
+
+  React.useEffect(() => {
+    return () => {
+      riffSessionRef.current?.flushToZustand();
+    };
+  }, []);
+
   const router = useRouter();
   const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
-  const { score, setScore, undo, redo, canUndo, canRedo, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
+  const { score, setScore, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
   const {
     messages: inspectorMessages,
@@ -310,8 +326,8 @@ export default function TactileSandboxPage() {
   const handleToolSelect = React.useCallback(
     (toolId: string) => {
       const editHandlers: Record<string, () => void> = {
-        "edit-undo": () => undo(),
-        "edit-redo": () => redo(),
+        "edit-undo": () => riffSessionRef.current?.editorUndo(),
+        "edit-redo": () => riffSessionRef.current?.editorRedo(),
         "edit-cut": () => {
           if (!score || selection.length === 0) return;
           const noteIds = selection.map((s) => s.noteId);
@@ -485,7 +501,7 @@ export default function TactileSandboxPage() {
         setActiveTool(toolId);
       }
     },
-    [score, selection, undo, redo, deleteSelection, clearSelection, applyScore, setActiveTool, setIsExportModalOpen, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef]
+    [score, selection, deleteSelection, clearSelection, applyScore, setActiveTool, setIsExportModalOpen, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef]
   );
 
   React.useEffect(() => {
@@ -499,12 +515,12 @@ export default function TactileSandboxPage() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "z") {
         e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
+        if (e.shiftKey) riffSessionRef.current?.editorRedo();
+        else riffSessionRef.current?.editorUndo();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
-        redo();
+        riffSessionRef.current?.editorRedo();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
         if (selection.length > 0 && score) {
@@ -709,8 +725,6 @@ export default function TactileSandboxPage() {
     selection,
     score,
     handleToolSelect,
-    undo,
-    redo,
     applyScore,
     activeTool,
     setActiveTool,
@@ -1011,7 +1025,9 @@ export default function TactileSandboxPage() {
   );
 
   const handleExport = async (format: string) => {
-    if (!score) return;
+    riffSessionRef.current?.flushToZustand();
+    const live = useScoreStore.getState().score;
+    if (!live) return;
     const downloadBlob = (blob: Blob, filename: string) => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -1021,10 +1037,10 @@ export default function TactileSandboxPage() {
     };
 
     if (format === "xml") {
-      const blob = new Blob([scoreToMusicXML(score)], { type: "application/xml" });
+      const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
       downloadBlob(blob, "harmony-forge-score.xml");
     } else if (format === "json") {
-      const blob = new Blob([JSON.stringify(score, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(live, null, 2)], { type: "application/json" });
       downloadBlob(blob, "harmony-forge-score.json");
     } else if (format === "pdf") {
       window.print();
@@ -1033,7 +1049,7 @@ export default function TactileSandboxPage() {
         const formData = new FormData();
         formData.append(
           "file",
-          new Blob([scoreToMusicXML(score)], { type: "application/xml" }),
+          new Blob([scoreToMusicXML(live)], { type: "application/xml" }),
           "score.xml",
         );
         const res = await fetch(`${API_BASE}/api/export-chord-chart`, {
@@ -1069,7 +1085,12 @@ export default function TactileSandboxPage() {
       style={{ backgroundColor: "var(--hf-bg)" }}
     >
       {/* Zone 1: Header */}
-      <SandboxHeader onExportClick={() => setIsExportModalOpen(true)} />
+      <SandboxHeader
+        onExportClick={() => {
+          riffSessionRef.current?.flushToZustand();
+          setIsExportModalOpen(true);
+        }}
+      />
 
       {/* Body */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -1084,7 +1105,6 @@ export default function TactileSandboxPage() {
               onCanvasClick={clearSelection}
               selection={selection}
               onNoteClick={handleScoreNoteClick}
-              visiblePartIds={visibleParts.size > 0 ? visibleParts : undefined}
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={handleAcceptCorrection}
               onRejectCorrection={handleRejectCorrection}
@@ -1100,6 +1120,7 @@ export default function TactileSandboxPage() {
               onInspectorInferredRegion={
                 isInspectorOpen ? handleInspectorInferredRegion : undefined
               }
+              onRiffScoreSessionReady={handleRiffScoreSessionReady}
             />
             {layersPanelOpen && score && (
               <div
@@ -1112,6 +1133,9 @@ export default function TactileSandboxPage() {
                 <div className="text-[11px] font-medium mb-2" style={{ color: "var(--hf-text-secondary)" }}>
                   Visible parts
                 </div>
+                <p className="text-[10px] mb-2 opacity-80" style={{ color: "var(--hf-text-secondary)" }}>
+                  The editor shows every staff; toggles here are for your workflow labels only.
+                </p>
                 {score.parts.map((part) => {
                   const isVisible = visibleParts.size === 0 || visibleParts.has(part.id);
                   return (
@@ -1225,5 +1249,17 @@ export default function TactileSandboxPage() {
         musicXML={score ? scoreToMusicXML(score) : generatedMusicXML}
       />
     </div>
+  );
+}
+
+/**
+ * TactileSandboxPage — RiffScore session context wraps inner so Theory Inspector can flush editor → Zustand.
+ */
+export default function TactileSandboxPage() {
+  const [riffSession, setRiffScoreSession] = React.useState<RiffScoreSessionHandles | null>(null);
+  return (
+    <RiffScoreSessionContext.Provider value={riffSession}>
+      <TactileSandboxPageInner onRiffScoreSessionReady={setRiffScoreSession} />
+    </RiffScoreSessionContext.Provider>
   );
 }

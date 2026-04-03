@@ -6,6 +6,7 @@ import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
@@ -18,15 +19,11 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   selection?: NoteSelection[];
   /** Called when user clicks a note */
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
-  /** Part IDs to show (empty = all) */
-  visiblePartIds?: Set<string>;
   /** Pending AI corrections to render as ghost note overlays */
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
   issueHighlights?: ScoreIssueHighlight[];
-  /** Called when the score changes from within the editor (RiffScore user edits) */
-  onScoreChange?: (score: EditableScore) => void;
   noteInspectionEnabled?: boolean;
   focusHighlightNoteIds?: readonly string[];
   onInspectorSelectMeasure?: (measureIndex: number) => void;
@@ -36,6 +33,7 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
       | { kind: "measure"; measureIndex: number }
       | { kind: "part"; staffIndex: number },
   ) => void;
+  onRiffScoreSessionReady?: (session: RiffScoreSessionHandles) => void;
 }
 
 /**
@@ -50,25 +48,26 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onCanvasClick,
       selection = [],
       onNoteClick,
-      visiblePartIds,
       pendingCorrections,
       onAcceptCorrection,
       onRejectCorrection,
       issueHighlights,
-      onScoreChange,
       noteInspectionEnabled = false,
       focusHighlightNoteIds,
       onInspectorSelectMeasure,
       onInspectorSelectPart,
       onInspectorInferredRegion,
+      onRiffScoreSessionReady,
       className,
       ...props
     },
     ref,
   ) => {
     const [riffScoreCrashed, setRiffScoreCrashed] = React.useState(false);
+    const [riffRetryNonce, setRiffRetryNonce] = React.useState(0);
 
-    const handleRiffScoreError = React.useCallback(() => {
+    const handleRiffScoreError = React.useCallback((err?: Error) => {
+      console.error("[ScoreCanvas] RiffScore error", err);
       setRiffScoreCrashed(true);
     }, []);
 
@@ -372,16 +371,44 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
         )}
 
         {/* RiffScore editor when score exists */}
+        {score && riffScoreCrashed && (
+          <div
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 p-6 text-center"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--hf-bg) 94%, var(--hf-detail))",
+            }}
+          >
+            <p className="text-sm max-w-sm" style={{ color: "var(--hf-text-primary)" }}>
+              The notation editor stopped unexpectedly. Your score is still saved in the app — try again, or reload the page if the problem continues.
+            </p>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg text-sm font-medium"
+              style={{
+                backgroundColor: "var(--hf-accent)",
+                color: "var(--hf-bg)",
+              }}
+              onClick={() => {
+                setRiffScoreCrashed(false);
+                setRiffRetryNonce((n) => n + 1);
+              }}
+            >
+              Retry editor
+            </button>
+          </div>
+        )}
+
         {score && !riffScoreCrashed && (
-          <div className="absolute inset-0 pointer-events-auto min-h-[280px]">
+          <div
+            key={`riff-mount-${riffRetryNonce}`}
+            className="absolute inset-0 pointer-events-auto min-h-[280px]"
+          >
             <RiffScoreEditor
               score={score}
               className="w-full h-full"
               selection={selection}
               onNoteClick={onNoteClick}
-              visiblePartIds={visiblePartIds}
-              onError={handleRiffScoreError}
-              onScoreChange={onScoreChange}
+              onError={(e) => handleRiffScoreError(e)}
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={onAcceptCorrection}
               onRejectCorrection={onRejectCorrection}
@@ -391,6 +418,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onInspectorSelectMeasure={onInspectorSelectMeasure}
               onInspectorSelectPart={onInspectorSelectPart}
               onInspectorInferredRegion={onInspectorInferredRegion}
+              onSessionReady={onRiffScoreSessionReady}
             />
           </div>
         )}

@@ -13,10 +13,6 @@ import type {
   InspectorScoreFocus,
   NoteInsight,
 } from "@/store/useTheoryInspectorStore";
-import {
-  EXPLANATION_LEVELS,
-  type ExplanationLevel,
-} from "@/lib/ai/explanationLevel";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
 
@@ -110,31 +106,8 @@ export const TheoryInspectorPanel = React.forwardRef<
   ) => {
     const chatRef = React.useRef<HTMLDivElement>(null);
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
-    const explanationLevel = useTheoryInspectorStore((s) => s.explanationLevel);
-    const setExplanationLevel = useTheoryInspectorStore(
-      (s) => s.setExplanationLevel,
-    );
-    const hydrateExplanationLevelFromStorage = useTheoryInspectorStore(
-      (s) => s.hydrateExplanationLevelFromStorage,
-    );
-
-    React.useEffect(() => {
-      hydrateExplanationLevelFromStorage();
-    }, [hydrateExplanationLevelFromStorage]);
-
-    const chatLlmBlocked = tutorEnabled && explanationLevel === null;
     const suppressSuggestionProse = isMinimalSuggestionExplanation();
-
-    const levelLabel = (level: ExplanationLevel): string => {
-      switch (level) {
-        case "beginner":
-          return "Beginner";
-        case "intermediate":
-          return "Intermediate";
-        case "professional":
-          return "Professional";
-      }
-    };
+    const chatInputLocked = isStreaming && streamingMessageId != null;
 
     const renderChatMessage = (msg: TheoryInspectorMessage): React.ReactNode => {
       switch (msg.type) {
@@ -175,7 +148,6 @@ export const TheoryInspectorPanel = React.forwardRef<
               timestamp={msg.timestamp}
               onExplainMore={() => onExplainMore?.(msg.id)}
               onSuggestFix={() => onSuggestFix?.(msg.id)}
-              disableLlmActions={chatLlmBlocked}
             />
           );
         case "user":
@@ -202,7 +174,6 @@ export const TheoryInspectorPanel = React.forwardRef<
               key={msg.id}
               chips={msg.chips}
               onChipClick={onChipClick}
-              disabled={chatLlmBlocked}
             />
           );
         case "evidence":
@@ -329,54 +300,6 @@ export const TheoryInspectorPanel = React.forwardRef<
               aria-hidden="true"
             />
           </button>
-        </div>
-
-        {/* Explanation level — required before LLM chat / note tutor when API key is set */}
-        <div
-          className="w-full shrink-0 px-[12px] py-[8px] flex flex-col gap-[6px]"
-          style={{
-            backgroundColor: "var(--hf-bg)",
-            borderBottom: "1px solid var(--hf-detail)",
-          }}
-        >
-          <div
-            className="font-body text-[10px] leading-tight"
-            style={{ color: "var(--hf-text-secondary)" }}
-          >
-            {tutorEnabled
-              ? chatLlmBlocked
-                ? "Choose how deep the AI should go — required before chat, note summaries, and fix suggestions."
-                : "Explanation depth for the AI tutor (change anytime)."
-              : "When OPENAI_API_KEY is set, you choose explanation depth before using the AI tutor."}
-          </div>
-          <div
-            className="flex gap-[4px] w-full"
-            role="group"
-            aria-label="AI explanation level"
-          >
-            {EXPLANATION_LEVELS.map((level) => {
-              const active = explanationLevel === level;
-              return (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setExplanationLevel(level)}
-                  className="flex-1 min-w-0 px-[6px] py-[6px] rounded-[4px] font-mono text-[9px] font-medium leading-tight transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
-                  style={{
-                    backgroundColor: active
-                      ? "var(--hf-surface)"
-                      : "color-mix(in srgb, var(--hf-detail) 35%, transparent)",
-                    color: active ? "var(--neutral-50)" : "var(--hf-text-primary)",
-                    border: active
-                      ? "1px solid var(--hf-surface)"
-                      : "1px solid var(--hf-detail)",
-                  }}
-                >
-                  {levelLabel(level)}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {debugStatus && (
@@ -512,55 +435,6 @@ export const TheoryInspectorPanel = React.forwardRef<
                   )}
                 </div>
 
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
-                    Ideas to try next
-                  </div>
-                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Each bullet should name what to try and why (because / so that), tied to the facts and notation export.
-                  </div>
-                  <div>
-                    {!tutorEnabled ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Enable the AI tutor (OPENAI_API_KEY) to get suggestions here.
-                      </span>
-                    ) : chatLlmBlocked ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Choose an explanation level above to enable AI suggestions.
-                      </span>
-                    ) : isStreaming ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        …
-                      </span>
-                    ) : noteInsight.aiSuggestions?.trim() ? (
-                      <MarkdownText content={noteInsight.aiSuggestions.trim()} variant="panel" />
-                    ) : (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        No suggestions in this reply yet.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
                 {noteInsight.engineOriginExplanation ? (
                   <div
                     className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
@@ -621,7 +495,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                   </pre>
                 </div>
 
-                {/* Tutor summary (LLM) — after deterministic blocks so the AI synthesizes evidence + “why” */}
+                {/* Tutor summary (LLM) — after deterministic blocks; Ideas follow below */}
                 <div
                   className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
                   style={{
@@ -644,14 +518,6 @@ export const TheoryInspectorPanel = React.forwardRef<
                       >
                         Generating summary…
                       </span>
-                    ) : chatLlmBlocked ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Choose Beginner, Intermediate, or Professional above to generate the AI tutor
-                        summary.
-                      </span>
                     ) : tutorEnabled ? (
                       noteInsight.aiExplanation?.trim() ? (
                         <MarkdownText content={noteInsight.aiExplanation.trim()} variant="panel" />
@@ -671,6 +537,48 @@ export const TheoryInspectorPanel = React.forwardRef<
                       >
                         Add OPENAI_API_KEY to .env.local for an AI summary. The sections above still
                         explain the score without the tutor.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                    Ideas to try next
+                  </div>
+                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    After the summary: concrete tries—each bullet should name what to do and why (because / so that), tied to the facts and export.
+                  </div>
+                  <div>
+                    {!tutorEnabled ? (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        Enable the AI tutor (OPENAI_API_KEY) to get suggestions here.
+                      </span>
+                    ) : isStreaming ? (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        …
+                      </span>
+                    ) : noteInsight.aiSuggestions?.trim() ? (
+                      <MarkdownText content={noteInsight.aiSuggestions.trim()} variant="panel" />
+                    ) : (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        No suggestions in this reply yet.
                       </span>
                     )}
                   </div>
@@ -722,14 +630,8 @@ export const TheoryInspectorPanel = React.forwardRef<
               value={inputValue}
               onChange={(e) => onInputChange?.(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={
-                chatLlmBlocked
-                  ? "Choose explanation level above…"
-                  : ""
-              }
-              disabled={
-                chatLlmBlocked || (isStreaming && streamingMessageId != null)
-              }
+              placeholder=""
+              disabled={chatInputLocked}
               className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
               style={{ color: "var(--hf-text-primary)" }}
               aria-label="Theory Inspector message"
@@ -738,9 +640,7 @@ export const TheoryInspectorPanel = React.forwardRef<
           <button
             type="button"
             onClick={onSend}
-            disabled={
-              chatLlmBlocked || (isStreaming && streamingMessageId != null)
-            }
+            disabled={chatInputLocked}
             aria-label="Send message"
             className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
             style={{ backgroundColor: "var(--hf-surface)" }}

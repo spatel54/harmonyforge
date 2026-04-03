@@ -17,9 +17,6 @@ export interface ScoreState {
   history: EditableScore[];
   historyIndex: number;
   visibleParts: Set<string>;
-  /** When true, undo/redo is managed by RiffScore's command history. */
-  isExternallyManaged: boolean;
-  setExternallyManaged: (managed: boolean) => void;
   setVisibleParts: (parts: Set<string>) => void;
   togglePartVisibility: (partId: string) => void;
   setScore: (score: EditableScore | null) => void;
@@ -30,6 +27,8 @@ export interface ScoreState {
   canRedo: boolean;
   deleteSelection: (noteIds: string[]) => void;
   applyScore: (nextScore: EditableScore) => void;
+  /** Replace score from RiffScore flush; does not grow Zustand history (RiffScore owns edit undo). */
+  replaceScoreFromEditor: (nextScore: EditableScore) => void;
 }
 
 export const useScoreStore = create<ScoreState>((set, get) => ({
@@ -37,8 +36,6 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   history: [],
   historyIndex: -1,
   visibleParts: new Set<string>(),
-  isExternallyManaged: false,
-  setExternallyManaged: (managed) => set({ isExternallyManaged: managed }),
   setVisibleParts: (visibleParts) => set({ visibleParts }),
   togglePartVisibility: (partId) => {
     const { visibleParts } = get();
@@ -115,6 +112,16 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
       history: trimmed,
       historyIndex: trimmed.length - 1,
       canUndo: trimmed.length > 1,
+      canRedo: false,
+    });
+  },
+  replaceScoreFromEditor: (nextScore) => {
+    const normalized = normalizeScoreRests(nextScore);
+    set({
+      score: normalized,
+      history: [cloneScore(normalized)],
+      historyIndex: 0,
+      canUndo: false,
       canRedo: false,
     });
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { MusicEditorAPI, Score as RsScore } from "riffscore";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { useScoreStore } from "@/store/useScoreStore";
@@ -12,10 +12,12 @@ import {
 } from "@/lib/music/riffscoreAdapter";
 
 interface UseRiffScoreSyncReturn {
-  /** Push current Zustand score to RiffScore. Call after undo/redo or external mutations. */
+  /** Push current Zustand score to RiffScore. Call after load or Zustand-driven mutations. */
   pushToRiffScore: () => void;
-  /** Pull current RiffScore state into Zustand. Call after RiffScore user edits. */
+  /** Pull editor state into Zustand via `replaceScoreFromEditor` (no HF history growth). */
   pullFromRiffScore: () => void;
+  /** Same as pullFromRiffScore — call before inspector, export, or navigation. */
+  flushToZustand: () => void;
   /** Current HF->RS ID map */
   hfToRs: IdMap;
   /** Current RS->HF ID map */
@@ -27,7 +29,7 @@ interface UseRiffScoreSyncReturn {
  *
  * Uses a syncDirection flag to prevent infinite update loops:
  * - When we push to RiffScore, we set flag to ignore the resulting 'score' event
- * - When user edits in RiffScore, we pull and update Zustand without re-pushing
+ * - Lazy sync: no automatic pull on `score` events — call `flushToZustand` when the app needs Zustand.
  */
 export function useRiffScoreSync(
   apiRef: React.RefObject<MusicEditorAPI | null>,
@@ -72,32 +74,17 @@ export function useRiffScoreSync(
       currentScore,
     );
 
-    // Update Zustand without triggering a push back
-    useScoreStore.getState().applyScore(hfScore);
+    useScoreStore.getState().replaceScoreFromEditor(hfScore);
 
-    // Rebuild maps with the new state
     const maps = buildIdMap(hfScore, rsScore);
     hfToRsRef.current = maps.hfToRs;
     rsToHfRef.current = maps.rsToHf;
   }, [apiRef]);
 
-  // Subscribe to RiffScore score changes for pull sync
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-
-    const unsub = api.on("score", () => {
-      if (!isPushingRef.current) {
-        pullFromRiffScore();
-      }
-    });
-
-    return unsub;
-  }, [apiRef, pullFromRiffScore]);
-
   return {
     pushToRiffScore,
     pullFromRiffScore,
+    flushToZustand: pullFromRiffScore,
     hfToRs: hfToRsRef.current,
     rsToHf: rsToHfRef.current,
   };

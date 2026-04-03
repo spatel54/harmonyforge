@@ -9,7 +9,7 @@ export interface ViolationCardProps extends React.HTMLAttributes<HTMLDivElement>
   onExplainMore?: () => void;
   onSuggestFix?: () => void;
   onRegenerate?: () => void;
-  /** When true, LLM-backed actions are disabled (e.g. explanation level not chosen). */
+  /** When true, LLM-backed actions are disabled. */
   disableLlmActions?: boolean;
 }
 

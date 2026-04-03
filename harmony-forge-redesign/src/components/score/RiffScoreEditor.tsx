@@ -22,6 +22,7 @@ import {
 } from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
+import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
@@ -35,8 +36,6 @@ export interface RiffScoreEditorProps {
   selection?: NoteSelection[];
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
   noteInspectionEnabled?: boolean;
-  visiblePartIds?: Set<string>;
-  onScoreChange?: (score: EditableScore) => void;
   onError?: (err: Error) => void;
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
@@ -54,6 +53,8 @@ export interface RiffScoreEditorProps {
       | { kind: "measure"; measureIndex: number }
       | { kind: "part"; staffIndex: number },
   ) => void;
+  /** Exposes flush + RiffScore-native undo/redo for sandbox / Theory Inspector. */
+  onSessionReady?: (session: RiffScoreSessionHandles) => void;
 }
 
 const TOOLBAR_PALETTES = [
@@ -61,10 +62,7 @@ const TOOLBAR_PALETTES = [
   "EDIT",
   "DURATION",
   "PITCH",
-  "TEXT",
   "MEASURE",
-  "DYNAMICS",
-  "ARTICULATION",
   "PLAYBACK",
 ] as const;
 
@@ -75,10 +73,7 @@ const PALETTE_LABELS: Record<ToolbarPalette, string[]> = {
   EDIT: ["Undo", "Redo"],
   DURATION: ["Whole", "Half", "Quarter", "Eighth", "16th", "32nd", "64th", "Dotted Note", "Tie (T)", "Toggle Input Mode"],
   PITCH: ["Flat", "Natural", "Sharp"],
-  TEXT: [],
   MEASURE: ["Treble", "Bass", "Alto", "Tenor", "Add Measure", "Remove Measure", "Toggle Pickup"],
-  DYNAMICS: [],
-  ARTICULATION: [],
   PLAYBACK: ["Play"],
 };
 
@@ -87,10 +82,7 @@ const PALETTE_SHORT_LABELS: Record<ToolbarPalette, string> = {
   EDIT: "Ed",
   DURATION: "Du",
   PITCH: "Pi",
-  TEXT: "Tx",
   MEASURE: "Ms",
-  DYNAMICS: "Dy",
-  ARTICULATION: "Ar",
   PLAYBACK: "Pb",
 };
 
@@ -100,8 +92,6 @@ export function RiffScoreEditor({
   selection = [],
   onNoteClick,
   noteInspectionEnabled = false,
-  visiblePartIds,
-  onScoreChange,
   onError,
   pendingCorrections,
   onAcceptCorrection,
@@ -111,6 +101,7 @@ export function RiffScoreEditor({
   onInspectorSelectMeasure,
   onInspectorSelectPart,
   onInspectorInferredRegion,
+  onSessionReady,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -125,18 +116,11 @@ export function RiffScoreEditor({
   );
   const prevScoreRef = useRef<EditableScore | null>(null);
 
-  // visiblePartIds is reserved for future per-staff visibility toggling in RiffScore
-  void visiblePartIds;
-
   const { resolvedTheme } = useNextTheme();
   const rsTheme = resolvedTheme === "dark" ? "DARK" as const : "LIGHT" as const;
   const applyScore = useScoreStore((s) => s.applyScore);
-  const undo = useScoreStore((s) => s.undo);
-  const redo = useScoreStore((s) => s.redo);
-  const canUndo = useScoreStore((s) => s.canUndo);
-  const canRedo = useScoreStore((s) => s.canRedo);
 
-  const { pushToRiffScore, rsToHf } = useRiffScoreSync(apiRef, score);
+  const { pushToRiffScore, rsToHf, flushToZustand } = useRiffScoreSync(apiRef, score);
   const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
   const hasSelection = selectedNoteIds.size > 0;
   const focusHighlightSet = useMemo(
@@ -256,20 +240,22 @@ export function RiffScoreEditor({
         {
           id: "hf-action-undo",
           label: "Undo",
-          title: "Undo last edit",
+          title: "Undo last edit (RiffScore)",
           icon: <span className="text-[10px] font-semibold">UN</span>,
-          disabled: !canUndo,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: undo,
+          onClick: () => {
+            apiRef.current?.undo();
+          },
         },
         {
           id: "hf-action-redo",
           label: "Redo",
-          title: "Redo last edit",
+          title: "Redo last edit (RiffScore)",
           icon: <span className="text-[10px] font-semibold">RE</span>,
-          disabled: !canRedo,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: redo,
+          onClick: () => {
+            apiRef.current?.redo();
+          },
         },
         {
           id: "hf-action-transpose-up",
@@ -365,7 +351,7 @@ export function RiffScoreEditor({
 
       return plugins;
     },
-    [visiblePalettes, showPaletteMenu, canUndo, canRedo, hasSelection, score, undo, redo, selectedNoteIds],
+    [visiblePalettes, showPaletteMenu, hasSelection, score, selectedNoteIds],
   );
 
   // Build config from score, passing current theme
@@ -428,6 +414,20 @@ export function RiffScoreEditor({
       clearTimeout(timeout);
     };
   }, [instanceId]);
+
+  useEffect(() => {
+    if (!isReady || !onSessionReady) return;
+    const session: RiffScoreSessionHandles = {
+      flushToZustand,
+      editorUndo: () => {
+        apiRef.current?.undo();
+      },
+      editorRedo: () => {
+        apiRef.current?.redo();
+      },
+    };
+    onSessionReady(session);
+  }, [isReady, onSessionReady, flushToZustand]);
 
   // Push score to RiffScore when it changes externally (e.g., undo/redo, file load)
   useEffect(() => {
@@ -565,19 +565,6 @@ export function RiffScoreEditor({
 
     return unsub;
   }, [isReady, onError]);
-
-  // Notify parent when score changes from within RiffScore
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api || !onScoreChange) return;
-
-    const unsub = api.on("score", () => {
-      const currentScore = prevScoreRef.current;
-      if (currentScore) onScoreChange(currentScore);
-    });
-
-    return unsub;
-  }, [isReady, onScoreChange]);
 
   if (!score || !config) return null;
 

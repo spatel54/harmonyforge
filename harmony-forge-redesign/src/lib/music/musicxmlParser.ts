@@ -19,6 +19,23 @@ const PART_CLEFS: Record<string, string> = {
  * Clef from instrument / part name (checked before P1–P4 defaults so additive
  * scores with Viola / Cello / Bassoon on P2+ get correct clefs).
  */
+/** `<sound tempo="…"/>` from the first measure that declares it (MusicXML). */
+function extractSoundTempoBpm(measureEl: Element | null): number | undefined {
+  if (!measureEl) return;
+  const sounds =
+    measureEl.querySelectorAll("sound").length > 0
+      ? Array.from(measureEl.querySelectorAll("sound"))
+      : findAllByLocalName(measureEl, "sound");
+  for (const sound of sounds) {
+    const t = sound.getAttribute("tempo");
+    if (t) {
+      const v = Number.parseFloat(t);
+      if (Number.isFinite(v) && v > 0 && v < 1000) return v;
+    }
+  }
+  return;
+}
+
 function clefFromInstrumentName(partName?: string): string | null {
   if (!partName) return null;
   const n = partName.toLowerCase();
@@ -243,7 +260,8 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
     }
   }
 
-  return { parts, divisions };
+  const bpm = extractSoundTempoBpm(measures[0] ?? null);
+  return bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
 }
 
 /**
@@ -296,7 +314,10 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
   if (maxMeasures === 0) return null;
 
   const divisions = 4;
-  return { parts, divisions };
+  const firstMeasureEl =
+    partEls[0]?.querySelector("measure") ?? findAllByLocalName(partEls[0]!, "measure")[0];
+  const bpm = extractSoundTempoBpm(firstMeasureEl ?? null);
+  return bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
 }
 
 function inferClef(

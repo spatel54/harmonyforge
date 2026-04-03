@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
+import { RiffScoreSessionContext } from "@/context/RiffScoreSessionContext";
+import { useScoreStore } from "@/store/useScoreStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
 import type { EditableScore } from "@/lib/music/scoreTypes";
@@ -8,6 +10,7 @@ import {
   getViolationLabel,
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
+import { DEFAULT_EXPLANATION_LEVEL } from "@/lib/ai/explanationLevel";
 import type {
   NoteInsight,
   NoteInsightKind,
@@ -502,6 +505,10 @@ function findingsToHighlights(
  */
 export function useTheoryInspector() {
   const store = useTheoryInspectorStore();
+  const riffSession = useContext(RiffScoreSessionContext);
+  const flushEditorToZustand = useCallback(() => {
+    riffSession?.flushToZustand();
+  }, [riffSession]);
   const abortRef = useRef<AbortController | null>(null);
 
   // Check API key availability on mount
@@ -526,17 +533,9 @@ export function useTheoryInspector() {
       const trimmed = text.trim();
       if (!trimmed || store.isStreaming) return;
 
+      flushEditorToZustand();
+
       const gate = useTheoryInspectorStore.getState();
-      if (gate.hasApiKey && !gate.explanationLevel) {
-        store.addMessage({
-          id: msgId("sys"),
-          type: "system",
-          content:
-            "Choose Beginner, Intermediate, or Professional above before sending AI messages.",
-          timestamp: timestamp(),
-        });
-        return;
-      }
 
       // Abort any in-flight stream
       abortRef.current?.abort();
@@ -618,8 +617,8 @@ export function useTheoryInspector() {
             scoreSelectionContext,
             theoryInspectorNoteMode,
             conversationHistory,
-            ...(gate.hasApiKey && gate.explanationLevel
-              ? { explanationLevel: gate.explanationLevel }
+            ...(gate.hasApiKey
+              ? { explanationLevel: DEFAULT_EXPLANATION_LEVEL }
               : {}),
           }),
           signal: controller.signal,
@@ -666,7 +665,7 @@ export function useTheoryInspector() {
         store.setStreamingMessageId(null);
       }
     },
-    [store],
+    [store, flushEditorToZustand],
   );
 
   /**
@@ -675,7 +674,11 @@ export function useTheoryInspector() {
    * violation messages for each detected issue.
    */
   const runAudit = useCallback(
-    async (score: EditableScore) => {
+    async (_score?: EditableScore | null) => {
+      flushEditorToZustand();
+      const score = useScoreStore.getState().score;
+      if (!score) return;
+
       const slotData = scoreToAuditedSlots(score);
       if (!slotData) return;
 
@@ -741,7 +744,7 @@ export function useTheoryInspector() {
         store.setIssueHighlights(localHighlights);
       }
     },
-    [store],
+    [store, flushEditorToZustand],
   );
 
   const suggestionStore = useSuggestionStore();
@@ -752,20 +755,12 @@ export function useTheoryInspector() {
    * and stores the result as a SuggestionBatch.
    */
   const requestSuggestion = useCallback(
-    async (score: EditableScore) => {
+    async (_score?: EditableScore | null) => {
       if (suggestionStore.isLoading) return;
 
-      const st = useTheoryInspectorStore.getState();
-      if (st.hasApiKey && !st.explanationLevel) {
-        store.addMessage({
-          id: msgId("sys"),
-          type: "system",
-          content:
-            "Choose an explanation level above before requesting AI fix suggestions.",
-          timestamp: timestamp(),
-        });
-        return;
-      }
+      flushEditorToZustand();
+      const score = useScoreStore.getState().score;
+      if (!score) return;
 
       suggestionStore.setIsLoading(true);
       store.setIsStreaming(true);
@@ -820,7 +815,7 @@ export function useTheoryInspector() {
             genre: store.genre,
             violationType: lastViolation?.violationType,
             scoreContext,
-            explanationLevel: st.explanationLevel!,
+            explanationLevel: DEFAULT_EXPLANATION_LEVEL,
             suggestionExplanationMode: getSuggestionExplanationMode(),
           }),
         });
@@ -902,7 +897,7 @@ export function useTheoryInspector() {
         store.setIsStreaming(false);
       }
     },
-    [store, suggestionStore],
+    [store, suggestionStore, flushEditorToZustand],
   );
 
   /**
@@ -951,15 +946,6 @@ export function useTheoryInspector() {
     async (base: NoteInsight, evidence: string) => {
       const st0 = useTheoryInspectorStore.getState();
       if (!st0.hasApiKey) return;
-      if (!st0.explanationLevel) {
-        store.setSelectedNoteInsight({
-          ...base,
-          aiExplanation:
-            "Choose Beginner, Intermediate, or Professional above to enable the AI tutor summary.",
-          aiSuggestions: undefined,
-        });
-        return;
-      }
       store.setIsStreaming(true);
       store.setStreamingMessageId(null);
       try {
@@ -972,7 +958,7 @@ export function useTheoryInspector() {
             theoryInspectorNoteMode: base.inspectorMode,
             userMessage: `${evidence}\n\n---\n**Response rules** (apply after reading the notation block above):\n${NOTE_EXPLAIN_TUTOR_BRIEF}`,
             scoreSelectionContext: evidence,
-            explanationLevel: st0.explanationLevel,
+            explanationLevel: DEFAULT_EXPLANATION_LEVEL,
           }),
         });
         if (!response.ok) {
@@ -1025,12 +1011,15 @@ export function useTheoryInspector() {
     async (score: EditableScore, noteId: string, partId: string) => {
       if (store.isStreaming) return;
 
-      const found = getNoteById(score, noteId);
+      flushEditorToZustand();
+      const live = useScoreStore.getState().score ?? score;
+
+      const found = getNoteById(live, noteId);
       if (!found || found.note.isRest) return;
 
       logStudyEvent("theory_inspector_note_click", { noteId, partId });
 
-      const partIndex = score.parts.findIndex((p) => p.id === partId);
+      const partIndex = live.parts.findIndex((p) => p.id === partId);
       if (partIndex < 0) return;
 
       const {
@@ -1039,13 +1028,13 @@ export function useTheoryInspector() {
         generationBaselineAuditedSlots: baselineAuditedSlots,
       } = useTheoryInspectorStore.getState();
 
-      const isMelodyPart = score.parts.length > 1 && partIndex === 0;
+      const isMelodyPart = live.parts.length > 1 && partIndex === 0;
 
       if (isMelodyPart) {
-        const partName = score.parts[partIndex]?.name ?? partId;
+        const partName = live.parts[partIndex]?.name ?? partId;
         const currentPitch = found.note.pitch;
         const scoreFacts = buildAdditiveNoteContextLines(
-          score,
+          live,
           found.measureIdx,
           found.noteIdx,
           partId,
@@ -1084,15 +1073,15 @@ export function useTheoryInspector() {
         return;
       }
 
-      if (!isHarmonyPart(score, partId)) {
+      if (!isHarmonyPart(live, partId)) {
         return;
       }
 
-      const slotData = scoreToAuditedSlots(score, {
+      const slotData = scoreToAuditedSlots(live, {
         requireExactlyFourParts: true,
       });
       if (!slotData) {
-        const fallback = buildFallbackNoteInsight(score, noteId, partId, baselinePitches);
+        const fallback = buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
         if (fallback) {
           store.setSelectedNoteInsight(fallback);
           await streamTutorNoteInsight(fallback, fallback.evidenceLines.join("\n"));
@@ -1104,7 +1093,7 @@ export function useTheoryInspector() {
         VOICE_KEYS.some((voice) => sl.noteIds[voice] === noteId),
       );
       if (slotIndex < 0) {
-        const fallback = buildFallbackNoteInsight(score, noteId, partId, baselinePitches);
+        const fallback = buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
         if (fallback) {
           const evidenceLines = [
             ...fallback.evidenceLines,
@@ -1120,11 +1109,11 @@ export function useTheoryInspector() {
       const voice = VOICE_KEYS.find((v) => slot.noteIds[v] === noteId);
       if (!voice) return;
 
-      const satbResolved = resolveSatbPartIndices(score);
+      const satbResolved = resolveSatbPartIndices(live);
       const satbOpts: SatbNoteContextOptions | undefined = satbResolved
         ? { voiceStaffNames: satbResolved.names }
         : undefined;
-      const rosterLines = buildScorePartRosterLines(score);
+      const rosterLines = buildScorePartRosterLines(live);
 
       const currentPitch = slot.voices[voice];
       const originalEnginePitch = resolveOriginalEnginePitch(
@@ -1155,7 +1144,7 @@ export function useTheoryInspector() {
         satbOpts,
       );
       const rhythmFacts = buildSatbRhythmContextLines(
-        score,
+        live,
         slotData.auditedSlots,
         slotIndex,
         satbOpts,
@@ -1231,7 +1220,7 @@ export function useTheoryInspector() {
       const sourceTag = bt && originFindings.length > 0 ? "engine-trace" : "local-fallback";
 
       const { lines: satbMeasureLines } = buildMeasureFocusFacts(
-        score,
+        live,
         found.measureIdx,
       );
 
@@ -1291,7 +1280,7 @@ export function useTheoryInspector() {
       store.setSelectedNoteInsight(nextInsight);
       await streamTutorNoteInsight(nextInsight, evidenceLines.join("\n"));
     },
-    [store, streamTutorNoteInsight],
+    [store, streamTutorNoteInsight, flushEditorToZustand],
   );
 
   const explainGeneratedNote = explainNotePitch;

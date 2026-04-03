@@ -48,9 +48,20 @@ export interface Part {
   measures: Measure[];
 }
 
+/** Chord symbol on RiffScore’s global quant timeline (16 quants per quarter). */
+export interface ChordSymbolEntry {
+  id: string;
+  quant: number;
+  symbol: string;
+}
+
 export interface EditableScore {
   parts: Part[];
   divisions: number;
+  /** Playback tempo; defaults to 120 in RiffScore adapter when omitted. */
+  bpm?: number;
+  /** Harmony track (RiffScore chord track round-trip). */
+  chords?: ChordSymbolEntry[];
 }
 
 /** Generate unique IDs for notes and measures */

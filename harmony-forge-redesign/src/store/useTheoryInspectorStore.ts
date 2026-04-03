@@ -1,17 +1,11 @@
 import { create } from "zustand";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
-import {
-  EXPLANATION_LEVEL_STORAGE_KEY,
-  readStoredExplanationLevel,
-  type ExplanationLevel,
-} from "@/lib/ai/explanationLevel";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
-export type { ExplanationLevel };
 export type Genre = "classical" | "jazz" | "pop";
 
 export interface ValidationViolations {
@@ -108,11 +102,6 @@ export interface TheoryInspectorState {
   hasApiKey: boolean;
   setHasApiKey: (v: boolean) => void;
 
-  /** AI audience depth; required when hasApiKey before LLM calls */
-  explanationLevel: ExplanationLevel | null;
-  setExplanationLevel: (level: ExplanationLevel) => void;
-  hydrateExplanationLevelFromStorage: () => void;
-
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
   clearIssueHighlights: () => void;
@@ -169,22 +158,6 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     hasApiKey: false,
     setHasApiKey: (hasApiKey) => set({ hasApiKey }),
-
-    explanationLevel: null,
-    setExplanationLevel: (explanationLevel) => {
-      set({ explanationLevel });
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem(EXPLANATION_LEVEL_STORAGE_KEY, explanationLevel);
-        } catch {
-          /* ignore quota / private mode */
-        }
-      }
-    },
-    hydrateExplanationLevelFromStorage: () => {
-      const v = readStoredExplanationLevel();
-      if (v) set({ explanationLevel: v });
-    },
 
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),
