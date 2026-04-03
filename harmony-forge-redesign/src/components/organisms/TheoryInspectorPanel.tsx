@@ -18,6 +18,7 @@ import {
   type ExplanationLevel,
 } from "@/lib/ai/explanationLevel";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
+import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -122,6 +123,7 @@ export const TheoryInspectorPanel = React.forwardRef<
     }, [hydrateExplanationLevelFromStorage]);
 
     const chatLlmBlocked = tutorEnabled && explanationLevel === null;
+    const suppressSuggestionProse = isMinimalSuggestionExplanation();
 
     const levelLabel = (level: ExplanationLevel): string => {
       switch (level) {
@@ -238,6 +240,7 @@ export const TheoryInspectorPanel = React.forwardRef<
               corrections={batch.corrections}
               correctionStatuses={correctionStatuses}
               summary={batch.summary}
+              suppressProseSummary={suppressSuggestionProse}
               timestamp={msg.timestamp}
               onAcceptCorrection={(id) => onAcceptCorrection?.(id)}
               onRejectCorrection={(id) => onRejectCorrection?.(id)}
@@ -509,61 +512,6 @@ export const TheoryInspectorPanel = React.forwardRef<
                   )}
                 </div>
 
-                {/* Tutor summary (LLM) — first so readers get plain language before technical blocks */}
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
-                    Tutor summary
-                  </div>
-                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Plain-language read of this note and the facts below.
-                  </div>
-                  <div>
-                    {isStreaming ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Generating summary…
-                      </span>
-                    ) : chatLlmBlocked ? (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Choose Beginner, Intermediate, or Professional above to generate the AI tutor
-                        summary.
-                      </span>
-                    ) : tutorEnabled ? (
-                      noteInsight.aiExplanation?.trim() ? (
-                        <MarkdownText content={noteInsight.aiExplanation.trim()} variant="panel" />
-                      ) : (
-                        <span
-                          className="font-body text-[13px]"
-                          style={{ color: "var(--hf-text-primary)" }}
-                        >
-                          No summary yet. The boxes below still describe the score; wait for the
-                          response or check your connection.
-                        </span>
-                      )
-                    ) : (
-                      <span
-                        className="font-body text-[13px]"
-                        style={{ color: "var(--hf-text-primary)" }}
-                      >
-                        Add OPENAI_API_KEY to .env.local for an AI summary. The sections below still
-                        explain the score without the tutor.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
                 <div
                   className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
                   style={{
@@ -576,7 +524,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                     Ideas to try next
                   </div>
                   <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Optional prompts to refine harmony or voice-leading—grounded in the facts when the tutor is on.
+                    Each bullet should name what to try and why (because / so that), tied to the facts and notation export.
                   </div>
                   <div>
                     {!tutorEnabled ? (
@@ -645,8 +593,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                   </div>
                   <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
                     {noteInsight.insightKind === "melody-guide"
-                      ? "Plain read of your tune at this beat and how it lines up with the other staves—details live in the export below."
-                      : "Plain read of your harmony line in this chord moment—full four-part and bar context is in the export below."}
+                      ? "How your tune sits at this beat with the other staves. (HarmonyForge did not generate the melody—focus on fit and rhythm; full detail is in the export.)"
+                      : "Why HarmonyForge’s axiomatic engine chose the original harmony pitch at generation, and how that relates to what you see now—then use the export to verify every staff."}
                   </div>
                   <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" />
                 </div>
@@ -671,6 +619,61 @@ export const TheoryInspectorPanel = React.forwardRef<
                   >
                     {noteInsight.evidenceLines.join("\n")}
                   </pre>
+                </div>
+
+                {/* Tutor summary (LLM) — after deterministic blocks so the AI synthesizes evidence + “why” */}
+                <div
+                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                  style={{
+                    backgroundColor: "var(--hf-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    color: "var(--hf-text-primary)",
+                  }}
+                >
+                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                    Tutor summary
+                  </div>
+                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                    Wrap-up after the facts above—tie together what you’re hearing, why it matters musically, and how that connects to HarmonyForge’s rules when relevant.
+                  </div>
+                  <div>
+                    {isStreaming ? (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        Generating summary…
+                      </span>
+                    ) : chatLlmBlocked ? (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        Choose Beginner, Intermediate, or Professional above to generate the AI tutor
+                        summary.
+                      </span>
+                    ) : tutorEnabled ? (
+                      noteInsight.aiExplanation?.trim() ? (
+                        <MarkdownText content={noteInsight.aiExplanation.trim()} variant="panel" />
+                      ) : (
+                        <span
+                          className="font-body text-[13px]"
+                          style={{ color: "var(--hf-text-primary)" }}
+                        >
+                          No summary yet. The sections above still describe the score; wait for the
+                          response or check your connection.
+                        </span>
+                      )
+                    ) : (
+                      <span
+                        className="font-body text-[13px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        Add OPENAI_API_KEY to .env.local for an AI summary. The sections above still
+                        explain the score without the tutor.
+                      </span>
+                    )}
+                  </div>
                 </div>
               </>
           ) : null}

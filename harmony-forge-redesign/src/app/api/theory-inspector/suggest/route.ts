@@ -11,6 +11,10 @@ import {
   type ExplanationLevel,
 } from "@/lib/ai/explanationLevel";
 import {
+  isSuggestionExplanationMode,
+  type SuggestionExplanationMode,
+} from "@/lib/study/studyConfig";
+import {
   suggestResponseSchema,
   type SuggestResponse,
 } from "@/lib/ai/suggestionSchema";
@@ -31,6 +35,8 @@ interface SuggestRequestBody {
   scoreContext: ScoreNoteContext[];
   userMessage?: string;
   explanationLevel?: ExplanationLevel;
+  /** M5 RQ2: when "minimal", strip rationale/summary from the JSON response */
+  suggestionExplanationMode?: SuggestionExplanationMode;
 }
 
 /**
@@ -70,6 +76,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const suggestionExplanationMode: SuggestionExplanationMode =
+    isSuggestionExplanationMode(body.suggestionExplanationMode)
+      ? body.suggestionExplanationMode
+      : "full";
+
   const taxonomySection = getTaxonomyContext(genre, violationType);
 
   const systemPrompt = buildStylistStructuredPrompt({
@@ -79,6 +90,7 @@ export async function POST(request: NextRequest) {
     violationContext,
     scoreContext,
     explanationLevel: body.explanationLevel,
+    suggestionExplanationMode,
   });
 
   const messages = [
@@ -106,10 +118,18 @@ export async function POST(request: NextRequest) {
       return idx >= 0 && idx < scoreContext.length;
     });
 
-    return NextResponse.json({
-      corrections: validCorrections,
-      summary: result.summary,
-    });
+    const stripped =
+      suggestionExplanationMode === "minimal"
+        ? {
+            corrections: validCorrections.map((c) => ({
+              ...c,
+              rationale: "",
+            })),
+            summary: "",
+          }
+        : { corrections: validCorrections, summary: result.summary };
+
+    return NextResponse.json(stripped);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(

@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export type TransitionVariant = "parsing" | "generating";
+export type TransitionVariant = "parsing" | "generating" | "melody_only";
 
 export interface TransitionOverlayProps {
   variant: TransitionVariant;
@@ -20,6 +20,10 @@ const LABELS: Record<TransitionVariant, { headline: string; sub: string }> = {
   generating: {
     headline: "Generating Harmonies",
     sub: "Applying voice-leading rules…",
+  },
+  melody_only: {
+    headline: "Opening sandbox",
+    sub: "Loading your melody (no auto-harmonies)…",
   },
 };
 

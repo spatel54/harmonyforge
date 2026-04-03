@@ -21,6 +21,7 @@ import {
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
+import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
@@ -604,6 +605,10 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-ScoreCanvas {
           background: transparent !important;
         }
+        /* Draggable HarmonyForge scrub line replaces the built-in cursor hit-testing */
+        .riffscore-hf-wrapper [data-testid="playback-cursor"] {
+          opacity: 0 !important;
+        }
         .riffscore-hf-wrapper .hf-palette-menu {
           position: absolute;
           right: 8px;
@@ -668,6 +673,20 @@ export function RiffScoreEditor({
       <RiffScoreComponent
         id={instanceId}
         config={config}
+      />
+
+      <PlaybackScrubOverlay
+        containerRef={containerRef}
+        apiRef={apiRef}
+        score={score}
+        notePositions={notePositions}
+        measureCount={measureCount}
+        isReady={isReady}
+        contentTopPx={
+          noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure
+            ? 92
+            : 52
+        }
       />
 
       {/* Theory Inspector: click bar numbers to focus the whole measure */}

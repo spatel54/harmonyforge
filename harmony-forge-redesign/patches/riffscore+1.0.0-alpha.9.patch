@@ -45,11 +45,267 @@ index 1ca537c..ee2d0eb 100644
  declare const ScoreEditor: ({ scale, label, initialData, }: {
      scale?: number;
      label?: string;
+diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
+index ef82e00..d38ac51 100644
+--- a/node_modules/riffscore/dist/index.js
++++ b/node_modules/riffscore/dist/index.js
+@@ -3692,6 +3692,16 @@ var usePlayback = (score, bpm) => {
+     });
+     isInitialized2.current = true;
+   }, []);
++  React2.useEffect(() => {
++    const ev = "riffscore-clear-playback-anchor";
++    const handler = () => {
++      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++    };
++    if (typeof window !== "undefined") {
++      window.addEventListener(ev, handler);
++      return () => window.removeEventListener(ev, handler);
++    }
++  }, []);
+   const exitPlaybackMode = React2.useCallback(() => {
+     setIsActive(false);
+   }, []);
+@@ -3700,6 +3710,10 @@ var usePlayback = (score, bpm) => {
+     setIsPlaying(false);
+     setIsActive(true);
+     setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++    lastPlayPosition = { measureIndex: 0, quant: 0 };
++    if (typeof globalThis !== "undefined") {
++      globalThis.__HF_RIFFSCORE_PLAY_FROM = null;
++    }
+   }, []);
+   const pausePlayback = React2.useCallback(() => {
+     stopTonePlayback();
+@@ -3708,6 +3722,7 @@ var usePlayback = (score, bpm) => {
+   }, []);
+   const playScore = React2.useCallback(
+     async (startMeasureIndex = 0, startQuant = 0) => {
++      lastPlayPosition = { measureIndex: startMeasureIndex, quant: startQuant };
+       await ensureInit();
+       stopTonePlayback();
+       setLastPlayStart({ measureIndex: startMeasureIndex, quant: startQuant });
+@@ -3738,10 +3753,12 @@ var usePlayback = (score, bpm) => {
+             startTimeOffset,
+             (measureIndex, quant, duration) => {
+               setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
++              lastPlayPosition = { measureIndex, quant };
+             },
+             () => {
+               setIsPlaying(false);
+               setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++              lastPlayPosition = { measureIndex: 0, quant: 0 };
+             }
+           );
+         });
+@@ -3754,9 +3771,23 @@ var usePlayback = (score, bpm) => {
+     if (isPlaying2) {
+       pausePlayback();
+     } else {
+-      const resumeMeasure = (_a = playbackPosition.measureIndex) != null ? _a : 0;
+-      const resumeQuant = ((_b = playbackPosition.quant) != null ? _b : -1) + 1;
+-      playScore(resumeMeasure, resumeQuant);
++      const _pending = consumeHfRiffScorePendingPlay();
++      if (_pending) {
++        playScore(_pending.measureIndex, _pending.quant);
++      } else {
++        const pm = (_a = playbackPosition.measureIndex) != null ? _a : null;
++        const pq = (_b = playbackPosition.quant) != null ? _b : null;
++        let startM;
++        let startQ;
++        if (pm != null && pq != null) {
++          startM = pm;
++          startQ = pq + 1;
++        } else {
++          startM = lastPlayPosition.measureIndex;
++          startQ = lastPlayPosition.quant;
++        }
++        playScore(startM, startQ);
++      }
+     }
+   }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
+   return {
+@@ -8740,13 +8771,36 @@ var useInteraction = ({
+ };
+ 
+ // src/hooks/handlers/handlePlayback.ts
++var consumeHfRiffScorePendingPlay = () => {
++  const _g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const _hf = _g && _g.__HF_RIFFSCORE_PLAY_FROM;
++  if (
++    _hf != null &&
++    typeof _hf === "object" &&
++    typeof _hf.measureIndex === "number" &&
++    Number.isFinite(_hf.measureIndex) &&
++    _hf.measureIndex >= 0
++  ) {
++    const _hm = _hf.measureIndex;
++    const _hq =
++      typeof _hf.quant === "number" && Number.isFinite(_hf.quant)
++        ? _hf.quant
++        : 0;
++    _g.__HF_RIFFSCORE_PLAY_FROM = null;
++    return { measureIndex: _hm, quant: _hq };
++  }
++  return null;
++};
+ var handlePlayback = (e, playback, selection, score) => {
+   var _a;
+   const { playScore, isPlaying: isPlaying2, lastPlayStart } = playback;
+   const measures = getActiveStaff(score).measures;
+   if (e.key.toLowerCase() === "p") {
+     e.preventDefault();
+-    if (selection.measureIndex !== null && selection.eventId) {
++    const _pending = consumeHfRiffScorePendingPlay();
++    if (_pending) {
++      playScore(_pending.measureIndex, _pending.quant);
++    } else if (selection.measureIndex !== null && selection.eventId) {
+       const m = measures[selection.measureIndex];
+       const quant = getEventQuant(m, selection.eventId);
+       playScore(selection.measureIndex, quant);
+@@ -8765,7 +8819,10 @@ var handlePlayback = (e, playback, selection, score) => {
+       if (isPlaying2) {
+         playback.pausePlayback();
+       } else {
+-        if (playback.playbackPosition && playback.playbackPosition.measureIndex !== null) {
++        const _pending = consumeHfRiffScorePendingPlay();
++        if (_pending) {
++          playScore(_pending.measureIndex, _pending.quant);
++        } else if (playback.playbackPosition && playback.playbackPosition.measureIndex !== null) {
+           const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
+           playScore(playback.playbackPosition.measureIndex, resumeQuant);
+         } else if (selection.measureIndex !== null && selection.eventId) {
 diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
-index fc71835..f0f0bba 100644
+index fc71835..49fd66c 100644
 --- a/node_modules/riffscore/dist/index.mjs
 +++ b/node_modules/riffscore/dist/index.mjs
-@@ -18035,7 +18035,8 @@ var Toolbar = forwardRef(
+@@ -3686,6 +3686,16 @@ var usePlayback = (score, bpm) => {
+     });
+     isInitialized2.current = true;
+   }, []);
++  useEffect(() => {
++    const ev = "riffscore-clear-playback-anchor";
++    const handler = () => {
++      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++    };
++    if (typeof window !== "undefined") {
++      window.addEventListener(ev, handler);
++      return () => window.removeEventListener(ev, handler);
++    }
++  }, []);
+   const exitPlaybackMode = useCallback(() => {
+     setIsActive(false);
+   }, []);
+@@ -3694,6 +3704,10 @@ var usePlayback = (score, bpm) => {
+     setIsPlaying(false);
+     setIsActive(true);
+     setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++    lastPlayPosition = { measureIndex: 0, quant: 0 };
++    if (typeof globalThis !== "undefined") {
++      globalThis.__HF_RIFFSCORE_PLAY_FROM = null;
++    }
+   }, []);
+   const pausePlayback = useCallback(() => {
+     stopTonePlayback();
+@@ -3702,6 +3716,7 @@ var usePlayback = (score, bpm) => {
+   }, []);
+   const playScore = useCallback(
+     async (startMeasureIndex = 0, startQuant = 0) => {
++      lastPlayPosition = { measureIndex: startMeasureIndex, quant: startQuant };
+       await ensureInit();
+       stopTonePlayback();
+       setLastPlayStart({ measureIndex: startMeasureIndex, quant: startQuant });
+@@ -3732,10 +3747,12 @@ var usePlayback = (score, bpm) => {
+             startTimeOffset,
+             (measureIndex, quant, duration) => {
+               setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
++              lastPlayPosition = { measureIndex, quant };
+             },
+             () => {
+               setIsPlaying(false);
+               setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
++              lastPlayPosition = { measureIndex: 0, quant: 0 };
+             }
+           );
+         });
+@@ -3748,9 +3765,23 @@ var usePlayback = (score, bpm) => {
+     if (isPlaying2) {
+       pausePlayback();
+     } else {
+-      const resumeMeasure = (_a = playbackPosition.measureIndex) != null ? _a : 0;
+-      const resumeQuant = ((_b = playbackPosition.quant) != null ? _b : -1) + 1;
+-      playScore(resumeMeasure, resumeQuant);
++      const _pending = consumeHfRiffScorePendingPlay();
++      if (_pending) {
++        playScore(_pending.measureIndex, _pending.quant);
++      } else {
++        const pm = (_a = playbackPosition.measureIndex) != null ? _a : null;
++        const pq = (_b = playbackPosition.quant) != null ? _b : null;
++        let startM;
++        let startQ;
++        if (pm != null && pq != null) {
++          startM = pm;
++          startQ = pq + 1;
++        } else {
++          startM = lastPlayPosition.measureIndex;
++          startQ = lastPlayPosition.quant;
++        }
++        playScore(startM, startQ);
++      }
+     }
+   }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
+   return {
+@@ -8734,13 +8765,36 @@ var useInteraction = ({
+ };
+ 
+ // src/hooks/handlers/handlePlayback.ts
++var consumeHfRiffScorePendingPlay = () => {
++  const _g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const _hf = _g && _g.__HF_RIFFSCORE_PLAY_FROM;
++  if (
++    _hf != null &&
++    typeof _hf === "object" &&
++    typeof _hf.measureIndex === "number" &&
++    Number.isFinite(_hf.measureIndex) &&
++    _hf.measureIndex >= 0
++  ) {
++    const _hm = _hf.measureIndex;
++    const _hq =
++      typeof _hf.quant === "number" && Number.isFinite(_hf.quant)
++        ? _hf.quant
++        : 0;
++    _g.__HF_RIFFSCORE_PLAY_FROM = null;
++    return { measureIndex: _hm, quant: _hq };
++  }
++  return null;
++};
+ var handlePlayback = (e, playback, selection, score) => {
+   var _a;
+   const { playScore, isPlaying: isPlaying2, lastPlayStart } = playback;
+   const measures = getActiveStaff(score).measures;
+   if (e.key.toLowerCase() === "p") {
+     e.preventDefault();
+-    if (selection.measureIndex !== null && selection.eventId) {
++    const _pending = consumeHfRiffScorePendingPlay();
++    if (_pending) {
++      playScore(_pending.measureIndex, _pending.quant);
++    } else if (selection.measureIndex !== null && selection.eventId) {
+       const m = measures[selection.measureIndex];
+       const quant = getEventQuant(m, selection.eventId);
+       playScore(selection.measureIndex, quant);
+@@ -8759,7 +8813,10 @@ var handlePlayback = (e, playback, selection, score) => {
+       if (isPlaying2) {
+         playback.pausePlayback();
+       } else {
+-        if (playback.playbackPosition && playback.playbackPosition.measureIndex !== null) {
++        const _pending = consumeHfRiffScorePendingPlay();
++        if (_pending) {
++          playScore(_pending.measureIndex, _pending.quant);
++        } else if (playback.playbackPosition && playback.playbackPosition.measureIndex !== null) {
+           const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
+           playScore(playback.playbackPosition.measureIndex, resumeQuant);
+         } else if (selection.measureIndex !== null && selection.eventId) {
+@@ -18035,7 +18092,8 @@ var Toolbar = forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -59,7 +315,7 @@ index fc71835..f0f0bba 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18184,6 +18185,26 @@ var Toolbar = forwardRef(
+@@ -18184,6 +18242,26 @@ var Toolbar = forwardRef(
                  }
                )
              ] }),
@@ -86,7 +342,7 @@ index fc71835..f0f0bba 100644
              /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsx(
                ToolbarButton_default,
-@@ -23937,7 +23958,8 @@ var ScoreEditorContent = ({
+@@ -23937,7 +24015,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -96,7 +352,7 @@ index fc71835..f0f0bba 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24153,7 +24175,8 @@ var ScoreEditorContent = ({
+@@ -24153,7 +24232,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -106,7 +362,7 @@ index fc71835..f0f0bba 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24266,7 +24289,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24266,7 +24346,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,

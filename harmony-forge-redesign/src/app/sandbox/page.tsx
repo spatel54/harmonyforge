@@ -44,6 +44,9 @@ import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { StudyLogExportBar } from "@/components/study/StudyLogExportBar";
+import { getStudyCondition } from "@/lib/study/studyConfig";
+import { logStudyEvent } from "@/lib/study/studyEventLog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const ENGINE_URL =
@@ -84,6 +87,8 @@ export default function TactileSandboxPage() {
     setInspectorScoreFocus,
     explainGeneratedNote,
     runAudit,
+    explainViolationMore,
+    suggestFixForViolation,
   } = useTheoryInspector();
   const suggestionStore = useSuggestionStore();
   const pendingCorrections = suggestionStore.getPendingCorrections();
@@ -104,6 +109,7 @@ export default function TactileSandboxPage() {
       const allCorrections = suggestionStore.batches.flatMap((b) => b.corrections);
       const correction = allCorrections.find((c) => c.id === correctionId);
       if (!correction) return;
+      logStudyEvent("suggestion_accepted", { correctionId });
       const nextScore = applySuggestion(score, correction);
       applyScore(nextScore);
       suggestionStore.acceptCorrection(correctionId);
@@ -113,6 +119,7 @@ export default function TactileSandboxPage() {
 
   const handleRejectCorrection = React.useCallback(
     (correctionId: string) => {
+      logStudyEvent("suggestion_rejected", { correctionId });
       suggestionStore.rejectCorrection(correctionId);
     },
     [suggestionStore],
@@ -127,6 +134,7 @@ export default function TactileSandboxPage() {
         (c) => suggestionStore.correctionStatuses[c.id] === "pending",
       );
       if (pending.length === 0) return;
+      logStudyEvent("suggestion_accept_all", { batchId });
       const nextScore = applySuggestions(score, pending);
       applyScore(nextScore);
       suggestionStore.acceptAll(batchId);
@@ -136,6 +144,7 @@ export default function TactileSandboxPage() {
 
   const handleRejectAll = React.useCallback(
     (batchId: string) => {
+      logStudyEvent("suggestion_reject_all", { batchId });
       suggestionStore.rejectAll(batchId);
     },
     [suggestionStore],
@@ -1052,6 +1061,8 @@ export default function TactileSandboxPage() {
     return null;
   }
 
+  const reviewerStudyArm = getStudyCondition() === "reviewer_primary";
+
   return (
     <div
       className="flex flex-col w-full h-screen overflow-hidden"
@@ -1171,16 +1182,28 @@ export default function TactileSandboxPage() {
               onRejectCorrection={handleRejectCorrection}
               onAcceptAllCorrections={handleAcceptAll}
               onRejectAllCorrections={handleRejectAll}
+              onExplainMore={(msgId) => explainViolationMore(msgId)}
+              onSuggestFix={
+                score
+                  ? (msgId) => suggestFixForViolation(score, msgId)
+                  : undefined
+              }
             />
           </div>
         )}
       </div>
 
+      <StudyLogExportBar />
+
       {showOnboarding && (
         <OnboardingCoachmark
           stepLabel="Step 3 of 3"
           title="Edit, listen, and inspect theory"
-          description="Use note tools directly on the staff, drag notes up/down to change pitch, use Play for audio preview, and Theory Inspector for explanations."
+          description={
+            reviewerStudyArm
+              ? "Add harmony notes on extra staves as you like, use Play when available, and open Theory Inspector to audit issues and request fixes—harmonies were not auto-generated in this session."
+              : "Use note tools directly on the staff, drag notes up/down to change pitch, use Play for audio preview, and Theory Inspector for explanations."
+          }
           primaryCta="Finish tour"
           onPrimary={() => {
             completeOnboarding();

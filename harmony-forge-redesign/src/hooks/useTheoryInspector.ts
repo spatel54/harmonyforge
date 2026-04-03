@@ -45,6 +45,8 @@ import type { ScoreCorrection, LLMCorrection } from "@/lib/music/suggestionTypes
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import { SATB_RULES, isVoiceInRange, type VoiceKey } from "@/lib/music/theoryRules";
 import { splitNoteInsightAiContent } from "@/lib/ai/noteInsightAiSplit";
+import { getSuggestionExplanationMode } from "@/lib/study/studyConfig";
+import { logStudyEvent } from "@/lib/study/studyEventLog";
 
 const ENGINE_URL =
   typeof window !== "undefined"
@@ -60,7 +62,7 @@ const NOTE_EXPLAIN_TUTOR_BRIEF =
   "CURRENT SCORE FACTS are a **full notation snapshot** for this moment; treat them as authoritative. Lines starting **FACT: AUTHORITATIVE NOTATION** or **FACT: Clicked event** state the **notated note length**—if either appears, you **must** answer half-note vs quarter etc. from them; never say duration is missing. When a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
   "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
   "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
-  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”) with practical ideas to refine harmony or voice-leading or what to try at the **next** chord moment—grounded in the supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions.”";
+  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.”";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -98,6 +100,22 @@ function laymanFromFinding(f: TraceFinding): string {
     default:
       return f.message;
   }
+}
+
+/**
+ * Plain “why did the axiomatic pass put this pitch here?” for the **What this click means** card.
+ */
+function buildAxiomaticEngineWhyParagraph(
+  originalEnginePitch: string,
+  voice: VoiceKey,
+  noteFindings: TraceFinding[],
+  userModifiedPitch: boolean,
+): string {
+  const core = buildLaymanChordExplanation(originalEnginePitch, voice, noteFindings);
+  const suffix = userModifiedPitch
+    ? "\n\nThat reasoning describes **HarmonyForge’s first output** at this note. If you changed the pitch since then, the **live** score (and **Verifiable score export**) is authoritative for what you hear now."
+    : "";
+  return `**Why HarmonyForge’s axiomatic engine originally wrote ${originalEnginePitch} on ${voiceLayman(voice)}:** ${core}${suffix}`;
 }
 
 function buildLaymanChordExplanation(
@@ -307,12 +325,21 @@ function buildFallbackNoteInsight(
       : "") +
     `Open **Verifiable score export** for every staff at this beat and the full bar.`;
 
+  const additiveWhy =
+    originalEnginePitch !== null
+      ? `**Why HarmonyForge’s axiomatic pass emitted ${originalEnginePitch} on “${partName}”:** The deterministic solver assigned harmony pitches for your chosen ensemble to fit the melody and inferred chord context at this moment (additive score—no full four-voice slot grid in the inspector).${userModifiedPitch ? " You’ve edited since; the export below is the live truth." : ""}`
+      : "";
+
   const currentPitchGuideExplanation =
-    inspectorMode === "origin-justifier" ? SLIM_HARMONIC_GUIDE_ORIGIN : fullCurrentGuide;
+    inspectorMode === "origin-justifier"
+      ? originalEnginePitch !== null
+        ? `**This note still matches the first HarmonyForge output.**\n\n${additiveWhy}`
+        : SLIM_HARMONIC_GUIDE_ORIGIN
+      : `${fullCurrentGuide}${additiveWhy ? `\n\n${additiveWhy}` : ""}`;
 
   const deterministicExplanation = mergeDeterministicBlocks(
     engineOriginExplanation,
-    inspectorMode === "origin-justifier" ? SLIM_HARMONIC_GUIDE_ORIGIN : fullCurrentGuide,
+    currentPitchGuideExplanation,
   );
 
   const evidenceLines = [
@@ -652,6 +679,8 @@ export function useTheoryInspector() {
       const slotData = scoreToAuditedSlots(score);
       if (!slotData) return;
 
+      logStudyEvent("run_audit", {});
+
       try {
         const response = await fetch(`${ENGINE_URL}/api/validate-satb-trace`, {
           method: "POST",
@@ -792,6 +821,7 @@ export function useTheoryInspector() {
             violationType: lastViolation?.violationType,
             scoreContext,
             explanationLevel: st.explanationLevel!,
+            suggestionExplanationMode: getSuggestionExplanationMode(),
           }),
         });
 
@@ -898,6 +928,7 @@ export function useTheoryInspector() {
         sendMessage(chip);
       } else if (lower.includes("suggest correction") && score) {
         store.setPersona("stylist");
+        logStudyEvent("suggest_fix", { source: "chip" });
         requestSuggestion(score);
       } else if (
         lower.includes("fix") ||
@@ -996,6 +1027,8 @@ export function useTheoryInspector() {
 
       const found = getNoteById(score, noteId);
       if (!found || found.note.isRest) return;
+
+      logStudyEvent("theory_inspector_note_click", { noteId, partId });
 
       const partIndex = score.parts.findIndex((p) => p.id === partId);
       if (partIndex < 0) return;
@@ -1178,10 +1211,22 @@ export function useTheoryInspector() {
           : "") +
         ` **Verifiable score export** has all four parts, intervals, and bar-wide rhythm.`;
 
+      const satbWhy =
+        originalEnginePitch !== null
+          ? buildAxiomaticEngineWhyParagraph(
+              originalEnginePitch,
+              voice,
+              originFindings,
+              userModifiedPitch,
+            )
+          : "";
+
       const currentPitchGuideExplanation =
         inspectorMode === "origin-justifier"
-          ? SLIM_HARMONIC_GUIDE_ORIGIN
-          : fullSatbCurrentGuide;
+          ? originalEnginePitch !== null
+            ? `**This note still matches the first HarmonyForge output.**\n\n${satbWhy}`
+            : SLIM_HARMONIC_GUIDE_ORIGIN
+          : `${fullSatbCurrentGuide}${satbWhy ? `\n\n${satbWhy}` : ""}`;
 
       const sourceTag = bt && originFindings.length > 0 ? "engine-trace" : "local-fallback";
 
@@ -1232,9 +1277,7 @@ export function useTheoryInspector() {
         source: sourceTag === "engine-trace" ? "engine-trace" : "local-fallback",
         deterministicExplanation: mergeDeterministicBlocks(
           engineOriginExplanation,
-          inspectorMode === "origin-justifier"
-            ? SLIM_HARMONIC_GUIDE_ORIGIN
-            : fullSatbCurrentGuide,
+          currentPitchGuideExplanation,
         ),
         evidenceLines,
         insightKind,
@@ -1252,6 +1295,24 @@ export function useTheoryInspector() {
   );
 
   const explainGeneratedNote = explainNotePitch;
+
+  const explainViolationMore = useCallback((msgId: string) => {
+    logStudyEvent("explain_more", { msgId });
+    const m = useTheoryInspectorStore.getState().messages.find((x) => x.id === msgId);
+    if (m?.type !== "violation") return;
+    const label = m.violationType ?? "this issue";
+    void sendMessage(
+      `Explain more about “${label}” in plain language, using the checker context if available.`,
+    );
+  }, [sendMessage]);
+
+  const suggestFixForViolation = useCallback(
+    (score: EditableScore, msgId: string) => {
+      logStudyEvent("suggest_fix", { msgId });
+      void requestSuggestion(score);
+    },
+    [requestSuggestion],
+  );
 
   return {
     messages: store.messages,
@@ -1273,6 +1334,8 @@ export function useTheoryInspector() {
     setInspectorScoreFocus: store.setInspectorScoreFocus,
     explainNotePitch,
     explainGeneratedNote,
+    explainViolationMore,
+    suggestFixForViolation,
     clearMessages: store.clearMessages,
   };
 }

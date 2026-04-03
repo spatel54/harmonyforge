@@ -31,6 +31,8 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/atoms/ThemeProvider";
+import { StudySessionProvider } from "@/components/study/StudySessionProvider";
+import { StudyConsentGate } from "@/components/study/StudyConsentGate";
 
 export default function RootLayout({
   children,
@@ -48,12 +50,16 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <a href="#main-content" className="skip-link">
-            Skip to main content
-          </a>
-          <main id="main-content" className="w-full h-full relative">
-            {children}
-          </main>
+          <StudySessionProvider>
+            <StudyConsentGate>
+              <a href="#main-content" className="skip-link">
+                Skip to main content
+              </a>
+              <main id="main-content" className="w-full h-full relative">
+                {children}
+              </main>
+            </StudyConsentGate>
+          </StudySessionProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -10,6 +10,7 @@ import { BrandTitle } from "@/components/atoms/BrandTitle";
 import { useUploadStore } from "@/store/useUploadStore";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { getStudyCondition } from "@/lib/study/studyConfig";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -23,6 +24,7 @@ export default function Home() {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const reviewerStudyArm = getStudyCondition() === "reviewer_primary";
   const setFile = useUploadStore((s) => s.setFile);
   const setPreviewMusicXML = useUploadStore((s) => s.setPreviewMusicXML);
 
@@ -110,7 +112,11 @@ export default function Home() {
           <OnboardingCoachmark
             stepLabel="Step 1 of 3"
             title="Start by uploading a score"
-            description="Drop MusicXML, MXL, MIDI, or PDF to begin. PDF harmony generation needs pdfalto, Poppler (pdftoppm), and oemer on the engine host. You will configure mood and instruments on the next screen."
+            description={
+              reviewerStudyArm
+                ? "Upload your melody (MusicXML, MXL, or MIDI recommended). In this session you will add harmonies yourself; the assistant reviews and suggests. PDF preview still depends on engine tools (pdfalto, Poppler, oemer)."
+                : "Drop MusicXML, MXL, MIDI, or PDF to begin. PDF harmony generation needs pdfalto, Poppler (pdftoppm), and oemer on the engine host. You will configure mood and instruments on the next screen."
+            }
             primaryCta="Got it"
             onPrimary={() => setShowOnboarding(false)}
             onSecondary={() => {

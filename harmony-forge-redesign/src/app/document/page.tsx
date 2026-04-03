@@ -12,6 +12,9 @@ import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlPars
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { getStudyCondition } from "@/lib/study/studyConfig";
+import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
+import { logStudyEvent } from "@/lib/study/studyEventLog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -88,6 +91,9 @@ export default function DocumentPage() {
     return null;
   }
 
+  const studyCondition = getStudyCondition();
+  const reviewerArm = studyCondition === "reviewer_primary";
+
   const handleGenerate = async (config: GenerationConfig) => {
     if (!file) {
       setError("No file uploaded. Please go back and upload a score.");
@@ -96,6 +102,21 @@ export default function DocumentPage() {
     setIsTransitioning(true);
     setError(null);
     try {
+      if (reviewerArm) {
+        logStudyEvent("skipped_generation_reviewer_arm", {
+          mood: config.mood,
+          genre: config.genre,
+        });
+        const musicXML = await readMelodyXmlForReviewer(file, storePreviewXml);
+        setGeneratedMusicXML(musicXML);
+        router.push("/sandbox");
+        return;
+      }
+
+      logStudyEvent("generate_harmonies_clicked", {
+        mood: config.mood,
+        genre: config.genre,
+      });
       const formData = new FormData();
       formData.append("file", file);
       formData.append(
@@ -141,6 +162,14 @@ export default function DocumentPage() {
           <EnsembleBuilderPanel
             onGenerateHarmonies={handleGenerate}
             isGenerating={isTransitioning}
+            studyPrimaryVariant={
+              reviewerArm ? "reviewer_melody" : "generate"
+            }
+            studyPanelSubtitle={
+              reviewerArm
+                ? "You will build or adjust harmonies in the editor; the assistant flags issues and suggests fixes."
+                : undefined
+            }
           />
         </div>
         {error && (
@@ -155,7 +184,11 @@ export default function DocumentPage() {
           <OnboardingCoachmark
             stepLabel="Step 2 of 3"
             title="Set mood and instrumentation"
-            description="Preview your uploaded score, choose mood and genre, then select instruments before generating harmonies."
+            description={
+              reviewerArm
+                ? "Preview your score and set mood and genre for context. Continue with your melody only—you will add harmonies in the sandbox."
+                : "Preview your uploaded score, choose mood and genre, then select instruments before generating harmonies."
+            }
             primaryCta="Continue"
             onPrimary={() => setShowOnboarding(false)}
             onSecondary={() => {
@@ -168,7 +201,10 @@ export default function DocumentPage() {
       </div>
 
       {/* Loading overlay */}
-      <TransitionOverlay variant="generating" visible={isTransitioning} />
+      <TransitionOverlay
+        variant={reviewerArm ? "melody_only" : "generating"}
+        visible={isTransitioning}
+      />
     </>
   );
 }

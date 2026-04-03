@@ -5,6 +5,7 @@
  */
 
 import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
+import type { SuggestionExplanationMode } from "@/lib/study/studyConfig";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
@@ -172,7 +173,7 @@ Rules:
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
 - **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation.
-- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap).${editorFocusPromptBlock(ctx)}`;
+- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap). **Each suggestion bullet must state both what to try and why** (tie the reason to FACT lines—use “because” / “so that” / “reason:”).${editorFocusPromptBlock(ctx)}`;
 }
 
 interface StructuredPromptContext extends PromptContext {
@@ -184,6 +185,8 @@ interface StructuredPromptContext extends PromptContext {
     measureIndex: number;
     noteIndex: number;
   }>;
+  /** M5 RQ2: suppress stylist prose in structured JSON */
+  suggestionExplanationMode?: SuggestionExplanationMode;
 }
 
 /**
@@ -204,6 +207,18 @@ export function buildStylistStructuredPrompt(
     )
     .join("\n");
 
+  const minimalRules =
+    ctx.suggestionExplanationMode === "minimal"
+      ? `
+- **Minimal-explanation session (required):** For every correction set "rationale" to exactly "" (empty string). Set the top-level "summary" to exactly "" (empty string). Still return accurate noteId, suggestedPitch, and a very short ruleLabel (max 6 words, no punctuation essay). Do not add any other prose fields.
+`
+      : "";
+
+  const rationaleRuleLine =
+    ctx.suggestionExplanationMode === "minimal"
+      ? "- Rationale and summary must be empty strings as stated above."
+      : "- Provide a ruleLabel (short name for the rule) and rationale: **≤2 short sentences** OR **≤3 bullet lines** (plain language). End rationale with **one** source tag when the fix follows a classical norm (e.g. \"Aldwell & Schachter\" or \"Open Music Theory\")—not a paragraph of references.";
+
   return `You are the HarmonyForge Stylist. You suggest specific pitch corrections to resolve voice-leading violations.
 
 Genre context: ${ctx.genre}
@@ -217,11 +232,12 @@ ${noteList}
 
 ${HONESTY_NO_SYCOPHANCY}
 ${appendExplanationLevel(ctx)}
+${minimalRules}
 Rules:
 - Suggest 1-3 concrete pitch changes that resolve the violation.
 - Each correction MUST use a noteId from the list above (e.g. "note_0", "note_1", etc.) — copy the noteId exactly.
 - The suggestedPitch must be in scientific notation (e.g., "A4", "F#3", "Bb2").
-- Provide a ruleLabel (short name for the rule) and rationale: **≤2 short sentences** OR **≤3 bullet lines** (plain language). End rationale with **one** source tag when the fix follows a classical norm (e.g. "Aldwell & Schachter" or "Open Music Theory")—not a paragraph of references.
+- ${rationaleRuleLine}
 - Do not fabricate notes/rules; if no valid correction is supported by provided context, return zero corrections with a clear summary—state honestly if the fix is **one option** or could **trade off** another voice.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
 - Be concise and practical.${editorFocusPromptBlock(ctx)}`;

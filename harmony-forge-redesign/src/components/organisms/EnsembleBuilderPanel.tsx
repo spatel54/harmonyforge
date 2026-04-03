@@ -30,6 +30,12 @@ export interface EnsembleBuilderPanelProps
   onGenerateHarmonies?: (config: GenerationConfig) => void;
   /** Disable Generate button while harmonies are being generated */
   isGenerating?: boolean;
+  /**
+   * M5 study: reviewer arm uses melody-only continuation copy instead of auto harmony generation.
+   */
+  studyPrimaryVariant?: "generate" | "reviewer_melody";
+  /** Replaces default subheading under "Ensemble Builder" when set */
+  studyPanelSubtitle?: string;
 }
 
 /**
@@ -41,7 +47,7 @@ export interface EnsembleBuilderPanelProps
 export const EnsembleBuilderPanel = React.forwardRef<
   HTMLDivElement,
   EnsembleBuilderPanelProps
->(({ onGenerateHarmonies, isGenerating = false, className, ...props }, ref) => {
+>(({ onGenerateHarmonies, isGenerating = false, studyPrimaryVariant = "generate", studyPanelSubtitle, className, ...props }, ref) => {
   const [mood, setMood] = useState<"major" | "minor">("major");
   const [genre, setGenre] = useState<Genre>("classical");
   const [selections, setSelections] = useState<Record<VoiceType, string[]>>({
@@ -104,7 +110,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
           className="font-mono text-[12px] font-normal leading-none"
           style={{ color: "var(--hf-text-secondary)" }}
         >
-          Select mood, genre, and instruments for your arrangement
+          {studyPanelSubtitle ??
+            (studyPrimaryVariant === "reviewer_melody"
+              ? "Set context for the assistant; you will add harmonies in the editor."
+              : "Select mood, genre, and instruments for your arrangement")}
         </p>
       </div>
 
@@ -222,13 +231,19 @@ export const EnsembleBuilderPanel = React.forwardRef<
             backgroundColor: "var(--hf-accent)",
             color: "var(--text-on-light)",
           }}
-          aria-label="Generate harmonies"
+          aria-label={
+            studyPrimaryVariant === "reviewer_melody"
+              ? "Continue to sandbox with melody only"
+              : "Generate harmonies"
+          }
         >
           <Sparkles
             className="w-4 h-4 shrink-0"
             aria-hidden="true"
           />
-          Generate Harmonies
+          {studyPrimaryVariant === "reviewer_melody"
+            ? "Continue to sandbox (melody only)"
+            : "Generate Harmonies"}
         </button>
       </div>
     </div>

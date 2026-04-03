@@ -21,6 +21,22 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 6. **Explainability** — Theory Inspector treats the **deterministic engine** as ground truth for **generated** harmony parts; **note explain** uses deterministic **full-notation** FACTs (pitch **and** rhythm/duration, roster, vertical stack, cross-part intervals, motion, **full-bar measure dump** for the clicked bar) plus optional trace; chat + highlights explain violations on harmony; taxonomy is RAG-style context; LLM is optional and must not invent rules beyond supplied context. The tutor does **not** receive staff images—it receives **structured text** (`SCORE_DIGEST`, `FACT:` lines, `FULL BAR`); prompts and **user-message ordering** are tuned so that block is treated as visible notation. **Melody** clicks get context without engine-origin block. **Editor focus for chat (2026-04):** **`InspectorScoreFocus`** (note | measure | whole part): **`Editor focus`** in `prompts.ts` + **`scoreSelectionContext`**; **follow-up** chat **prepends** the same FACT block to the user message (not only the system prompt). **`conversationHistory` for follow-ups (2026-04-04):** built **before** appending the new user bubble so the API does **not** receive two consecutive `user` messages (plain question then notation)—see **Work log — Tutor follow-up + panels + markdown**. Measure bar strip + staff labels + RiffScore multi-select inference; green **focus highlights** (`regionExplainContext.ts`).
 7. **Source-transparent tutoring (2026-04)** — RAG lexicon (`Taxonomy.md`, `taxonomyIndex.ts`) maps **Fux**, **Aldwell & Schachter**, **Caplin**, and **Open Music Theory** to what the code actually does vs pedagogy-only claims. LLM system prompts (`prompts.ts`) require **brief citations** when stating rules (one best source per claim), **plain language first**, and **tight length** defaults so users learn without information overload.
 8. **Honest, non-sycophantic tutor (2026-04)** — Same `prompts.ts`: shared **`HONESTY_NO_SYCOPHANCY`** block for Auditor/Tutor/Stylist—no flattery or false agreement; **passing the checker ≠ musically ideal**; admit **thin context** and **gray areas**; **correct wrong premises** gently from facts; Stylist notes when a fix is **one option** or has **tradeoffs**.
+9. **M5 study prep (2026-04)** — **RQ1:** `study=reviewer_primary` or env → Document **Continue to sandbox (melody only)** skips `generate-from-file`. **RQ2:** `hfExplain=minimal` or env → stylist API/UI suppresses suggestion prose; `buildStylistStructuredPrompt` + server strip. **Logging:** opt-in `studyEventLog` + Sandbox **Research log** strip; optional **`NEXT_PUBLIC_HF_STUDY_REQUIRES_CONSENT`** modal. See **`@docs/plan.md` → M5 — User study**.
+
+---
+
+## Research protocol (M5) — in-app conditions (reference)
+
+| Factor | Level | In-app behavior |
+|--------|--------|------------------|
+| RQ1 arm | `generator_primary` | Generate Harmonies calls engine; additive parts in Sandbox. |
+| RQ1 arm | `reviewer_primary` | Melody-only XML to Sandbox; user-authored harmonies. |
+| RQ2 explanation | `full` | Default stylist `summary` / `rationale` + panel prose. |
+| RQ2 explanation | `minimal` | Empty summary/rationale in API response; neutral card copy. |
+
+**Dependent variables (outside app):** ownership / agency scales, trust or skepticism measures — collected via your survey instrument, not stored in HarmonyForge by default.
+
+**Verification:** `cd harmony-forge-redesign && npm run test` (`studyConfig.test.ts`); `?study=reviewer_primary` manual path; `?hfExplain=minimal` + stylist suggestion smoke test with `OPENAI_API_KEY`.
 
 ---
 
@@ -52,6 +68,49 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 | **Score canvas (staff IDs)** | **2026-04:** `extractStaffLabelLayout` in `riffscorePositions.ts`; `RiffScoreEditor` part-name overlays or **Staves (top → bottom)** fallback. |
 | **Config** | `harmony-forge-redesign/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
 | **Ops** | Documented `make dev`; **`make dev-clean`** clears ports **8000 / 3000 / 3001** and Next **`.next/dev/lock`** when restarting (see **Work log — 2026-04-03**). |
+| **Playback scrub** | `PlaybackScrubOverlay` + `playbackScrub.ts` + `riffscorePlaybackBridge.ts`; **`patch-package`** aligns RiffScore **toolbar Play**, **Space**, **P** with scrub via **`__HF_RIFFSCORE_PLAY_FROM`**; **manual QA** for regressions still advised — see **Playback scrub** subsection below. |
+
+### Playback scrub — draggable playhead & “Play starts where I dropped” (2026-04)
+
+**End goal (this slice):** In the Sandbox, the user can **drag a vertical playhead** over the RiffScore canvas, **release** to choose where playback should begin, and when they press **Play** (toolbar), **Space**, or **P**, audio starts from that intent. **Product simplification:** on release, the playhead **snaps to the nearest measure beginning** (quant `0` in RiffScore’s timeline) so start position is stable and matches user mental model (“play from this bar”).
+
+**Why it’s hard (root cause):** RiffScore bundles **two playback paths**: (1) **`MusicEditorAPI.play()`** / `pause()` / `stop()` — module-level `lastPlayPosition` + `scheduleTonePlayback`; (2) **internal React `usePlayback`** — `playScore` / `handlePlayToggle` / keyboard **`handlePlayback`** — `playbackPosition` state + `scheduleScorePlayback`. The **toolbar Play** button and **shortcuts** use path (2). HarmonyForge scrub originally only updated path (1), so **Play jumped back** to stale internal state.
+
+**Approach:**
+
+1. **Overlay playhead** — `PlaybackScrubOverlay` on `RiffScoreEditor`: draggable line; **`lineLeftPx`** state (avoid React resetting `left` each render); sync from hidden SVG `[data-testid="playback-cursor"]` only while transport is moving (`playingRef` and/or **frame-to-frame DOM motion**) so **paused** scrub position is not overwritten by a **stale** SVG transform.
+2. **Layout → measure** — `playbackScrub.ts`: `buildMeasurePlaybackSpans` from `extractNotePositions`; `contentXToMeasureQuant`; **`contentXToNearestMeasureStart`** for bar snap + `snapContentX`.
+3. **Seek after drop** — `seekTo`: `api.play(measureIndex, 0)` then `pause()` if not resuming (arms Tone); `suppressDomSyncRef` during the async gap; **`setPendingRiffScorePlayFrom`** + **`clearRiffScoreInternalPlaybackAnchor`** (custom event) so internal resume state can be cleared.
+4. **`patch-package` on `riffscore`** (`patches/riffscore+1.0.0-alpha.9.patch`), **`dist/index.mjs`** + **`dist/index.js`**:
+   - **`globalThis.__HF_RIFFSCORE_PLAY_FROM`** `{ measureIndex, quant }` — set from HF on scrub release; **consumed** when starting playback.
+   - **`consumeHfRiffScorePendingPlay()`** — read + clear pending; used by **`handlePlayToggle`**, **`handlePlayback`** (**`P`** and plain **`Space`** when not playing). **Unchanged:** `Shift+Space` / `Shift+⌘|Alt+Space` (replay / from start) do **not** consume pending.
+   - **`handlePlayToggle` `else` branch** — pending first, then existing `playbackPosition` / `lastPlayPosition` fallback.
+   - **`playScore` entry** — assign **`lastPlayPosition`** immediately so API and internal stay aligned.
+   - **Position callback** during `scheduleScorePlayback` — mirror **`lastPlayPosition`** on each tick; **stop** / **end** reset `lastPlayPosition` and clear pending where applicable.
+   - **`useEffect`** listens for **`riffscore-clear-playback-anchor`** to null internal `playbackPosition` (works with HF event after scrub).
+5. **Bridge module** — `harmony-forge-redesign/src/lib/music/riffscorePlaybackBridge.ts` — `setPendingRiffScorePlayFrom`; documents toolbar + **Space** + **P**.
+6. **CSS** — Native RiffScore playback cursor hidden (`opacity: 0`); user sees HF line only.
+
+**Steps completed (files):**
+
+| Item | Location |
+|------|-----------|
+| Span + clamp helpers + nearest measure start | `lib/music/playbackScrub.ts`, `playbackScrub.test.ts` |
+| Pending play global + types | `lib/music/riffscorePlaybackBridge.ts` |
+| Overlay + rAF + drag + seek | `components/score/PlaybackScrubOverlay.tsx` |
+| Hide native cursor | `components/score/RiffScoreEditor.tsx` (inline `<style>`) |
+| RiffScore fork patch | `patches/riffscore+1.0.0-alpha.9.patch` (includes existing `toolbarPlugins` + playback hooks) |
+
+**Verification:** `cd harmony-forge-redesign && npm run test` (`playbackScrub` tests + rest). **Manual:** scrub → toolbar Play; scrub → **Space**; scrub → **P**; pause/resume; stop clears pending.
+
+**Current failure / open issues (actively watch):**
+
+- **User-reported regressions** — Earlier iterations lost visible line, snap-back on scrub, or no follow-audio motion; mitigations shipped (stateful `left`, DOM-motion detection, pending global). If **Play still ignores drop** in a specific browser or focus state, capture: **toolbar vs keyboard**, **single vs multi editor**, and **console** for RiffScore errors.
+- **Dual schedulers** — `api.play` vs `playScore` both touch Tone; we rely on **`stopTonePlayback`** before each start. Edge cases (rapid scrub + play, sample load failures) may still glitch; **`/audio/piano/*.mp3` 404** remains a separate **silent playback** risk (see system map).
+- **Other play entry points** — Any RiffScore code that calls **`playScore`** without going through **`handlePlayToggle`** or **`handlePlayback`** would **not** consume **`__HF_RIFFSCORE_PLAY_FROM`**; grep upstream if new shortcuts appear.
+- **Multi-instance** — One global pending object; **multiple RiffScore roots** on one page would race (not current Sandbox layout).
+
+---
 
 ### Context-Aware Theory Inspector — shipped detail (2026-04)
 
@@ -87,7 +146,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - [x] `harmonize-core.ts` — `planStructuralHierarchy` disclaimer  
 - [x] `docs/plan.md`, `docs/progress.md`, `docs/context/system-map.md` — synced for theory/RAG narrative + honest/non-sycophantic tutor (`HONESTY_NO_SYCOPHANCY`)  
 - [x] `make test` + `harmony-forge-redesign && npm run test` passed after engine/taxonomy/prompt edits  
-- [x] **Theory Inspector UX + staff labels (2026-04):** panel reorder (tutor first), plain-language blocks, `<<<SUGGESTIONS>>>` split (`noteInsightAiSplit.ts`, `NoteInsight.aiSuggestions`), `extractStaffLabelLayout` + `RiffScoreEditor` labels, `useLayoutEffect` autoscroll workaround for Turbopack / React Compiler — see **Theory Inspector UX (2026-04)** above; docs re-synced in this edit  
+- [x] **Theory Inspector UX + staff labels (2026-04):** panel order evolved: **Tutor summary last** (after verifiable export); **Ideas to try next** + tutor stream require **what + why** per suggestion; **What this click means** hammers **why** the axiomatic engine placed the original harmony pitch (`buildAxiomaticEngineWhyParagraph` / additive copy); plain-language blocks, `<<<SUGGESTIONS>>>` split (`noteInsightAiSplit.ts`, `NoteInsight.aiSuggestions`), `extractStaffLabelLayout` + `RiffScoreEditor` labels, `useLayoutEffect` autoscroll — see **Theory Inspector UX (2026-04)** above; docs re-synced  
 - [x] **Theory Inspector free-form chat (2026-04-03):** persistent composer, empty default messages, no auto chips after chat/audit, `streamingMessageId` + history fix, optional note context on `sendMessage`; `harmony-forge-redesign` tests + build pass  
 - [x] **Docs sync (2026-04-03):** `@progress.md` work log + table row; `@plan.md` status blurb + §3 checkbox; `@docs/context/system-map.md` banner + Theory Inspector row + data-flow §7  
 - [x] **Docs sync (2026-04-04):** `@progress.md` — **Work log — Theory Inspector: editor focus for chat + measure/part (2026-04-04)**, consolidated table + Context-Aware file list + approach §6 + current-failures item 11; `@plan.md` status blurb + §3 checkbox + verification test name; `@docs/context/system-map.md` banner + Theory Inspector / RiffScore rows + data-flow §7  
@@ -106,7 +165,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 
 **Approach:**
 
-1. **Panel order** — After “This note”, show **Tutor summary** (LLM) first, then **Ideas to try next** (parsed suggestions), then **What the tool first wrote** (origin snapshot), **What this click means** (short plain-English read), **Verifiable score export** (monospace FACT block). *(Renamed from “How this note fits…” / “Facts passed to the tutor” in 2026-04-04; first panel no longer duplicates the full FACT dump.)*
+1. **Panel order** — After “This note”, show **Ideas to try next** (parsed suggestions; each bullet should state what to try and why), **What the tool first wrote** (origin snapshot), **What this click means** (plain read + **why** HarmonyForge’s axiomatic pass chose the original pitch), **Verifiable score export** (monospace FACT block), then **Tutor summary** (LLM wrap-up last). *(Tutor summary moved to bottom 2026-04 so facts and engine-why precede synthesis.)*
 2. **Single-stream LLM split** — Tutor user brief requires a line `<<<SUGGESTIONS>>>` then bullets; `splitNoteInsightAiContent` in `noteInsightAiSplit.ts` splits streamed/JSON text into `NoteInsight.aiExplanation` + `NoteInsight.aiSuggestions`. `prompts.ts` allows that bullet block after the delimiter.
 3. **Staff ↔ part** — RiffScore `Staff` has no label in types; **`extractStaffLabelLayout`** (`riffscorePositions.ts`) measures `g.staff` rects vs the editor container; **`RiffScoreEditor`** draws left-edge **part name** overlays (with **Input** badge on first staff when multiple parts) or a **“Staves (top → bottom)”** fallback strip if geometry doesn’t match `score.parts.length`.
 4. **React 19 / Compiler quirk** — `useEffect(..., [messages, noteInsight, …])` triggered **“The final argument passed to useEffect changed size between renders”** under **Next 16.1.6 + Turbopack + React Compiler** (dependency array shape differed across renders—e.g. compiler treating `messages` as expanded deps). **Mitigation:** autoscroll uses **`useLayoutEffect` with no dependency array** (scroll after every paint—cheap for this panel). Revisit if we add a stable single-string digest + one dep without compiler rewrite.
@@ -557,6 +616,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - **Playback utils**: `playbackUtils.ts` — `scoreToScheduledNotes()`, `scheduledNotesToSeconds()`; converts EditableScore to timed events for Tone.js.
 - **usePlayback hook**: Tone.js Synth + Part; play/pause/stop; `Tone.start()` on first user gesture; auto-stop when playback ends.
 - **Sandbox wiring**: SandboxPlaybackBar play/pause triggers actual audio; skip back/forward, rewind, fast-forward stop playback.
+- **RiffScore playhead scrub (2026-04):** See **Playback scrub — draggable playhead & “Play starts where I dropped”** above — `PlaybackScrubOverlay`, `playbackScrub.ts`, `riffscorePlaybackBridge.ts`, and **`patch-package`** (`__HF_RIFFSCORE_PLAY_FROM`, `consumeHfRiffScorePendingPlay`, toolbar + **Space** + **P**); drop snaps to **measure start** (quant `0`).
 - **Build**: Next.js build passes.
 
 **#74 Engine refinement (HFLitReview/NotebookLM):**

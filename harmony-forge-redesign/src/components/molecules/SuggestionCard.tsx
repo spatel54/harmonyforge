@@ -9,6 +9,8 @@ export interface SuggestionCardProps extends React.HTMLAttributes<HTMLDivElement
   corrections: ScoreCorrection[];
   correctionStatuses: Record<string, CorrectionStatus>;
   summary?: string;
+  /** M5 RQ2: hide explanatory summary; show only neutral copy + pitch rows */
+  suppressProseSummary?: boolean;
   timestamp?: string;
   onAcceptCorrection: (correctionId: string) => void;
   onRejectCorrection: (correctionId: string) => void;
@@ -29,6 +31,7 @@ export const SuggestionCard = React.forwardRef<
       corrections,
       correctionStatuses,
       summary,
+      suppressProseSummary = false,
       timestamp,
       onAcceptCorrection,
       onRejectCorrection,
@@ -73,14 +76,18 @@ export const SuggestionCard = React.forwardRef<
           </span>
         </div>
 
-        {/* Summary — always shown */}
+        {/* Summary — full prose, or neutral line in minimal-explanation sessions */}
         <p
           className="font-body text-[11px] font-normal leading-[1.55]"
           style={{ color: "var(--hf-text-primary)" }}
         >
-          {summary || (corrections.length === 0
-            ? "No specific corrections could be generated for this score."
-            : `${corrections.length} correction${corrections.length > 1 ? "s" : ""} suggested:`)}
+          {suppressProseSummary
+            ? corrections.length === 0
+              ? "No pitch changes in this batch."
+              : "Suggested pitch changes (no written explanation for this session):"
+            : summary || (corrections.length === 0
+                ? "No specific corrections could be generated for this score."
+                : `${corrections.length} correction${corrections.length > 1 ? "s" : ""} suggested:`)}
         </p>
 
         {/* Correction list */}
