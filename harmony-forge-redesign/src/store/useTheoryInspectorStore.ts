@@ -1,11 +1,17 @@
 import { create } from "zustand";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
+import {
+  EXPLANATION_LEVEL_STORAGE_KEY,
+  readStoredExplanationLevel,
+  type ExplanationLevel,
+} from "@/lib/ai/explanationLevel";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
+export type { ExplanationLevel };
 export type Genre = "classical" | "jazz" | "pop";
 
 export interface ValidationViolations {
@@ -53,11 +59,28 @@ export interface NoteInsight {
   userModifiedPitch: boolean;
   /** Block A: why the engine emitted originalEnginePitch (omit for melody-guide) */
   engineOriginExplanation?: string;
-  /** Block B: how current pitch sits in the live score (pitch-only) */
+  /** Block B: how this moment sits in the live score (full notation: pitch, rhythm, voicing) */
   currentPitchGuideExplanation: string;
   /** When user changed pitch: FACT line for tutor */
   pitchEditDeltaLine?: string;
 }
+
+/** What the user focused for Theory Inspector chat context (note, bar, or staff). */
+export type InspectorScoreFocus =
+  | { kind: "note"; insight: NoteInsight }
+  | {
+      kind: "measure";
+      measureIndex: number;
+      evidenceLines: string[];
+      noteIds: string[];
+    }
+  | {
+      kind: "part";
+      partId: string;
+      partName: string;
+      evidenceLines: string[];
+      noteIds: string[];
+    };
 
 export interface TheoryInspectorState {
   messages: TheoryInspectorMessage[];
@@ -85,12 +108,20 @@ export interface TheoryInspectorState {
   hasApiKey: boolean;
   setHasApiKey: (v: boolean) => void;
 
+  /** AI audience depth; required when hasApiKey before LLM calls */
+  explanationLevel: ExplanationLevel | null;
+  setExplanationLevel: (level: ExplanationLevel) => void;
+  hydrateExplanationLevelFromStorage: () => void;
+
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
   clearIssueHighlights: () => void;
 
   selectedNoteInsight: NoteInsight | null;
   setSelectedNoteInsight: (insight: NoteInsight | null) => void;
+
+  inspectorScoreFocus: InspectorScoreFocus | null;
+  setInspectorScoreFocus: (focus: InspectorScoreFocus | null) => void;
 
   /** Harmony part note ids → pitch when generated score was first loaded */
   generationBaselineHarmonyPitches: Record<string, string>;
@@ -139,12 +170,48 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
     hasApiKey: false,
     setHasApiKey: (hasApiKey) => set({ hasApiKey }),
 
+    explanationLevel: null,
+    setExplanationLevel: (explanationLevel) => {
+      set({ explanationLevel });
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(EXPLANATION_LEVEL_STORAGE_KEY, explanationLevel);
+        } catch {
+          /* ignore quota / private mode */
+        }
+      }
+    },
+    hydrateExplanationLevelFromStorage: () => {
+      const v = readStoredExplanationLevel();
+      if (v) set({ explanationLevel: v });
+    },
+
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),
     clearIssueHighlights: () => set({ issueHighlights: [] }),
 
     selectedNoteInsight: null,
-    setSelectedNoteInsight: (selectedNoteInsight) => set({ selectedNoteInsight }),
+    setSelectedNoteInsight: (insight) =>
+      set((s) => {
+        if (insight) {
+          return {
+            selectedNoteInsight: insight,
+            inspectorScoreFocus: { kind: "note", insight },
+          };
+        }
+        return {
+          selectedNoteInsight: null,
+          inspectorScoreFocus:
+            s.inspectorScoreFocus?.kind === "note" ? null : s.inspectorScoreFocus,
+        };
+      }),
+
+    inspectorScoreFocus: null,
+    setInspectorScoreFocus: (focus) =>
+      set({
+        inspectorScoreFocus: focus,
+        selectedNoteInsight: focus?.kind === "note" ? focus.insight : null,
+      }),
 
     generationBaselineHarmonyPitches: {},
     generationBaselineSatbTrace: null,

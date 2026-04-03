@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 export interface QuickReplyChipsProps extends React.HTMLAttributes<HTMLDivElement> {
   chips?: string[];
   onChipClick?: (chip: string) => void;
+  disabled?: boolean;
 }
 
 const DEFAULT_CHIPS = [
@@ -27,7 +28,7 @@ const DEFAULT_CHIPS = [
 export const QuickReplyChips = React.forwardRef<
   HTMLDivElement,
   QuickReplyChipsProps
->(({ chips = DEFAULT_CHIPS, onChipClick, className, ...props }, ref) => {
+>(({ chips = DEFAULT_CHIPS, onChipClick, disabled = false, className, ...props }, ref) => {
   const rows: string[][] = [];
   for (let i = 0; i < chips.length; i += 2) {
     rows.push(chips.slice(i, i + 2));
@@ -47,6 +48,7 @@ export const QuickReplyChips = React.forwardRef<
             <button
               key={ci}
               type="button"
+              disabled={disabled}
               onClick={() => onChipClick?.(chip)}
               className={cn(
                 "flex-1 text-left px-[10px] py-[4px]",
@@ -54,6 +56,7 @@ export const QuickReplyChips = React.forwardRef<
                 "font-mono text-[10px] font-normal leading-tight",
                 "transition-opacity hover:opacity-80",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)",
+                disabled && "opacity-40 cursor-not-allowed hover:opacity-40",
               )}
               style={{
                 backgroundColor:

@@ -4,25 +4,70 @@
  * explanations following the Theory Named strategy.
  */
 
+import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
+
+export type { ExplanationLevel };
 
 interface PromptContext {
   genre: string;
   taxonomySection: string;
   violationType?: string;
   violationContext?: string;
+  /**
+   * Editor focus: deterministic FACT lines for clicked note, measure, or part.
+   * Preferred over violationContext when both are sent (API merges them).
+   */
+  scoreSelectionContext?: string;
   /** Note-click explain: dual-mode tutor behavior */
   theoryInspectorNoteMode?: TheoryInspectorMode;
+  /** Audience depth; required for live LLM calls from the app */
+  explanationLevel?: ExplanationLevel;
 }
 
-/** Shared voice: transparent sources without walls of text */
+/** Facts the user focused in the score (note / measure / part); ground LLM replies. */
+function resolveScoreFocus(ctx: PromptContext): string | undefined {
+  const raw = ctx.scoreSelectionContext?.trim() || ctx.violationContext?.trim();
+  return raw || undefined;
+}
+
+function editorFocusPromptBlock(ctx: PromptContext): string {
+  const focus = resolveScoreFocus(ctx);
+  if (!focus) return "";
+  return `
+
+Editor focus (deterministic facts from the live score; treat as ground truth for this reply unless the user clearly changes topic):
+${focus}
+
+Anchor your answer to this focus when it is relevant. If the focus is a single note and "Note explain mode" applies, follow that mode. The focus may include **SCORE_DIGEST** (one-line pitch + duration + meter) and **FULL BAR** (every staff’s events in that measure)—that **is** embedded notation, not a hint that data is missing. Treat the focus as a **unified notation snapshot**: combine pitch, rhythm (durations, beats, dots, ties, meter), vertical sonority, intervals, and motion in one explanation. If you see **FACT: AUTHORITATIVE NOTATION**, **FACT: Clicked event**, or **SCORE_DIGEST**, the **notated duration is there**—state it for rhythm questions; never claim duration is absent. If the focus is a **measure** or **whole part** (no single-note engine origin in the facts), describe patterns, sonorities, and voice-leading using only what appears in the focus lines—do not invent Roman numerals or generator intent.`;
+}
+
+/** Shared voice: transparent sources, scannable length */
 const CITATION_AND_BREVITY = `Citation and length (apply in every reply):
-- When you state a **rule, norm, or why something matters in theory**, add **one short source** (e.g. "Aldwell & Schachter", "Open Music Theory", or "Fux's counterpoint tradition") so the user sees where the idea comes from. Pick the **single most relevant** source for that claim—do not list every author in the reference block.
-- Purely factual description of pitches or intervals from the user message needs **no** citation unless you tie it to a named rule.
-- **Plain English first**, then optional brief attribution in the same sentence or the next short one—not a bibliography.
-- Default to **concise**: roughly **3–8 sentences** for a typical note or chip reply; **2–4 sentences** per distinct violation. Expand only if the user clearly asks to go deeper.`;
+- When you state a **rule, norm, or why something matters in theory**, add **one short source** inline (e.g. Aldwell & Schachter, Open Music Theory, Fux tradition)—**one** source per claim, not a bibliography.
+- Purely factual description of the score from the user message (pitches, rhythms, intervals, voicing) needs **no** citation unless you tie it to a named rule.
+- **Format (default):** use **3–5 bullet lines**, each starting with "- ", **one idea per bullet** (rule or observation + optional single source in that line).
+- **Alternative:** if bullets do not fit, use **at most 4 short sentences** total for the main answer (same content cap).
+- For **multiple distinct violations**, keep the **whole reply** within the same cap (combine into one tight bullet list).
+- Expand only if the user clearly asks to go deeper.`;
+
+function explanationAudienceBlock(level: ExplanationLevel): string {
+  switch (level) {
+    case "beginner":
+      return `Audience: **Beginner**. Define theory terms when you use them; avoid abbreviations unless you expand them once; **one concept per bullet**; do not assume prior harmony or counterpoint coursework.`;
+    case "intermediate":
+      return `Audience: **Intermediate**. Use standard theory vocabulary (chord tones, voice leading, cadence, etc.); relate briefly to common-practice patterns when relevant.`;
+    case "professional":
+      return `Audience: **Professional**. Be dense and precise; assume fluency with Roman numerals, SATB vocabulary, and voice-leading jargon; minimal setup—answer the question directly.`;
+  }
+}
+
+function appendExplanationLevel(ctx: PromptContext): string {
+  if (!ctx.explanationLevel) return "";
+  return `\n\n${explanationAudienceBlock(ctx.explanationLevel)}\n`;
+}
 
 /** No flattery; acknowledge limits of engine, context, and textbook rules */
 const HONESTY_NO_SYCOPHANCY = `Honesty and tone (not sycophantic):
@@ -44,15 +89,16 @@ function theoryInspectorNoteModeRules(mode: TheoryInspectorMode): string {
       );
     case "harmonic-guide":
       return (
-        "You are in **Harmonic Guide** mode. Explain how the **live** pitch fits the score—vertical sonority, intervals, and motion—using HARMONIC GUIDE / CURRENT SCORE FACTS. " +
-        "When the facts list a **staff roster** and multiple staves at the same beat, discuss the clicked pitch relative to **each other staff** that has a pitch (input melody and every named generated part), not only melody vs clicked line. " +
+        "You are in **Harmonic Guide** mode. Explain this **moment in the live score** as a whole—vertical sonority, intervals, voice motion, **and** notated durations/rhythm from the facts—using HARMONIC GUIDE / CURRENT SCORE FACTS. Do not silo “pitch answer” vs “rhythm answer”; weave them together whenever both appear. " +
+        "When the facts list a **staff roster** and multiple staves at the same beat, discuss **each staff** that sounds (**Melody** and every named generated part), not only the clicked line. " +
         "If a pitch-edit FACT shows the user changed the note since generation, never say the engine chose the current pitch. " +
         "Cite a theory source only when you explain a **named norm** (e.g. spacing, parallels); keep it to **one short mention**."
       );
     case "melody-context":
       return (
         "You are in **Melody (input) context** mode. There is no engine-origin block for this staff. " +
-        "Explain how this melody pitch relates to **each generated staff** named in the facts at the same beat; do not invent generator intent. " +
+        "Explain how this melody moment fits **each generated staff** at the same beat—pitch, duration, and vertical intervals together; do not invent generator intent. " +
+        "Use **Clicked event**, **At that beat**, and any **Notation at this chord moment** FACTs as one integrated snapshot. " +
         "Optional: one brief OMT or textbook mention if you state a general harmonic principle."
       );
   }
@@ -86,16 +132,16 @@ ${ctx.taxonomySection}
 ${CITATION_AND_BREVITY}
 
 ${HONESTY_NO_SYCOPHANCY}
-
+${appendExplanationLevel(ctx)}
 Rules:
 - Be transparent: only explain rules present in the provided reference material and deterministic engine checks.
-- For each violation: **one** plain-language sentence on what went wrong, **one** on why it matters in common practice, ending with a **short** source tag (e.g. "— Aldwell & Schachter" or "— Open Music Theory") when the rule comes from the reference material. Mention **engine / validate-satb-trace** only if it helps the user trust the flag—not every time.
-- Distinguish **hard prohibitions** (textbook SATB rules, enforced by constraints) from **search heuristics** (solver prefers smoother total motion; Fux/OMT pedagogy, not a full species engine)—only when relevant, in **one** sentence.
+- Prefer a **single bullet list** for all violations; each bullet: what went wrong, why it matters (one phrase each), optional **short** source when the rule comes from the reference material. Mention **engine / validate-satb-trace** only if it helps trust the flag—not every time.
+- Distinguish **hard prohibitions** (textbook SATB rules, enforced by constraints) from **search heuristics** (solver prefers smoother total motion; Fux/OMT pedagogy, not a full species engine)—only when relevant, in **one** bullet.
 - If evidence is missing, say "insufficient engine evidence" instead of guessing.
 - Report violation counts and locations when available.
 - Do not suggest fixes (that is the Stylist's role).
 - **Caplin / sentence vs period:** Do not claim formal segmentation unless the user message includes explicit structural FACTs or metadata. Otherwise call large-scale form **aspirational** for the current engine path.
-- If the genre is jazz or pop, one sentence on which classical rules are often relaxed (cite OMT or genre section if you name a rule).`;
+- If the genre is jazz or pop, add **one bullet** on which classical rules are often relaxed (cite OMT or genre section if you name a rule).${editorFocusPromptBlock(ctx)}`;
 }
 
 function buildTutorPrompt(ctx: PromptContext): string {
@@ -113,20 +159,20 @@ ${modeBlock}
 ${CITATION_AND_BREVITY}
 
 ${HONESTY_NO_SYCOPHANCY}
-
+${appendExplanationLevel(ctx)}
 Rules:
 - **Sources:** Whenever you explain **why** a rule exists or what tradition it comes from, add **one** short citation (prefer **Open Music Theory** for how topics are grouped; **Aldwell & Schachter** for strict SATB prohibitions and spacing; **Fux** only when smooth motion or independence is the point). Do **not** stack multiple authors for the same sentence.
 - When you distinguish **what the code checks** (e.g. validate-satb-trace, spacing/range) from **heuristic voicing choice** (solver prefers less total motion—not full Fux species), say so in **one** plain sentence when it matters to the question; skip if the user only asked about sound or intervals.
 - When the message includes "ORIGIN JUSTIFIER" or "ENGINE ORIGIN", that block is frozen from the first load after harmony generation. Use it only to explain what the tool originally emitted. Never attribute the user’s **current** pitch to the engine if a pitch-edit FACT or "CURRENT SCORE FACTS" / "HARMONIC GUIDE" facts show a different pitch—describe the live pitch using the current facts only.
-- When the user message includes "CURRENT SCORE FACTS" (or SCORE FACTS), those lines come from the live score. Treat them as ground truth: **staff roster** (input vs generated part names), all staves sounding at that beat, and interval FACTs between the clicked pitch and other staves. Cover **every listed harmony staff** when multiple are present, not only the melody. Focus on **pitch**; avoid duration, rhythm, and articulation unless the user asks.
-- For note-level questions, do not hedge with "maybe", "probably", "likely", or "might" when the facts directly support the claim. If harmonic function or Roman numerals are not in the facts, do not invent them; describe only what the listed pitches and intervals establish.
+- When the user message includes "CURRENT SCORE FACTS" (or SCORE FACTS), those lines come from the live score. Treat them as ground truth for a **full notation slice**: **staff roster** (Melody vs generated part names), all staves sounding at that beat, **notated durations** (half note, quarter note, beats, dots, ties, meter width), interval FACTs, and motion between moments where listed. Cover **every listed harmony staff** when multiple are present. **Integrate** rhythm with pitch and harmony in the same reply—never imply the context is “pitch-only” when durations or meter appear in the facts. If **FACT: AUTHORITATIVE NOTATION** appears (often repeated under the user’s follow-up message), that line states the clicked note’s **written duration**—use it; never claim duration was not provided.
+- For note-level questions, do not hedge with "maybe", "probably", "likely", or "might" when the facts directly support the claim. If harmonic function or Roman numerals are not in the facts, do not invent them; describe what the listed pitches, intervals, and **stated durations** establish.
 - One generated harmony note: **short** answer—what it is doing harmonically, then **optional** one-sentence "why textbooks care" with a single source if a rule applies. No history lecture unless asked.
 - For general rule questions, anchor claims in the reference material. Never invent violations or locations not supported by the supplied context.
 - If evidence in the message is thin, say exactly which pieces are missing—not vague uncertainty.
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
-- Avoid bullet lists in the main answer unless the user asked for a list; prefer a few tight paragraphs or one cohesive short block.
-- **Note-inspector note click:** If the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only.`;
+- **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation.
+- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap).${editorFocusPromptBlock(ctx)}`;
 }
 
 interface StructuredPromptContext extends PromptContext {
@@ -170,15 +216,15 @@ Score context (notes available for correction):
 ${noteList}
 
 ${HONESTY_NO_SYCOPHANCY}
-
+${appendExplanationLevel(ctx)}
 Rules:
 - Suggest 1-3 concrete pitch changes that resolve the violation.
 - Each correction MUST use a noteId from the list above (e.g. "note_0", "note_1", etc.) — copy the noteId exactly.
 - The suggestedPitch must be in scientific notation (e.g., "A4", "F#3", "Bb2").
-- Provide a ruleLabel (short name for the rule) and rationale (**1–2 short sentences**, plain language). End rationale with **one** source tag when the fix follows a classical norm (e.g. "Aldwell & Schachter" or "Open Music Theory")—not a paragraph of references.
+- Provide a ruleLabel (short name for the rule) and rationale: **≤2 short sentences** OR **≤3 bullet lines** (plain language). End rationale with **one** source tag when the fix follows a classical norm (e.g. "Aldwell & Schachter" or "Open Music Theory")—not a paragraph of references.
 - Do not fabricate notes/rules; if no valid correction is supported by provided context, return zero corrections with a clear summary—state honestly if the fix is **one option** or could **trade off** another voice.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
-- Be concise and practical.`;
+- Be concise and practical.${editorFocusPromptBlock(ctx)}`;
 }
 
 function buildStylistPrompt(ctx: PromptContext): string {
@@ -195,12 +241,12 @@ Reference material:
 ${ctx.taxonomySection}
 
 ${HONESTY_NO_SYCOPHANCY}
-
+${appendExplanationLevel(ctx)}
 Rules:
 - Suggest 1-2 concrete pitch changes that resolve the violation.
-- Explain why the fix works in **one or two plain sentences**; mention the rule name (e.g. parallel fifths, spacing) and add **one** short source (Aldwell & Schachter or Open Music Theory) if it is a classical textbook rule. Mention engine-checked behavior only when it clarifies trust.
+- Explain why the fix works with **≤4 short sentences** OR **3–5 bullets** (same cap as Citation and length); mention the rule name (e.g. parallel fifths, spacing) and add **one** short source if it is a classical textbook rule. Mention engine-checked behavior only when it clarifies trust.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
 - Format suggestions as actionable steps the user can apply in the score editor.
 - If a suggestion is **not** the only musically valid fix, say so in one phrase (e.g. "one common fix").
-- Be concise and practical—no lecture.`;
+- Be concise and practical—no lecture.${editorFocusPromptBlock(ctx)}`;
 }

@@ -9,6 +9,9 @@ export interface UploadState {
   setFile: (file: File | null) => void;
   generatedMusicXML: string | null;
   setGeneratedMusicXML: (xml: string | null) => void;
+  /** Server-built MusicXML for Document preview (PDF / MXL / MIDI after intake) */
+  previewMusicXML: string | null;
+  setPreviewMusicXML: (xml: string | null) => void;
   /** Source file name (for sandbox playback bar) */
   sourceFileName: string | null;
   setSourceFileName: (name: string | null) => void;
@@ -47,13 +50,19 @@ function saveToStorage(xml: string | null, sourceFileName: string | null): void 
 export const useUploadStore = create<UploadState>((set, get) => ({
   file: null,
   setFile: (file) =>
-    set({ file, sourceFileName: file ? file.name.replace(/\.[^/.]+$/, "") : null }),
+    set({
+      file,
+      sourceFileName: file ? file.name.replace(/\.[^/.]+$/, "") : null,
+      previewMusicXML: null,
+    }),
   generatedMusicXML: null,
   setGeneratedMusicXML: (xml) => {
     const sourceFileName = get().sourceFileName;
     saveToStorage(xml, sourceFileName);
     set({ generatedMusicXML: xml });
   },
+  previewMusicXML: null,
+  setPreviewMusicXML: (previewMusicXML) => set({ previewMusicXML }),
   sourceFileName: null,
   setSourceFileName: (name) => {
     set({ sourceFileName: name });

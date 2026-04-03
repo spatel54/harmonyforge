@@ -488,3 +488,56 @@ ${partList}
 ${measures.join("\n")}
 </score-timewise>`;
 }
+
+/**
+ * Single-part partwise MusicXML 2.0 from ParsedScore (Document preview after PDF/MIDI/MXL intake).
+ * No DOCTYPE so browsers avoid loading external DTDs.
+ */
+export function parsedScoreToPartwiseMelodyMusicXML(source: ParsedScore): string {
+  const beatsPerMeasure = source.timeSignature?.beats ?? DEFAULT_BEATS_PER_MEASURE;
+  const beatType = source.timeSignature?.beatType ?? DEFAULT_BEAT_TYPE;
+  const melody = source.melody ?? [];
+  if (melody.length === 0) {
+    return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="2.0"><part-list/><part id="P1"/></score-partwise>`;
+  }
+
+  const maxEndBeat = melody.reduce(
+    (acc, n) => Math.max(acc, n.beat + clampDurationBeats(n.duration ?? 1)),
+    0,
+  );
+  const totalBeats = source.totalBeats ?? Math.max(beatsPerMeasure, maxEndBeat);
+  const totalMeasures = source.totalMeasures ?? Math.max(1, Math.ceil(totalBeats / beatsPerMeasure));
+
+  const events: TimedEvent[] = melody.map((note) => ({
+    pitch: note.pitch,
+    startBeat: note.beat,
+    duration: clampDurationBeats(note.duration ?? 1),
+  }));
+  const measureSegs = splitEventsByMeasure(events, totalMeasures, beatsPerMeasure);
+
+  const partLabel = esc(source.melodyPartName ?? "Melody");
+  const workTitle = esc(source.melodyPartName ?? "Score");
+  const displayName = source.melodyPartName ?? "Melody";
+
+  const measureEls = Array.from({ length: totalMeasures }, (_, mIdx) => {
+    const attributes =
+      mIdx === 0
+        ? `${attributesXML("P1", "Soprano", displayName, source, beatsPerMeasure, beatType)}\n`
+        : "";
+    const note = measureContentXML(measureSegs[mIdx] ?? [], beatsPerMeasure);
+    return `  <measure number="${mIdx + 1}">
+${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+  </measure>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="2.0">
+  <work><work-title>${workTitle}</work-title></work>
+  <part-list>
+    <score-part id="P1"><part-name>${partLabel}</part-name></score-part>
+  </part-list>
+  <part id="P1">
+${measureEls.join("\n")}
+  </part>
+</score-partwise>`;
+}

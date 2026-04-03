@@ -9,6 +9,8 @@ export interface ViolationCardProps extends React.HTMLAttributes<HTMLDivElement>
   onExplainMore?: () => void;
   onSuggestFix?: () => void;
   onRegenerate?: () => void;
+  /** When true, LLM-backed actions are disabled (e.g. explanation level not chosen). */
+  disableLlmActions?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export const ViolationCard = React.forwardRef<
       onExplainMore,
       onSuggestFix,
       onRegenerate,
+      disableLlmActions = false,
       className,
       ...props
     },
@@ -93,8 +96,9 @@ export const ViolationCard = React.forwardRef<
           <button
             type="button"
             onClick={onRegenerate}
+            disabled={disableLlmActions}
             aria-label="Regenerate explanation"
-            className="flex items-center justify-center w-[20px] h-[20px] rounded-[2px] transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+            className="flex items-center justify-center w-[20px] h-[20px] rounded-[2px] transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
             style={{ color: "var(--hf-text-primary)" }}
           >
             <RefreshCw
@@ -108,7 +112,8 @@ export const ViolationCard = React.forwardRef<
           <button
             type="button"
             onClick={onExplainMore}
-            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+            disabled={disableLlmActions}
+            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
             style={{
               backgroundColor:
                 "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
@@ -122,7 +127,8 @@ export const ViolationCard = React.forwardRef<
           <button
             type="button"
             onClick={onSuggestFix}
-            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+            disabled={disableLlmActions}
+            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
             style={{ backgroundColor: "var(--hf-surface)" }}
           >
             Suggest Fix

@@ -1,6 +1,7 @@
 import React from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MarkdownText } from "@/components/molecules/MarkdownText";
 
 export type ChatBubbleVariant = "system" | "user" | "ai";
 
@@ -86,12 +87,7 @@ export const ChatBubble = React.forwardRef<HTMLDivElement, ChatBubbleProps>(
             className="flex flex-col gap-[4px] px-[12px] py-[8px] rounded-[4px] max-w-[230px]"
             style={{ backgroundColor: "rgba(var(--hf-surface-rgb), 0.15)" }}
           >
-            <p
-              className="font-body text-[11px] font-normal leading-[1.5]"
-              style={{ color: "var(--hf-text-primary)" }}
-            >
-              {content}
-            </p>
+            <MarkdownText content={content} variant="bubble" className="leading-[1.5]" />
 
             {/* userActRow: gap:8 jc:end */}
             {onEdit && (
@@ -132,26 +128,21 @@ export const ChatBubble = React.forwardRef<HTMLDivElement, ChatBubbleProps>(
         className={cn("flex flex-col gap-[6px] w-full", className)}
         {...props}
       >
-        {/* aCard: layout:vertical gap:6 pad:[10,12] fill:#A55B370D stroke:$sonata-detail r:4 */}
+        {/* Match user/system: theme tokens so text stays readable in light + dark */}
         <div
           className="w-full rounded-[4px] px-[12px] py-[10px]"
           style={{
-            backgroundColor: "rgba(var(--hf-surface-rgb), 0.05)",
-            border: "1px solid var(--sonata-detail)",
+            backgroundColor: "rgba(var(--hf-surface-rgb), 0.14)",
+            border: "1px solid var(--hf-detail)",
           }}
         >
-          <p
-            className="font-body text-[11px] font-normal leading-[1.6]"
-            style={{ color: "var(--text-on-light)" }}
-          >
-            {content}
-          </p>
+          <MarkdownText content={content} variant="bubble" />
         </div>
 
         {timestamp && (
           <span
             className="font-body text-[9px] font-normal"
-            style={{ color: "#7A6050" }}
+            style={{ color: "var(--hf-text-secondary)" }}
           >
             {timestamp}
           </span>

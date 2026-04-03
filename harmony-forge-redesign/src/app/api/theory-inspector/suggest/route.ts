@@ -7,6 +7,10 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import {
+  isExplanationLevel,
+  type ExplanationLevel,
+} from "@/lib/ai/explanationLevel";
+import {
   suggestResponseSchema,
   type SuggestResponse,
 } from "@/lib/ai/suggestionSchema";
@@ -26,6 +30,7 @@ interface SuggestRequestBody {
   violationContext?: string;
   scoreContext: ScoreNoteContext[];
   userMessage?: string;
+  explanationLevel?: ExplanationLevel;
 }
 
 /**
@@ -55,6 +60,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!isExplanationLevel(body.explanationLevel)) {
+    return NextResponse.json(
+      {
+        error:
+          "Missing or invalid explanationLevel (expected beginner | intermediate | professional).",
+      },
+      { status: 400 },
+    );
+  }
+
   const taxonomySection = getTaxonomyContext(genre, violationType);
 
   const systemPrompt = buildStylistStructuredPrompt({
@@ -63,6 +78,7 @@ export async function POST(request: NextRequest) {
     violationType,
     violationContext,
     scoreContext,
+    explanationLevel: body.explanationLevel,
   });
 
   const messages = [

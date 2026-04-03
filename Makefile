@@ -2,19 +2,34 @@
 # Use these commands for cross-language tests and evaluation.
 # See .cursor/rules/architecture.mdc: AI should rely on Makefile to trigger tests.
 
-.PHONY: install dev dev-clean dev-backend dev-frontend test lint lint-frontend verify build test-engine
+.PHONY: install dev dev-clean dev-backend dev-frontend test lint lint-frontend verify build test-engine pdfalto
 
 # Install dependencies (update when package.json / requirements.txt exist)
 install:
 	@if [ -f package.json ]; then npm install; fi
 	@if [ -f harmony-forge-redesign/package.json ]; then cd harmony-forge-redesign && npm install; fi
-	@if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
+	@if [ -f requirements.txt ]; then \
+		python3 -m pip install -r requirements.txt && \
+		python3 -m pip install "oemer==0.1.8" --no-deps; \
+	fi
 	@echo "Install complete."
 
-# Kill processes on ports 8000, 3000, 3001 (run before dev if "Address already in use")
+# Build vendored pdfalto binary at pdfalto/pdfalto (C++/cmake). Fetches the xpdf submodule first.
+# If linking fails, see pdfalto/Readme.md (e.g. ./install_deps.sh for bundled libs).
+pdfalto:
+	@test -f pdfalto/CMakeLists.txt || (echo "pdfalto/CMakeLists.txt missing" && exit 1)
+	cd pdfalto && git submodule update --init --recursive
+	cd pdfalto && cmake . && $(MAKE)
+
+# Kill listeners on 8000 (engine), 3000/3001 (Next). Run before `make dev` if you see EADDRINUSE or Next lock errors.
+# Removes stale harmony-forge-redesign/.next/dev/lock after killing Next (safe if no dev server remains).
 dev-clean:
-	@lsof -ti:8000 -ti:3000 -ti:3001 2>/dev/null | xargs kill -9 2>/dev/null || true
-	@echo "Ports 8000, 3000, 3001 cleared."
+	@for port in 8000 3000 3001; do \
+		pids=$$(lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null || true); \
+		if [ -n "$$pids" ]; then echo "Killing PID(s) on port $$port: $$pids"; kill -9 $$pids 2>/dev/null || true; fi; \
+	done
+	@rm -f harmony-forge-redesign/.next/dev/lock 2>/dev/null || true
+	@echo "Ports 8000, 3000, 3001 cleared (and Next dev lock removed if present)."
 
 # Full stack (frontend + backend)
 dev:

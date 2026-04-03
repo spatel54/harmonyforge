@@ -18,16 +18,22 @@ import {
   computeTheoryInspectorMode,
   computeUserModifiedPitch,
   resolveOriginalEnginePitch,
+  type TheoryInspectorMode,
 } from "@/lib/music/theoryInspectorMode";
 import { useSuggestionStore } from "@/store/useSuggestionStore";
-import { getNoteById } from "@/lib/music/scoreUtils";
+import { getNoteById, parseMeasureBeats } from "@/lib/music/scoreUtils";
 import type { SatbNoteContextOptions } from "@/lib/music/noteExplainContext";
 import {
   buildAdditiveNoteContextLines,
   buildPitchEditDeltaFact,
   buildSatbNoteContextLines,
+  buildSatbRhythmContextLines,
   buildScorePartRosterLines,
+  describeNotationForTutor,
+  formatAuthoritativeDurationFact,
+  formatScoreDigestForFoundHit,
 } from "@/lib/music/noteExplainContext";
+import { buildMeasureFocusFacts } from "@/lib/music/regionExplainContext";
 import type { TraceFinding, SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import { voicesAtGenerationForSlot } from "@/lib/music/theoryInspectorBaseline";
 import {
@@ -47,13 +53,14 @@ const ENGINE_URL =
 
 /** Tutor: plain language, grounded in score + checker facts. */
 const NOTE_EXPLAIN_TUTOR_BRIEF =
-  "Write for a curious musician who is not a theory student. Focus on PITCH only—do not discuss rhythm, duration, or articulation unless the user explicitly asks. " +
-  "If the message includes ENGINE ORIGIN facts, use those ONLY to explain what HarmonyForge originally generated at load time. Never say the engine ‘chose’ or ‘picked’ the CURRENT pitch if a pitch-edit FACT shows the user changed it—describe the current pitch using CURRENT SCORE FACTS instead. " +
-  "STAFF ROSTER and vertical FACT lines name each staff (input vs generated) using the score’s part names (e.g. violin, cello). When multiple harmony staves are listed, relate the clicked note to the **input melody AND each other staff** that has a pitch at that moment—not only melody vs clicked line. Use every relevant INTERVAL FACT toward other staves when present. " +
-  "CURRENT SCORE FACTS describe the live notation (all staves at the same time, intervals, neighbors). Treat FACT lines as authoritative; when a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
-  "If the user clicked the input melody (no engine-origin block), explain how that melody pitch relates to **each generated staff** at the same beat—do not invent generator intent. " +
-  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Short paragraphs, 2–5 max. " +
-  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”) with practical ideas to refine this harmony or voice-leading or what to try at the **next** chord moment—only when grounded in the supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions.”";
+  "Write for a curious musician who is not a theory student. **Before** any **Response rules** section, this message includes **exported notation** from the app: **SCORE_DIGEST**, **FACT:** lines, and usually a **FULL BAR** listing. That block **is** the score you can read (not a teaser). **Never** say notation or duration was not provided if SCORE_DIGEST or AUTHORITATIVE lines exist. " +
+  "**Do not prioritize pitch over rhythm or other dimensions**—weave **everything the FACT lines supply** into one answer: pitches, notated durations (note type, quarter-note span, dots, ties), meter, staff roster, every staff sounding at this beat, intervals, voice-leading motion between moments, and same-line neighbors (before/after, across the barline) when listed. Mention articulation or dynamics only if they appear in the facts or the user asks. " +
+  "If the message includes ENGINE ORIGIN facts, use those ONLY to explain what HarmonyForge originally generated at load time. Never say the engine ‘chose’ or ‘picked’ the CURRENT pitch if a pitch-edit FACT shows the user changed it—describe the **live** score using CURRENT SCORE FACTS instead. " +
+  "STAFF ROSTER and vertical FACT lines label the user’s first staff as **Melody** when there are multiple staves; generated staves use their part names. When multiple harmony staves are listed, relate this moment to **Melody AND each other staff** that sounds. Use every relevant INTERVAL FACT. " +
+  "CURRENT SCORE FACTS are a **full notation snapshot** for this moment; treat them as authoritative. Lines starting **FACT: AUTHORITATIVE NOTATION** or **FACT: Clicked event** state the **notated note length**—if either appears, you **must** answer half-note vs quarter etc. from them; never say duration is missing. When a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
+  "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
+  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
+  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”) with practical ideas to refine harmony or voice-leading or what to try at the **next** chord moment—grounded in the supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions.”";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -291,12 +298,14 @@ function buildFallbackNoteInsight(
         `With only ${n} part line(s), the editor does not expose the full four-voice SATB snapshot, so you will not see the same slot-by-slot engine trace as on a strict S/A/T/B score—but this pitch is still what the deterministic pass originally emitted on this note.`
       : undefined;
 
+  const mbFallback = parseMeasureBeats(found.measure.timeSignature);
+  const rhythmPhrase = describeNotationForTutor(found.note, mbFallback);
   const fullCurrentGuide =
-    `**Current pitch (${currentPitch})** in the live score: how it lines up with your other parts at this beat is summarized in the FACT lines below (pitch relationships only). ` +
+    `**${currentPitch}** on “${partName}” (measure ${found.measureIdx + 1}). ${rhythmPhrase.charAt(0).toUpperCase() + rhythmPhrase.slice(1)} ` +
     (userModifiedPitch
-      ? `You have changed this note since generation; use the Origin Justifier section for what the tool first wrote, and these FACTs for what you hear now.`
-      : `You have not changed this pitch since generation; the FACTs still describe the same sounding moment.`) +
-    (scoreFacts.length > 0 ? `\n\n${scoreFacts.join("\n")}` : "");
+      ? `You changed this note since generation; the export below matches the live score. `
+      : "") +
+    `Open **Verifiable score export** for every staff at this beat and the full bar.`;
 
   const currentPitchGuideExplanation =
     inspectorMode === "origin-justifier" ? SLIM_HARMONIC_GUIDE_ORIGIN : fullCurrentGuide;
@@ -314,7 +323,7 @@ function buildFallbackNoteInsight(
         ]
       : []),
     ...(pitchEditDeltaLine ? [pitchEditDeltaLine] : []),
-    "=== HARMONIC GUIDE — CURRENT SCORE FACTS (live notation, pitch context) ===",
+    "=== HARMONIC GUIDE — CURRENT SCORE FACTS (live notation: full snapshot) ===",
     ...scoreFacts,
     "---",
     `Part: ${partName} (${n} part score — no four-line chord snapshot for this click)`,
@@ -490,12 +499,55 @@ export function useTheoryInspector() {
       const trimmed = text.trim();
       if (!trimmed || store.isStreaming) return;
 
+      const gate = useTheoryInspectorStore.getState();
+      if (gate.hasApiKey && !gate.explanationLevel) {
+        store.addMessage({
+          id: msgId("sys"),
+          type: "system",
+          content:
+            "Choose Beginner, Intermediate, or Professional above before sending AI messages.",
+          timestamp: timestamp(),
+        });
+        return;
+      }
+
       // Abort any in-flight stream
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Add user message
+      const snap = useTheoryInspectorStore.getState();
+
+      // Conversation history must exclude this turn’s user message, or the API gets
+      // a plain-text duplicate immediately before the enriched final user message.
+      const conversationHistory = snap.messages
+        .filter((m) => m.type === "user" || m.type === "ai")
+        .slice(-20)
+        .map((m) => ({
+          role: (m.type === "user" ? "user" : "assistant") as
+            | "user"
+            | "assistant",
+          content: m.content ?? "",
+        }));
+
+      // Find the most recent violation for context
+      const lastViolation = [...snap.messages].reverse().find(
+        (m) => m.type === "violation",
+      );
+      const violationType = lastViolation?.violationType;
+
+      const scoreFocus = snap.inspectorScoreFocus;
+      let scoreSelectionContext: string | undefined;
+      let theoryInspectorNoteMode: TheoryInspectorMode | undefined;
+      if (scoreFocus?.kind === "note") {
+        const ev = scoreFocus.insight.evidenceLines;
+        scoreSelectionContext = ev?.length ? ev.join("\n") : undefined;
+        theoryInspectorNoteMode = scoreFocus.insight.inspectorMode;
+      } else if (scoreFocus?.kind === "measure" || scoreFocus?.kind === "part") {
+        scoreSelectionContext = scoreFocus.evidenceLines.join("\n");
+        theoryInspectorNoteMode = undefined;
+      }
+
       const userMsg: TheoryInspectorMessage = {
         id: msgId("u"),
         type: "user",
@@ -505,26 +557,8 @@ export function useTheoryInspector() {
       store.addMessage(userMsg);
       store.setInputValue("");
 
-      // Determine persona from context
       const persona = store.persona;
       const genre = store.genre;
-
-      // Find the most recent violation for context
-      const lastViolation = [...store.messages].reverse().find(
-        (m) => m.type === "violation",
-      );
-      const violationType = lastViolation?.violationType;
-
-      // Build conversation history (last 10 exchanges)
-      const history = store.messages
-        .filter((m) => m.type === "user" || m.type === "ai")
-        .slice(-20)
-        .map((m) => ({
-          role: (m.type === "user" ? "user" : "assistant") as
-            | "user"
-            | "assistant",
-          content: m.content ?? "",
-        }));
 
       // Prepare streaming AI message placeholder
       const aiMsgId = msgId("ai");
@@ -538,6 +572,13 @@ export function useTheoryInspector() {
       store.setIsStreaming(true);
       store.setStreamingMessageId(aiMsgId);
 
+      const focusRepeat =
+        scoreSelectionContext?.trim() ?? "";
+      const userMessageWithFocus =
+        focusRepeat.length > 0
+          ? `**Exported notation for this turn (read before answering; SCORE_DIGEST / FACT lines / FULL BAR = visible score):**\n${focusRepeat}\n\n---\n**User:**\n${trimmed}`
+          : trimmed;
+
       try {
         const response = await fetch("/api/theory-inspector", {
           method: "POST",
@@ -545,9 +586,14 @@ export function useTheoryInspector() {
           body: JSON.stringify({
             persona,
             genre,
-            userMessage: trimmed,
+            userMessage: userMessageWithFocus,
             violationType,
-            conversationHistory: history,
+            scoreSelectionContext,
+            theoryInspectorNoteMode,
+            conversationHistory,
+            ...(gate.hasApiKey && gate.explanationLevel
+              ? { explanationLevel: gate.explanationLevel }
+              : {}),
           }),
           signal: controller.signal,
         });
@@ -567,14 +613,6 @@ export function useTheoryInspector() {
             source?: string;
           };
           store.updateMessage(aiMsgId, { content: data.content });
-
-          if (data.chips) {
-            store.addMessage({
-              id: msgId("chips"),
-              type: "chips",
-              chips: data.chips,
-            });
-          }
         } else {
           // Streaming mode
           const reader = response.body?.getReader();
@@ -589,19 +627,6 @@ export function useTheoryInspector() {
             accumulated += decoder.decode(value, { stream: true });
             store.updateMessage(aiMsgId, { content: accumulated });
           }
-
-          // Add follow-up chips
-          store.addMessage({
-            id: msgId("chips"),
-            type: "chips",
-            chips: violationType
-              ? ["Explain more", "Suggest fix", "Show in score"]
-              : [
-                  "Explain this chord",
-                  "Check voice leading",
-                  "Suggest correction",
-                ],
-          });
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -677,12 +702,6 @@ export function useTheoryInspector() {
           }
         }
 
-        // Add follow-up chips
-        store.addMessage({
-          id: msgId("chips"),
-          type: "chips",
-          chips: ["Explain violations", "Suggest fixes", "Show in score"],
-        });
       } catch {
         // Engine trace not reachable — fallback to local deterministic highlight checks.
         const harmonyPartIds = getHarmonyPartIds(score);
@@ -706,6 +725,19 @@ export function useTheoryInspector() {
   const requestSuggestion = useCallback(
     async (score: EditableScore) => {
       if (suggestionStore.isLoading) return;
+
+      const st = useTheoryInspectorStore.getState();
+      if (st.hasApiKey && !st.explanationLevel) {
+        store.addMessage({
+          id: msgId("sys"),
+          type: "system",
+          content:
+            "Choose an explanation level above before requesting AI fix suggestions.",
+          timestamp: timestamp(),
+        });
+        return;
+      }
+
       suggestionStore.setIsLoading(true);
       store.setIsStreaming(true);
 
@@ -759,6 +791,7 @@ export function useTheoryInspector() {
             genre: store.genre,
             violationType: lastViolation?.violationType,
             scoreContext,
+            explanationLevel: st.explanationLevel!,
           }),
         });
 
@@ -885,8 +918,17 @@ export function useTheoryInspector() {
 
   const streamTutorNoteInsight = useCallback(
     async (base: NoteInsight, evidence: string) => {
-      const key = useTheoryInspectorStore.getState().hasApiKey;
-      if (!key) return;
+      const st0 = useTheoryInspectorStore.getState();
+      if (!st0.hasApiKey) return;
+      if (!st0.explanationLevel) {
+        store.setSelectedNoteInsight({
+          ...base,
+          aiExplanation:
+            "Choose Beginner, Intermediate, or Professional above to enable the AI tutor summary.",
+          aiSuggestions: undefined,
+        });
+        return;
+      }
       store.setIsStreaming(true);
       store.setStreamingMessageId(null);
       try {
@@ -897,8 +939,9 @@ export function useTheoryInspector() {
             persona: "tutor",
             genre: store.genre,
             theoryInspectorNoteMode: base.inspectorMode,
-            userMessage: `${NOTE_EXPLAIN_TUTOR_BRIEF}\n\n${evidence}`,
-            violationContext: evidence,
+            userMessage: `${evidence}\n\n---\n**Response rules** (apply after reading the notation block above):\n${NOTE_EXPLAIN_TUTOR_BRIEF}`,
+            scoreSelectionContext: evidence,
+            explanationLevel: st0.explanationLevel,
           }),
         });
         if (!response.ok) {
@@ -974,9 +1017,12 @@ export function useTheoryInspector() {
           found.noteIdx,
           partId,
         );
+        const mbMelody = parseMeasureBeats(found.measure.timeSignature);
+        const melodyRhythm = describeNotationForTutor(found.note, mbMelody);
         const currentPitchGuideExplanation =
-          `**Melody (input) pitch ${currentPitch}** on “${partName}”: the FACT lines list what each staff sounds at the same beat so you can read vertical pitch relationships (not generator output).` +
-          (scoreFacts.length > 0 ? `\n\n${scoreFacts.join("\n")}` : "");
+          `You clicked your **tune** (“${partName}”) in measure ${found.measureIdx + 1}. ` +
+          `This written pitch is **${currentPitch}**. ${melodyRhythm.charAt(0).toUpperCase() + melodyRhythm.slice(1)} ` +
+          `**Verifiable score export** lists every staff at this beat and the full bar.`;
 
         const melodyInsight: NoteInsight = {
           noteId,
@@ -987,7 +1033,7 @@ export function useTheoryInspector() {
           source: "local-fallback",
           deterministicExplanation: currentPitchGuideExplanation,
           evidenceLines: [
-            "=== CURRENT SCORE FACTS (melody + harmony at this beat; pitch only) ===",
+            "=== CURRENT SCORE FACTS (melody + harmony at this beat; full notation snapshot) ===",
             ...scoreFacts,
             `Measure ${found.measureIdx + 1} · ${currentPitch}`,
           ],
@@ -1075,6 +1121,19 @@ export function useTheoryInspector() {
         baselinePitches,
         satbOpts,
       );
+      const rhythmFacts = buildSatbRhythmContextLines(
+        score,
+        slotData.auditedSlots,
+        slotIndex,
+        satbOpts,
+      );
+
+      const clickedAuthoritative = formatAuthoritativeDurationFact(
+        found.note,
+        parseMeasureBeats(found.measure.timeSignature),
+        found.measure.timeSignature,
+      );
+
       const currentFacts = buildSatbNoteContextLines(
         slotData.auditedSlots,
         slotIndex,
@@ -1109,12 +1168,15 @@ export function useTheoryInspector() {
           ? `${buildLaymanChordExplanation(originalEnginePitch, voice, originFindings)}${originFacts.length > 0 ? `\n\n${originFacts.join("\n")}` : ""}`
           : undefined;
 
+      const mbSatb = parseMeasureBeats(found.measure.timeSignature);
+      const satbRhythmPhrase = describeNotationForTutor(found.note, mbSatb);
       const fullSatbCurrentGuide =
-        `**Current pitch ${currentPitch}** (${voiceLayman(voice)}) at chord moment ${slotIndex + 1}: how it sits in the **live** score is in the FACT lines below.` +
+        `Chord moment **${slotIndex + 1}** — your **${voice}** line (${voiceLayman(voice)}) sounds **${currentPitch}**. ` +
+        `${satbRhythmPhrase.charAt(0).toUpperCase() + satbRhythmPhrase.slice(1)}` +
         (userModifiedPitch
-          ? ` You edited this line since generation—the Origin Justifier block above is frozen to the first load.`
+          ? ` You edited this line since the first generation; **What the tool first wrote** stays frozen to that pass.`
           : "") +
-        (currentFacts.length > 0 ? `\n\n${currentFacts.join("\n")}` : "");
+        ` **Verifiable score export** has all four parts, intervals, and bar-wide rhythm.`;
 
       const currentPitchGuideExplanation =
         inspectorMode === "origin-justifier"
@@ -1122,6 +1184,11 @@ export function useTheoryInspector() {
           : fullSatbCurrentGuide;
 
       const sourceTag = bt && originFindings.length > 0 ? "engine-trace" : "local-fallback";
+
+      const { lines: satbMeasureLines } = buildMeasureFocusFacts(
+        score,
+        found.measureIdx,
+      );
 
       const evidenceLines = [
         ...(originalEnginePitch !== null
@@ -1140,8 +1207,15 @@ export function useTheoryInspector() {
         ...(pitchEditDeltaLine ? ["", pitchEditDeltaLine] : []),
         "",
         "=== HARMONIC GUIDE — CURRENT SCORE FACTS (live notation) ===",
+        "=== NOTATION PROVIDED TO YOU (deterministic export from the editor) ===",
+        formatScoreDigestForFoundHit(found),
         ...rosterLines,
+        clickedAuthoritative,
+        ...rhythmFacts,
         ...currentFacts,
+        "---",
+        "FULL BAR (all staves, this measure):",
+        ...satbMeasureLines,
         "",
         `Chord moment ${slotIndex + 1} · current four lines (high → low): ${slot.voices.soprano} · ${slot.voices.alto} · ${slot.voices.tenor} · ${slot.voices.bass}`,
       ];
@@ -1184,6 +1258,7 @@ export function useTheoryInspector() {
     inputValue: store.inputValue,
     setInputValue: store.setInputValue,
     isStreaming: store.isStreaming,
+    streamingMessageId: store.streamingMessageId,
     hasApiKey: store.hasApiKey,
     persona: store.persona,
     genre: store.genre,
@@ -1194,6 +1269,8 @@ export function useTheoryInspector() {
     requestSuggestion,
     issueHighlights: store.issueHighlights,
     selectedNoteInsight: store.selectedNoteInsight,
+    inspectorScoreFocus: store.inspectorScoreFocus,
+    setInspectorScoreFocus: store.setInspectorScoreFocus,
     explainNotePitch,
     explainGeneratedNote,
     clearMessages: store.clearMessages,

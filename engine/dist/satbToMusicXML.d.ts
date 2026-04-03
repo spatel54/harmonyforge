@@ -13,3 +13,8 @@ export interface SatbToMusicXMLOptions {
 }
 /** Build MusicXML string from SATB result. Outputs only parts with selected instruments. */
 export declare function satbToMusicXML(result: SolverResult, instruments?: Record<Voice, string[]>, source?: ParsedScore, options?: SatbToMusicXMLOptions): string;
+/**
+ * Single-part partwise MusicXML 2.0 from ParsedScore (Document preview after PDF/MIDI/MXL intake).
+ * No DOCTYPE so browsers avoid loading external DTDs.
+ */
+export declare function parsedScoreToPartwiseMelodyMusicXML(source: ParsedScore): string;

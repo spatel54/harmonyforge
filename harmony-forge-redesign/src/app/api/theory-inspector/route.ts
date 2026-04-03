@@ -8,6 +8,10 @@ import {
   type Genre,
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
+import {
+  isExplanationLevel,
+  type ExplanationLevel,
+} from "@/lib/ai/explanationLevel";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 interface TheoryInspectorRequestBody {
@@ -16,8 +20,11 @@ interface TheoryInspectorRequestBody {
   userMessage: string;
   violationType?: ViolationKey;
   violationContext?: string;
+  /** Editor focus facts (note / measure / part); merged with violationContext in prompts when alone */
+  scoreSelectionContext?: string;
   theoryInspectorNoteMode?: TheoryInspectorMode;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  explanationLevel?: ExplanationLevel;
 }
 
 /**
@@ -34,6 +41,7 @@ export async function POST(request: NextRequest) {
     userMessage,
     violationType,
     violationContext,
+    scoreSelectionContext,
     theoryInspectorNoteMode,
   } = body;
 
@@ -47,6 +55,16 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+  if (apiKey && !isExplanationLevel(body.explanationLevel)) {
+    return NextResponse.json(
+      {
+        error:
+          "Missing or invalid explanationLevel (expected beginner | intermediate | professional).",
+      },
+      { status: 400 },
+    );
+  }
 
   // --- Fallback mode: no API key ---
   if (!apiKey) {
@@ -70,7 +88,9 @@ export async function POST(request: NextRequest) {
     taxonomySection,
     violationType,
     violationContext,
+    scoreSelectionContext: scoreSelectionContext ?? violationContext,
     theoryInspectorNoteMode,
+    explanationLevel: body.explanationLevel,
   });
 
   // Build conversation history (capped at last 10 exchanges)

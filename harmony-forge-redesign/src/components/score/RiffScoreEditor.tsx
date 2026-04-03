@@ -41,6 +41,18 @@ export interface RiffScoreEditorProps {
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
   issueHighlights?: ScoreIssueHighlight[];
+  /** Theory Inspector: tint these note ids (measure/part focus), separate from violation highlights */
+  focusHighlightNoteIds?: readonly string[];
+  /** User picked a measure in the inspector strip — parent should set Zustand focus + facts */
+  onInspectorSelectMeasure?: (measureIndex: number) => void;
+  /** User picked a staff label — 0-based staff index aligned with score.parts */
+  onInspectorSelectPart?: (staffIndex: number) => void;
+  /** Multi-select in RiffScore inferred measure- or part-wide focus */
+  onInspectorInferredRegion?: (
+    region:
+      | { kind: "measure"; measureIndex: number }
+      | { kind: "part"; staffIndex: number },
+  ) => void;
 }
 
 const TOOLBAR_PALETTES = [
@@ -94,6 +106,10 @@ export function RiffScoreEditor({
   onAcceptCorrection,
   onRejectCorrection,
   issueHighlights = [],
+  focusHighlightNoteIds = [],
+  onInspectorSelectMeasure,
+  onInspectorSelectPart,
+  onInspectorInferredRegion,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -122,6 +138,11 @@ export function RiffScoreEditor({
   const { pushToRiffScore, rsToHf } = useRiffScoreSync(apiRef, score);
   const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
   const hasSelection = selectedNoteIds.size > 0;
+  const focusHighlightSet = useMemo(
+    () => new Set(focusHighlightNoteIds),
+    [focusHighlightNoteIds],
+  );
+  const measureCount = score?.parts[0]?.measures.length ?? 0;
 
   const downloadXml = () => {
     if (!score) return;
@@ -131,6 +152,20 @@ export function RiffScoreEditor({
     anchor.download = "harmony-forge-score.xml";
     anchor.click();
     URL.revokeObjectURL(anchor.href);
+  };
+
+  const runSelectMeasureInRiffScore = (measureIndex: number) => {
+    const api = apiRef.current;
+    if (!api) return;
+    api.select(measureIndex + 1, 0, 0);
+    api.selectAll("measure");
+  };
+
+  const runSelectStaffInRiffScore = (staffIndex: number) => {
+    const api = apiRef.current;
+    if (!api) return;
+    api.select(1, staffIndex, 0);
+    api.selectAll("staff");
   };
 
   const applyOnSelection = (transform: (current: EditableScore, noteIds: Set<string>) => EditableScore) => {
@@ -434,17 +469,42 @@ export function RiffScoreEditor({
     };
   }, [isReady, score, rsToHf]);
 
-  // Subscribe to selection events for onNoteClick
+  // Subscribe to selection events for onNoteClick + optional measure/part inference
   useEffect(() => {
     const api = apiRef.current;
-    if (!api || !onNoteClick) return;
+    if (!api || (!onNoteClick && !onInspectorInferredRegion)) return;
 
     const unsub = api.on("selection", (sel: unknown) => {
       const rsSel = sel as RsSelection;
       if (rsSel.selectedNotes.length === 0) return;
+      if (!score) return;
 
-      const first = rsSel.selectedNotes[0];
-      if (!first.noteId || !score) return;
+      const selected = rsSel.selectedNotes;
+      if (
+        noteInspectionEnabled &&
+        onInspectorInferredRegion &&
+        selected.length > 1
+      ) {
+        const m0 = selected[0]!.measureIndex;
+        const allSameMeasure = selected.every((n) => n.measureIndex === m0);
+        const staffSet = new Set(selected.map((n) => n.staffIndex));
+        if (allSameMeasure && staffSet.size > 1) {
+          onInspectorInferredRegion({ kind: "measure", measureIndex: m0 });
+          return;
+        }
+        const s0 = selected[0]!.staffIndex;
+        const allSameStaff = selected.every((n) => n.staffIndex === s0);
+        const measureSet = new Set(selected.map((n) => n.measureIndex));
+        if (allSameStaff && measureSet.size > 1) {
+          onInspectorInferredRegion({ kind: "part", staffIndex: s0 });
+          return;
+        }
+      }
+
+      if (!onNoteClick) return;
+
+      const first = selected[0]!;
+      if (!first.noteId) return;
 
       // Map RiffScore selection back to HF NoteSelection
       const hfNoteId = rsToHf.get(first.noteId) ?? first.noteId;
@@ -483,7 +543,14 @@ export function RiffScoreEditor({
     });
 
     return unsub;
-  }, [isReady, onNoteClick, score, rsToHf]);
+  }, [
+    isReady,
+    noteInspectionEnabled,
+    onInspectorInferredRegion,
+    onNoteClick,
+    score,
+    rsToHf,
+  ]);
 
   // Subscribe to errors
   useEffect(() => {
@@ -603,12 +670,55 @@ export function RiffScoreEditor({
         config={config}
       />
 
+      {/* Theory Inspector: click bar numbers to focus the whole measure */}
+      {noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure && (
+        <div
+          className="absolute left-0 right-0 z-[25] flex flex-wrap items-center gap-1 px-2 py-1"
+          style={{
+            top: 48,
+            backgroundColor: "color-mix(in srgb, var(--hf-bg) 92%, transparent)",
+            borderBottom: "1px solid var(--hf-detail)",
+          }}
+          role="toolbar"
+          aria-label="Select measure for Theory Inspector"
+        >
+          <span
+            className="text-[9px] font-medium shrink-0 pr-1"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Bars
+          </span>
+          {Array.from({ length: measureCount }, (_, i) => (
+            <button
+              key={`m-${i}`}
+              type="button"
+              className="min-w-[22px] h-[22px] rounded text-[10px] font-mono leading-none transition-colors hover:opacity-90"
+              style={{
+                backgroundColor: "var(--hf-detail)",
+                color: "var(--hf-text-primary)",
+                border: "1px solid var(--hf-detail)",
+              }}
+              title={`Focus measure ${i + 1} for chat`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                runSelectMeasureInRiffScore(i);
+                onInspectorSelectMeasure(i);
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Part names when SVG staff geometry is unavailable */}
       {score.parts.length > 0 && !staffLabelsUseOverlay && (
         <div
           className="absolute left-0 right-0 z-[6] px-2 py-1 pointer-events-none"
           style={{
-            top: 48,
+            top:
+              noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure ? 92 : 48,
             backgroundColor: "color-mix(in srgb, var(--hf-bg) 94%, transparent)",
             borderBottom: "1px solid var(--hf-detail)",
           }}
@@ -616,15 +726,38 @@ export function RiffScoreEditor({
         >
           <div className="text-[10px] font-medium mb-0.5" style={{ color: "var(--hf-text-secondary)" }}>
             Staves (top → bottom)
+            {noteInspectionEnabled && onInspectorSelectPart ? " — click a line to focus the part" : ""}
           </div>
           <ol
             className="m-0 pl-4 text-[11px] leading-snug list-decimal"
             style={{ color: "var(--hf-text-primary)" }}
           >
             {score.parts.map((p, i) => (
-              <li key={p.id}>
-                {p.name}
-                {i === 0 && score.parts.length > 1 ? " — input melody" : ""}
+              <li key={p.id} className={noteInspectionEnabled && onInspectorSelectPart ? "pointer-events-auto" : ""}>
+                {noteInspectionEnabled && onInspectorSelectPart ? (
+                  <button
+                    type="button"
+                    className="text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit"
+                    style={{ color: "var(--hf-text-primary)" }}
+                    title={
+                      i === 0 && score.parts.length > 1
+                        ? `Melody (score part “${p.name}”) — focus for chat`
+                        : `Focus whole part “${p.name}” for chat`
+                    }
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      runSelectStaffInRiffScore(i);
+                      onInspectorSelectPart(i);
+                    }}
+                  >
+                    {i === 0 && score.parts.length > 1 ? "Melody" : p.name}
+                  </button>
+                ) : (
+                  <>
+                    {i === 0 && score.parts.length > 1 ? "Melody" : p.name}
+                  </>
+                )}
               </li>
             ))}
           </ol>
@@ -637,41 +770,58 @@ export function RiffScoreEditor({
           const part = score.parts[si];
           if (!part) return null;
           const centerY = layout.top + layout.height / 2;
+          const displayStaffName =
+            si === 0 && score.parts.length > 1 ? "Melody" : part.name;
+          const labelTitle =
+            si === 0 && score.parts.length > 1
+              ? `Melody (${part.name})`
+              : part.name;
+          const canPartInspect = noteInspectionEnabled && onInspectorSelectPart;
           return (
             <div
               key={part.id}
-              className="absolute pointer-events-none z-[5] flex items-center gap-1 max-w-[min(160px,32vw)]"
+              className={`absolute z-[25] flex items-center gap-1 max-w-[min(160px,32vw)] ${canPartInspect ? "" : "pointer-events-none"}`}
               style={{
                 left: 4,
                 top: centerY,
                 transform: "translateY(-50%)",
               }}
-              title={
-                part.name +
-                (si === 0 && score.parts.length > 1 ? " — input melody" : "")
-              }
+              title={canPartInspect ? `${labelTitle} — click to focus whole part for chat` : labelTitle}
             >
-              {si === 0 && score.parts.length > 1 ? (
-                <span
-                  className="shrink-0 rounded px-1 py-px text-[9px] font-medium leading-none"
-                  style={{
-                    backgroundColor: "var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
+              {canPartInspect ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 max-w-full text-left bg-transparent border-none p-0 cursor-pointer rounded-sm hover:opacity-90"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    runSelectStaffInRiffScore(si);
+                    onInspectorSelectPart(si);
                   }}
                 >
-                  Input
+                  <span
+                    className="truncate font-body text-[11px] font-medium leading-tight"
+                    style={{
+                      color: "var(--hf-text-primary)",
+                      textShadow:
+                        "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
+                    }}
+                  >
+                    {displayStaffName}
+                  </span>
+                </button>
+              ) : (
+                <span
+                  className="truncate font-body text-[11px] font-medium leading-tight"
+                  style={{
+                    color: "var(--hf-text-primary)",
+                    textShadow:
+                      "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
+                  }}
+                >
+                  {displayStaffName}
                 </span>
-              ) : null}
-              <span
-                className="truncate font-body text-[11px] font-medium leading-tight"
-                style={{
-                  color: "var(--hf-text-primary)",
-                  textShadow:
-                    "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
-                }}
-              >
-                {part.name}
-              </span>
+              )}
             </div>
           );
         })}
@@ -760,6 +910,28 @@ export function RiffScoreEditor({
               />
             );
           })}
+        </div>
+      )}
+
+      {focusHighlightSet.size > 0 && notePositions.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none z-[4]">
+          {notePositions
+            .filter((p) => focusHighlightSet.has(p.selection.noteId))
+            .map((pos) => (
+              <div
+                key={`focus-${pos.selection.noteId}`}
+                className="absolute rounded-sm"
+                style={{
+                  left: pos.x - 3,
+                  top: pos.y - 3,
+                  width: pos.w + 6,
+                  height: pos.h + 8,
+                  backgroundColor: "rgba(16, 185, 129, 0.2)",
+                  borderBottom: "2px solid rgba(16, 185, 129, 0.75)",
+                }}
+                aria-hidden="true"
+              />
+            ))}
         </div>
       )}
     </div>

@@ -1,0 +1,32 @@
+# HarmonyForge — Python deps for PDF → MusicXML OMR (`engine/parsers/fileIntake.ts` + `oemer` CLI).
+#
+# Node.js (main app): root `npm install` and `harmony-forge-redesign/npm install` — see `make install`.
+#
+# Python version: use 3.10–3.12 in a venv for oemer + onnxruntime (official wheels). Python 3.14+ may
+# lack onnx wheels or fail when oemer auto-downloads checkpoints on first run.
+#
+# oemer checkpoints: first CLI run downloads ~4 ONNX files into site-packages/oemer/checkpoints (HTTPS).
+# If that fails (SSL, proxy, timeout), install manually from:
+#   https://github.com/BreezeWhite/oemer/releases/tag/checkpoints
+# Then point HarmonyForge at that Python’s `oemer` via OEMER_BIN.
+#
+# Native / system (not pip):
+#   - pdfalto: cmake + make in ./pdfalto (optional PDFALTO_BIN)
+#   - Poppler: pdftoppm on PATH (brew install poppler / apt install poppler-utils)
+#
+# oemer’s PyPI package requests onnxruntime-gpu on Linux, which often has no wheel on CPU-only
+# machines. Install the CPU stack below, then add oemer without re-resolving its requires
+# (Makefile `install` does both steps).
+
+onnxruntime>=1.16.0,<2
+opencv-python-headless>=4.5.3.56
+matplotlib>=3.7.0
+pillow>=10.0.0
+scipy>=1.11.0
+scikit-learn>=1.2.0
+types-Pillow
+types-tensorflow
+typing-extensions
+
+# oemer CLI is installed by `make install` after this file:
+#   pip install "oemer==0.1.8" --no-deps

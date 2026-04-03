@@ -130,7 +130,14 @@ function getCandidatesSimple(parsed, fixedSoprano) {
 /** Backtracking solver with configurable voice-leading check */
 function solve(parsedChords, melodyPitches, check = checkVoiceLeading) {
     const result = [];
-    /** Parsimonious voice-leading (HFLitReview): prefer common tones, then stepwise motion. Lower score = better. */
+    /**
+     * Candidate ordering heuristic (not a species-counterpoint cost function).
+     * Pedagogical lineage: Fux, *Gradus ad Parnassum* (Mann ed.) and Open Music Theory stress conjunct motion
+     * and linear independence; contrary motion toward perfect consonances avoids concealed parallels in strict
+     * counterpoint. This engine does **not** encode Fux interval arithmetic or species rules—it only ranks
+     * voicings by **sum of absolute MIDI semitone motion** across S/A/T/B vs the previous chord (parsimony proxy).
+     * Lower score = tried first during backtracking.
+     */
     function candidateMotionScore(prev, curr) {
         if (!prev)
             return 0;

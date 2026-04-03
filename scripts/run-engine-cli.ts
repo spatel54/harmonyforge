@@ -8,17 +8,16 @@
  *   npx tsx scripts/run-engine-cli.ts --instruments "Soprano:Flute,Bass:Cello"
  *
  * Options:
- *   -i, --input <path>    Input MusicXML (default: input/月亮代表我的心.xml)
+ *   -i, --input <path>    Input .xml, .musicxml, .mxl, .mid/.midi, or .pdf (default: input/月亮代表我的心.xml)
  *   -o, --output <path>   Output path (default: output/<name>_flute_cello.xml)
  *   --mood <major|minor>  Key mode (default: major)
  *   --instruments <spec>  Comma-separated Voice:Instrument (e.g. "Soprano:Flute,Bass:Cello")
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
-import { parseMusicXML } from "../engine/parsers/musicxmlParser.js";
+import { intakeFileToParsedScore } from "../engine/parsers/fileIntake.js";
 import { ensureChords } from "../engine/chordInference.js";
 import { generateSATB } from "../engine/solver.js";
 import { satbToMusicXML } from "../engine/satbToMusicXML.js";
@@ -72,7 +71,7 @@ function parseArgs(): {
   }
 
   if (!output) {
-    const base = input.replace(/\.(xml|musicxml)$/i, "").split(/[/\\]/).pop() ?? "output";
+    const base = input.replace(/\.(xml|musicxml|mxl|mid|midi|pdf)$/i, "").split(/[/\\]/).pop() ?? "output";
     const suffix = Object.values(instruments).flat().filter(Boolean).join("_").toLowerCase() || "flute_cello";
     output = join(ROOT, "output", `${base}_${suffix}.xml`);
   }
@@ -83,19 +82,20 @@ function parseArgs(): {
 function main(): number {
   const { input, output, mood, instruments } = parseArgs();
 
-  let xml: string;
+  let buffer: Buffer;
   try {
-    xml = readFileSync(input, "utf-8");
+    buffer = readFileSync(input);
   } catch (e) {
     console.error(`Error reading ${input}:`, e);
     return 1;
   }
 
-  const parsed = parseMusicXML(xml);
-  if (!parsed || parsed.melody.length === 0) {
-    console.error("Could not parse file or no melody found");
+  const intake = intakeFileToParsedScore(buffer, basename(input), { allowPdfOm: true });
+  if (!intake.ok) {
+    console.error(intake.failure.error);
     return 1;
   }
+  const parsed = intake.parsed;
 
   const withChords = ensureChords(parsed, mood);
   const result = generateSATB({

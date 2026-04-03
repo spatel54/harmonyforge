@@ -4,6 +4,8 @@ import {
   buildCrossPartIntervalFacts,
   buildSatbNoteContextLines,
   buildScorePartRosterLines,
+  formatAuthoritativeDurationFact,
+  formatScoreDigestLine,
 } from "@/lib/music/noteExplainContext";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { scoreToAuditedSlots } from "@/lib/music/theoryInspectorSlots";
@@ -23,8 +25,12 @@ describe("buildScorePartRosterLines", () => {
       ],
     };
     const lines = buildScorePartRosterLines(score);
-    expect(lines.some((l) => l.includes("Piano") && l.includes("input"))).toBe(true);
-    expect(lines.some((l) => l.includes("Violin") && l.includes("staff 2"))).toBe(true);
+    expect(lines.some((l) => l.includes("Staff 1") && l.includes("Melody"))).toBe(
+      true,
+    );
+    expect(lines.some((l) => l.includes("Violin") && l.includes("staff 2"))).toBe(
+      true,
+    );
     expect(lines.some((l) => l.includes("Cello"))).toBe(true);
   });
 });
@@ -76,6 +82,37 @@ describe("buildCrossPartIntervalFacts", () => {
   });
 });
 
+describe("formatScoreDigestLine", () => {
+  it("includes duration fields in one line", () => {
+    const s = formatScoreDigestLine({
+      measureNumber1Based: 4,
+      beatInBar: 0,
+      note: { id: "n", pitch: "F4", duration: "h" },
+      measureQuarterBeats: 4,
+      timeSignature: "4/4",
+    });
+    expect(s.startsWith("SCORE_DIGEST:")).toBe(true);
+    expect(s).toContain("F4");
+    expect(s).toContain("half");
+    expect(s).toContain("quarterNoteSpan=2");
+  });
+});
+
+describe("formatAuthoritativeDurationFact", () => {
+  it("states human duration and beat span loudly", () => {
+    const line = formatAuthoritativeDurationFact(
+      { id: "n1", pitch: "F4", duration: "h" },
+      4,
+      "4/4",
+    );
+    expect(line).toContain("AUTHORITATIVE NOTATION");
+    expect(line).toContain("F4");
+    expect(line).toContain("half note");
+    expect(line).toContain("2");
+    expect(line).toContain("4/4");
+  });
+});
+
 describe("buildAdditiveNoteContextLines", () => {
   it("includes roster, generated labels, and cross-part intervals", () => {
     const score: EditableScore = {
@@ -104,7 +141,7 @@ describe("buildAdditiveNoteContextLines", () => {
               id: "m2",
               notes: [
                 { id: "b1", pitch: "G3", duration: "q" },
-                { id: "b2", pitch: "A3", duration: "q" },
+                { id: "b2", pitch: "A3", duration: "h" },
               ],
             },
           ],
@@ -112,9 +149,18 @@ describe("buildAdditiveNoteContextLines", () => {
       ],
     };
     const lines = buildAdditiveNoteContextLines(score, 0, 1, "h1");
-    expect(lines.some((l) => l.includes("Tune") && l.includes("Staff 1"))).toBe(true);
+    expect(lines.some((l) => l.includes("NOTATION PROVIDED TO YOU"))).toBe(true);
+    expect(lines.some((l) => l.startsWith("SCORE_DIGEST:"))).toBe(true);
+    expect(lines.some((l) => l.includes("MEASURE FOCUS"))).toBe(true);
+    expect(lines.some((l) => l.includes("Staff 1") && l.includes("Melody"))).toBe(
+      true,
+    );
     expect(lines.some((l) => l.includes("generated") && l.includes("Horn"))).toBe(true);
     expect(lines.filter((l) => l.startsWith("FACT: Interval from clicked")).length).toBeGreaterThanOrEqual(1);
+    expect(lines.some((l) => l.includes("half note") && l.includes("A3"))).toBe(true);
+    expect(lines.some((l) => l.includes("AUTHORITATIVE NOTATION") && l.includes("A3"))).toBe(
+      true,
+    );
   });
 });
 

@@ -28,6 +28,14 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Called when the score changes from within the editor (RiffScore user edits) */
   onScoreChange?: (score: EditableScore) => void;
   noteInspectionEnabled?: boolean;
+  focusHighlightNoteIds?: readonly string[];
+  onInspectorSelectMeasure?: (measureIndex: number) => void;
+  onInspectorSelectPart?: (staffIndex: number) => void;
+  onInspectorInferredRegion?: (
+    region:
+      | { kind: "measure"; measureIndex: number }
+      | { kind: "part"; staffIndex: number },
+  ) => void;
 }
 
 /**
@@ -49,6 +57,10 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       issueHighlights,
       onScoreChange,
       noteInspectionEnabled = false,
+      focusHighlightNoteIds,
+      onInspectorSelectMeasure,
+      onInspectorSelectPart,
+      onInspectorInferredRegion,
       className,
       ...props
     },
@@ -375,6 +387,10 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onRejectCorrection={onRejectCorrection}
               issueHighlights={issueHighlights}
               noteInspectionEnabled={noteInspectionEnabled}
+              focusHighlightNoteIds={focusHighlightNoteIds}
+              onInspectorSelectMeasure={onInspectorSelectMeasure}
+              onInspectorSelectPart={onInspectorSelectPart}
+              onInspectorInferredRegion={onInspectorInferredRegion}
             />
           </div>
         )}

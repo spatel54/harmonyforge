@@ -5,21 +5,16 @@
 import express from "express";
 import multer from "multer";
 import { generateSATB } from "./solver.js";
-import { spawnSync } from "child_process";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import { parseMusicXML } from "./parsers/musicxmlParser.js";
-import { parseMIDI } from "./parsers/midiParser.js";
-import { parseMXL } from "./parsers/mxlParser.js";
+import { intakeFileToParsedScore } from "./parsers/fileIntake.js";
 import { ensureChords } from "./chordInference.js";
-import { satbToMusicXML } from "./satbToMusicXML.js";
+import { satbToMusicXML, parsedScoreToPartwiseMelodyMusicXML } from "./satbToMusicXML.js";
 import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB.js";
 const app = express();
 const PORT = 8000;
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 25 * 1024 * 1024 },
 });
 const VALID_TONICS = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -127,66 +122,14 @@ app.post("/api/generate-from-file", upload.fields([
             // ignore invalid JSON
         }
     }
-    const ext = (file.originalname.split(".").pop() ?? "").toLowerCase();
-    let parsed;
-    if (ext === "pdf") {
-        const tmpDir = mkdtempSync(join(tmpdir(), "hf-pdf-"));
-        const pdfPath = join(tmpDir, "input.pdf");
-        const outDir = join(tmpDir, "out");
-        try {
-            writeFileSync(pdfPath, file.buffer);
-            const result = spawnSync("audiveris", [
-                "-batch",
-                "-transcribe",
-                "-export",
-                "-output",
-                outDir,
-                "-option",
-                "org.audiveris.omr.sheet.BookManager.useSeparateBookFolders=false",
-                pdfPath,
-            ], { encoding: "utf-8", timeout: 60000 });
-            if (result.status === 0) {
-                const candidates = ["input.mxl", "input.mvt1.mxl"];
-                for (const name of candidates) {
-                    const mxlPath = join(outDir, name);
-                    if (existsSync(mxlPath)) {
-                        parsed = parseMXL(readFileSync(mxlPath));
-                        if (parsed?.melody.length)
-                            break;
-                    }
-                }
-            }
-        }
-        catch {
-            // fall through to 501
-        }
-        if (!parsed || !parsed.melody.length) {
-            res.status(501).json({
-                error: "PDF conversion requires Audiveris OMR. Install from https://audiveris.github.io then run: audiveris -batch -transcribe -export -output ./out file.pdf. Upload the generated .mxl or .xml file.",
-            });
-            return;
-        }
-    }
-    else if (["xml", "musicxml"].includes(ext)) {
-        const xml = file.buffer.toString("utf-8");
-        parsed = parseMusicXML(xml);
-    }
-    else if (ext === "mxl") {
-        parsed = parseMXL(file.buffer);
-    }
-    else if (["mid", "midi"].includes(ext)) {
-        parsed = parseMIDI(file.buffer);
-    }
-    else {
-        res.status(400).json({
-            error: `Unsupported format: .${ext}. Use .xml, .mxl, .mid, or .midi.`,
-        });
+    const intake = intakeFileToParsedScore(file.buffer, file.originalname, {
+        allowPdfOm: true,
+    });
+    if (!intake.ok) {
+        res.status(intake.failure.status).json({ error: intake.failure.error });
         return;
     }
-    if (!parsed || parsed.melody.length === 0) {
-        res.status(422).json({ error: "Could not parse file or no melody found" });
-        return;
-    }
+    const parsed = intake.parsed;
     const withChords = ensureChords(parsed, config?.mood, config?.genre);
     const leadSheet = {
         key: withChords.key,
@@ -205,24 +148,38 @@ app.post("/api/generate-from-file", upload.fields([
     });
     res.type("application/xml").send(musicXML);
 });
-/** Validate from MusicXML file: parse → infer chords → generate SATB → validate. Returns HER-style metrics. */
+/** Intake any supported format → single-part MusicXML for Document preview (same path as raw .xml upload). */
+app.post("/api/to-preview-musicxml", upload.single("file"), (req, res) => {
+    const file = req.file;
+    if (!file) {
+        res.status(400).json({ error: "No file uploaded" });
+        return;
+    }
+    const intake = intakeFileToParsedScore(file.buffer, file.originalname, {
+        allowPdfOm: true,
+    });
+    if (!intake.ok) {
+        res.status(intake.failure.status).json({ error: intake.failure.error });
+        return;
+    }
+    const xml = parsedScoreToPartwiseMelodyMusicXML(intake.parsed);
+    res.type("application/xml").send(xml);
+});
+/** Validate from file (.xml, .musicxml, .mxl, .mid, .midi; not PDF): parse → infer chords → generate SATB → validate. */
 app.post("/api/validate-from-file", upload.single("file"), (req, res) => {
     const file = req.file;
     if (!file) {
         res.status(400).json({ error: "No file uploaded" });
         return;
     }
-    const ext = (file.originalname.split(".").pop() ?? "").toLowerCase();
-    if (!["xml", "musicxml"].includes(ext)) {
-        res.status(400).json({ error: "Use MusicXML .xml file for validation" });
+    const intake = intakeFileToParsedScore(file.buffer, file.originalname, {
+        allowPdfOm: false,
+    });
+    if (!intake.ok) {
+        res.status(intake.failure.status).json({ error: intake.failure.error });
         return;
     }
-    const xml = file.buffer.toString("utf-8");
-    const parsed = parseMusicXML(xml);
-    if (!parsed || parsed.melody.length === 0) {
-        res.status(422).json({ error: "Could not parse file or no melody found" });
-        return;
-    }
+    const parsed = intake.parsed;
     const withChords = ensureChords(parsed, "major", "classical");
     const leadSheet = {
         key: withChords.key,
@@ -237,24 +194,21 @@ app.post("/api/validate-from-file", upload.single("file"), (req, res) => {
     const validation = validateSATBSequence(result.slots.map((s) => s.voices));
     res.json(validation);
 });
-/** Export practical plain-text chord chart from MusicXML file. */
+/** Export practical plain-text chord chart from MusicXML / MXL / MIDI (not PDF). */
 app.post("/api/export-chord-chart", upload.single("file"), (req, res) => {
     const file = req.file;
     if (!file) {
         res.status(400).json({ error: "No file uploaded" });
         return;
     }
-    const ext = (file.originalname.split(".").pop() ?? "").toLowerCase();
-    if (!["xml", "musicxml"].includes(ext)) {
-        res.status(400).json({ error: "Use MusicXML .xml file for chord chart export" });
+    const intake = intakeFileToParsedScore(file.buffer, file.originalname, {
+        allowPdfOm: false,
+    });
+    if (!intake.ok) {
+        res.status(intake.failure.status).json({ error: intake.failure.error });
         return;
     }
-    const xml = file.buffer.toString("utf-8");
-    const parsed = parseMusicXML(xml);
-    if (!parsed || parsed.melody.length === 0) {
-        res.status(422).json({ error: "Could not parse file or no melody found" });
-        return;
-    }
+    const parsed = intake.parsed;
     const withChords = ensureChords(parsed, "major", "classical");
     const title = parsed.melodyPartName ?? "Untitled";
     const keyLabel = `${withChords.key.tonic} ${withChords.key.mode}`;

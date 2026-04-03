@@ -33,6 +33,10 @@ import { ChatFAB } from "@/components/atoms/ChatFAB";
 import { useTheoryInspector } from "@/hooks/useTheoryInspector";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import {
+  buildMeasureFocusFacts,
+  buildPartFocusFacts,
+} from "@/lib/music/regionExplainContext";
+import {
   applyOriginalGeneratedPitches,
   captureGenerationBaseline,
 } from "@/lib/music/theoryInspectorBaseline";
@@ -68,9 +72,16 @@ export default function TactileSandboxPage() {
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
   const {
     messages: inspectorMessages,
+    inputValue: inspectorInputValue,
+    setInputValue: setInspectorInputValue,
+    sendMessage: sendInspectorMessage,
+    handleChipClick: handleInspectorChipClick,
     isStreaming,
+    streamingMessageId: inspectorStreamingMessageId,
     issueHighlights,
     selectedNoteInsight,
+    inspectorScoreFocus,
+    setInspectorScoreFocus,
     explainGeneratedNote,
     runAudit,
   } = useTheoryInspector();
@@ -917,6 +928,56 @@ export default function TactileSandboxPage() {
     }
   }, [isInspectorOpen, score, runAudit]);
 
+  const handleInspectorSelectMeasure = React.useCallback(
+    (measureIndex: number) => {
+      if (!score) return;
+      const { lines, noteIds } = buildMeasureFocusFacts(score, measureIndex);
+      setInspectorScoreFocus({
+        kind: "measure",
+        measureIndex,
+        evidenceLines: lines,
+        noteIds,
+      });
+    },
+    [score, setInspectorScoreFocus],
+  );
+
+  const handleInspectorSelectPart = React.useCallback(
+    (staffIndex: number) => {
+      if (!score) return;
+      const part = score.parts[staffIndex];
+      if (!part) return;
+      const { lines, noteIds } = buildPartFocusFacts(score, part.id);
+      setInspectorScoreFocus({
+        kind: "part",
+        partId: part.id,
+        partName: part.name,
+        evidenceLines: lines,
+        noteIds,
+      });
+    },
+    [score, setInspectorScoreFocus],
+  );
+
+  const handleInspectorInferredRegion = React.useCallback(
+    (region:
+      | { kind: "measure"; measureIndex: number }
+      | { kind: "part"; staffIndex: number }) => {
+      if (region.kind === "measure") {
+        handleInspectorSelectMeasure(region.measureIndex);
+      } else {
+        handleInspectorSelectPart(region.staffIndex);
+      }
+    },
+    [handleInspectorSelectMeasure, handleInspectorSelectPart],
+  );
+
+  const inspectorFocusHighlightNoteIds = React.useMemo(() => {
+    const f = inspectorScoreFocus;
+    if (!f || f.kind === "note") return [];
+    return f.noteIds;
+  }, [inspectorScoreFocus]);
+
   const handleScoreNoteClick = React.useCallback(
     (sel: NoteSelection, shiftKey: boolean) => {
       toggleNoteSelection(sel, shiftKey);
@@ -1018,6 +1079,16 @@ export default function TactileSandboxPage() {
               onRejectCorrection={handleRejectCorrection}
               issueHighlights={issueHighlights}
               noteInspectionEnabled={isInspectorOpen}
+              focusHighlightNoteIds={inspectorFocusHighlightNoteIds}
+              onInspectorSelectMeasure={
+                isInspectorOpen ? handleInspectorSelectMeasure : undefined
+              }
+              onInspectorSelectPart={
+                isInspectorOpen ? handleInspectorSelectPart : undefined
+              }
+              onInspectorInferredRegion={
+                isInspectorOpen ? handleInspectorInferredRegion : undefined
+              }
             />
             {layersPanelOpen && score && (
               <div
@@ -1081,8 +1152,17 @@ export default function TactileSandboxPage() {
 
             <TheoryInspectorPanel
               className="h-full flex-1"
+              messages={inspectorMessages}
+              inputValue={inspectorInputValue}
+              onInputChange={setInspectorInputValue}
+              onSend={() => {
+                void sendInspectorMessage(inspectorInputValue);
+              }}
+              onChipClick={(chip) => handleInspectorChipClick(chip, score)}
               isStreaming={isStreaming}
+              streamingMessageId={inspectorStreamingMessageId}
               noteInsight={selectedNoteInsight}
+              inspectorScoreFocus={inspectorScoreFocus}
               debugStatus={inspectorDebugStatus}
               onClose={() => setIsInspectorOpen(false)}
               suggestionBatches={suggestionBatchMap}

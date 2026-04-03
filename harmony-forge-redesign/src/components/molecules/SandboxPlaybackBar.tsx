@@ -222,7 +222,7 @@ export const SandboxPlaybackBar = React.forwardRef<
               "flex items-center justify-center w-[28px] h-[28px] rounded-[16px]",
               "disabled:opacity-30 disabled:cursor-not-allowed",
             )}
-            style={{ color: "var(--text-on-light)" }}
+            style={{ color: "var(--hf-text-primary)" }}
           >
             <ChevronLeft
               className="w-[16px] h-[16px]"
@@ -234,7 +234,7 @@ export const SandboxPlaybackBar = React.forwardRef<
           {/* PageCounter: IBM Plex Mono fs:13 fw:500 */}
           <span
             className="font-mono text-[13px] font-medium tabular-nums whitespace-nowrap"
-            style={{ color: "var(--text-on-light)" }}
+            style={{ color: "var(--hf-text-primary)" }}
             aria-live="polite"
             aria-label={`Page ${currentPage} of ${totalPages}`}
           >
@@ -252,7 +252,7 @@ export const SandboxPlaybackBar = React.forwardRef<
               "flex items-center justify-center w-[28px] h-[28px] rounded-[16px]",
               "disabled:opacity-30 disabled:cursor-not-allowed",
             )}
-            style={{ color: "var(--text-on-light)" }}
+            style={{ color: "var(--hf-text-primary)" }}
           >
             <ChevronRight
               className="w-[16px] h-[16px]"

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js engine/ --passWithNoTests",
     "lint": "eslint engine/ --ext .ts",
-    "dev:backend": "tsx watch engine/server.ts",
+    "dev:backend": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" tsx watch engine/server.ts",
     "build:engine": "tsc -p engine/tsconfig.json"
   },
   "dependencies": {

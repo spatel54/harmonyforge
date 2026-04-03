@@ -25,10 +25,10 @@ export default function DocumentPage() {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [previewScore, setPreviewScore] = React.useState<EditableScore | null>(null);
-  const [previewMusicXML, setPreviewMusicXML] = React.useState<string | null>(null);
   const [previewMeta, setPreviewMeta] = React.useState<{ title: string; meta: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const file = useUploadStore((s) => s.file);
+  const storePreviewXml = useUploadStore((s) => s.previewMusicXML);
   const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
   const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
@@ -55,29 +55,33 @@ export default function DocumentPage() {
   React.useEffect(() => {
     if (!file) {
       setPreviewScore(null);
-      setPreviewMusicXML(null);
       setPreviewMeta(null);
       return;
     }
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-    if (!["xml", "musicxml"].includes(ext)) {
-      setPreviewScore(null);
-      setPreviewMusicXML(null);
-      setPreviewMeta({ title: file.name.replace(/\.[^/.]+$/, ""), meta: "Preview after Generate" });
+    if (["xml", "musicxml"].includes(ext)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const xml = String(reader.result);
+        const meta = extractMusicXMLMetadata(xml);
+        setPreviewMeta(meta);
+        setPreviewScore(parseMusicXML(xml));
+      };
+      reader.readAsText(file, "utf-8");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const xml = String(reader.result);
-      const meta = extractMusicXMLMetadata(xml);
-      setPreviewMusicXML(xml);
-      setPreviewMeta(meta);
-      // Also parse for fallback (VexFlow) — OSMD takes precedence when musicXML is set
-      const score = parseMusicXML(xml);
-      setPreviewScore(score);
-    };
-    reader.readAsText(file, "utf-8");
-  }, [file]);
+    if (!storePreviewXml) {
+      setPreviewScore(null);
+      setPreviewMeta({
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        meta: "No preview — go back and upload again",
+      });
+      return;
+    }
+    const meta = extractMusicXMLMetadata(storePreviewXml);
+    setPreviewMeta(meta);
+    setPreviewScore(parseMusicXML(storePreviewXml));
+  }, [file, storePreviewXml]);
 
   // Don't render document UI while redirecting (no file)
   if (!file) {
