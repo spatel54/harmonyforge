@@ -1,6 +1,6 @@
 # HarmonyForge
 
-> **In one sentence:** Upload your melody, get rule-based harmonies you can **edit**, **hear**, and **ask questions about**—with a transparent engine, not a black-box model.
+> **In one sentence:** Upload your melody, get rule-based harmonies you can **edit**, **hear**, and **ask questions about**—with a transparent AI engine, not a black-box model.
 
 ---
 
