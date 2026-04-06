@@ -1,1 +1,5 @@
 temp
+
+# Root-level npm artifacts (not canonical for this repo — see node_modules/README.md)
+/node_modules/*
+!/node_modules/README.md
