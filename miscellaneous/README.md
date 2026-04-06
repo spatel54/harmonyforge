@@ -1,27 +1,55 @@
 # Miscellaneous
 
-Supporting and legacy material **outside** the main `backend/` and `frontend/` apps.
+> **Stuff that is not the main app.**  
+> Day-to-day HarmonyForge work happens in **`../backend/`** and **`../frontend/`**. This folder is for legacy demos, PDF tooling, and small helper scripts.
+
+---
+
+## What is here
+
+```text
+miscellaneous/
+├── chamber-music-fullstack/   ← older reference project (read its own README)
+├── pdfalto/                   ← vendored PDF→ALTO build (see below)
+├── run-amp.sh                 ← optional Amp automation script
+└── .playwright-mcp/           ← local tooling artifacts (safe to ignore)
+```
+
+---
 
 ## `chamber-music-fullstack/`
 
-Legacy / reference stack from earlier project layout. **Do not treat as the canonical HarmonyForge app.** See:
+| | |
+|--|--|
+| **What** | Legacy / reference full-stack from an earlier layout |
+| **Important** | **Not** the canonical HarmonyForge app — do not deploy this by mistake |
+| **Details** | [chamber-music-fullstack/README.md](chamber-music-fullstack/README.md) |
 
-- [chamber-music-fullstack/README.md](chamber-music-fullstack/README.md)
+---
 
 ## `pdfalto/`
 
-Vendored **pdfalto** build used for PDF → ALTO (and related intake). From the **repo root**:
+| | |
+|--|--|
+| **What** | Vendored **pdfalto** sources and build output for PDF → ALTO (used on the intake path) |
+| **How to build** | From **repo root**: `make pdfalto` |
+| **After build** | Binary and upstream files appear under this tree (may include an upstream readme) |
 
-```bash
-make pdfalto
-```
-
-After a successful build, this directory contains the binary and upstream-style files (including any `Readme` shipped with the vendored tree).
+---
 
 ## `run-amp.sh`
 
-Runs [Sourcegraph Amp](https://ampcode.com/install) with a local **`PROMPT.md`**: retries every 5s until success. Expects **`AMP_API_KEY`** in **`.env`** next to the script (or in the environment). If your prompt file lives elsewhere (e.g. **`docs/PROMPT.md`**), adjust the `cat` path in the script.
+| | |
+|--|--|
+| **What** | Runs [Sourcegraph Amp](https://ampcode.com/install) against a local **`PROMPT.md`**, retrying every 5s until it succeeds |
+| **Needs** | **`AMP_API_KEY`** in a `.env` file **next to this script** (or exported in the shell) |
+| **Tip** | If your prompt lives in **`docs/PROMPT.md`**, edit the script’s `cat PROMPT.md` line to point there |
+
+---
 
 ## `.playwright-mcp/`
 
-Local Playwright / MCP-related artifacts. **Not required** for core HarmonyForge development.
+| | |
+|--|--|
+| **What** | Local Playwright / MCP-related files |
+| **Need it?** | **No** for normal HarmonyForge development |

@@ -1,76 +1,106 @@
 # HarmonyForge
 
-**HarmonyForge** is a *Glass Box* co-creative system for symbolic music arrangement: deterministic, rule-based harmony generation from your melody (MusicXML, MIDI, MXL, PDF when OMR works) so you stay the author and can see *why* the engine chose each harmony move.
+> **In one sentence:** Upload your melody, get rule-based harmonies you can **edit**, **hear**, and **ask questions about**—with a transparent engine, not a black-box model.
 
-## What it is
+---
 
-- **Logic Core** (Node/TypeScript backend): chord inference, SATB-style solver, file intake, REST API on **port 8000**.
-- **Tactile Sandbox** (Next.js frontend on **port 3000**): upload → preview + ensemble config → generate → **RiffScore** editor with **`EditableScore`** in Zustand as the canonical model (bidirectional sync). Playback, export, **Theory Inspector** (note explain, chat, stylist suggestions, SATB audit with highlights on the score).
-- **Theory Inspector** uses optional LLMs as **explainers and suggestors** only; it does not invent the primary harmony output. Configure keys in [`frontend/.env.example`](frontend/.env.example) (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL` / `OPENAI_URL`).
+## Start here
 
-**Principles:** expressive sovereignty · copyright-safe axiomatic theory (not dataset mimicry) · pedagogical transparency.
+| If you want to… | Do this |
+|-----------------|--------|
+| **Run the app locally** | [Quick start](#quick-start) (two commands) |
+| **Understand the folders** | [Repository layout](#repository-layout) and [folder guides](#folder-guides) |
+| **Read the roadmap / history** | [docs/README.md](docs/README.md) → `plan.md` + `progress.md` |
+| **Work on the website** | [frontend/README.md](frontend/README.md) |
+| **Work on harmony / API** | [backend/README.md](backend/README.md) |
 
-## What it is not
+---
 
-Not a black-box neural harmonizer, not audio synthesis, and not “hands-off” automation—the app keeps **edit authority** with you.
+## What you get (three pieces)
 
-## Research context
+```text
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│   Logic Core        │     │   Tactile Sandbox   │     │   Theory Inspector  │
+│   (backend)         │     │   (Next.js)         │     │   (optional LLM)    │
+├─────────────────────┤     ├─────────────────────┤     ├─────────────────────┤
+│ Parse files         │     │ Upload & configure  │     │ Explain notes       │
+│ Infer chords        │ ──► │ Edit in score       │ ◄─► │ Chat & stylist tips │
+│ Solve SATB-style    │     │ Play & export       │     │ Audit highlights    │
+│ REST API :8000      │     │ Browser :3000       │     │ Keys in .env.local  │
+└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
+```
 
-[SALT Lab](https://ischool.illinois.edu/people/yun-huang) (UIUC). Motivation: reduce the **repair-phase bottleneck** after probabilistic tools by pairing a **transparent engine** with a tactile workspace and inspector. See **Related resources** below for empirical and thematic studies.
+- **You stay the author.** The engine suggests harmonies from **music-theory rules**; the optional LLM **explains** and **suggests**—it does not replace the deterministic output.
+- **Inputs:** MusicXML, MIDI, MXL; PDF when the OMR path is set up (still finicky).
+- **Not included:** Automatic “AI composer” in the hidden sense, full DAW audio production, or surrendering edit control.
 
-## User flow
+**Ideas behind the project:** expressive sovereignty, copyright-safe axiomatic theory (not copying datasets), and teaching-friendly transparency. Research context: [SALT Lab](https://ischool.illinois.edu/people/yun-huang) (UIUC).
 
-| Step | Route | What you do |
-|------|--------|-------------|
-| Playground | `/` | Upload score; optional **Welcome** / **Tour** in header; first visit **onboarding modal** |
-| Standalone onboarding | `/onboarding` | Same upload flow with onboarding modal always available (demo / testing) |
-| Document | `/document` | Preview, mood/genre/instruments, **Generate** (or melody-only in M5 reviewer arm) |
-| Sandbox | `/sandbox` | Edit in **RiffScore**, playback, export, **Theory Inspector** |
+---
+
+## Your journey in the app
+
+```mermaid
+flowchart LR
+  A["Playground\n/"] --> B["Document\n/document"]
+  B --> C["Sandbox\n/sandbox"]
+  A -.->|optional| O["Onboarding\n/onboarding"]
+```
+
+| Step | URL | What happens |
+|------|-----|----------------|
+| 1 | `/` | Upload a score; first-time **Welcome** / **Tour** if you use them |
+| 2 | `/document` | Preview, pick mood and instruments, **Generate** harmonies |
+| 3 | `/sandbox` | Edit in **RiffScore**, play back, export, open **Theory Inspector** |
+| Alt | `/onboarding` | Same as step 1, with onboarding always easy to reach (demos / testing) |
+
+---
 
 ## Quick start
 
 ```bash
-make install       # backend/ + frontend/ deps (and Python deps for PDF/OMR tooling)
-make dev           # backend :8000 + Next :3000
+make install    # Installs backend + frontend (and Python bits for PDF/OMR)
+make dev        # Engine :8000 + website :3000 together
 ```
 
-Open **http://localhost:3000**.
+Then open **http://localhost:3000** in your browser.
 
-```bash
-make dev-clean     # Free ports 8000 / 3000 / 3001 if something is stuck
-make test-engine   # CLI: sample input → backend/output/
-```
+| Stuck on ports? | One-liner |
+|-----------------|-----------|
+| Something already using 8000 / 3000 / 3001 | `make dev-clean` then `make dev` again |
 
-**Environment:** copy [`frontend/.env.example`](frontend/.env.example) to `.env.local` for Theory Inspector. **`NEXT_PUBLIC_API_URL`** should point at the engine (default `http://localhost:8000`) for browser calls.
+**Theory Inspector (optional):** copy [`frontend/.env.example`](frontend/.env.example) → `frontend/.env.local` and add `OPENAI_API_KEY`. The browser talks to the engine via **`NEXT_PUBLIC_API_URL`** (defaults to `http://localhost:8000`).
 
-**Note:** Prefer **`make install`** in **`backend/`** and **`frontend/`**. A stray **`node_modules/`** at the repo root is not the supported layout (there is no root `package.json`).
+> **Heads-up:** Install dependencies inside **`backend/`** and **`frontend/`** (or use `make install`). A **`node_modules/`** folder at the **repo root** alone is not a supported setup—there is no root `package.json`.
+
+---
 
 ## Repository layout
 
 ```text
 harmonyforge/
-├── Makefile              # install, dev, test, build, pdfalto, dev-clean
-├── README.md             # this file
-├── backend/              # → backend/README.md — engine + HTTP API
-├── frontend/             # → frontend/README.md — Next.js app
-├── docs/                 # → docs/README.md — plans, ADRs, taxonomy, logs
-├── miscellaneous/        # → miscellaneous/README.md — legacy stack, pdfalto, scripts
-└── .cursor/              # → .cursor/README.md — editor/AI rules (optional)
+├── Makefile           ← install, dev, test, build, pdfalto, dev-clean
+├── README.md          ← you are here
+├── backend/           ← harmony engine + HTTP API
+├── frontend/          ← Next.js app
+├── docs/              ← plans, ADRs, taxonomy, work logs
+├── miscellaneous/     ← legacy demo, pdfalto build, helper scripts
+└── .cursor/           ← Cursor / AI project rules (optional read)
 ```
 
 ```mermaid
 flowchart LR
-  subgraph users [You]
-    Browser[Browser]
+  subgraph you [You]
+    B[Browser]
   end
-  subgraph fe [frontend]
-    Next[Next.js]
+  subgraph app [frontend]
+    N[Next.js]
   end
-  subgraph be [backend]
-    API[Express engine]
+  subgraph api [backend]
+    E[Express engine]
   end
-  Browser --> Next
-  Next -->|"NEXT_PUBLIC_API_URL"| API
+  B --> N
+  N -->|"NEXT_PUBLIC_API_URL"| E
 ```
 
 ### Folder guides
@@ -83,39 +113,48 @@ flowchart LR
 | [miscellaneous/](miscellaneous/) | [miscellaneous/README.md](miscellaneous/README.md) |
 | [.cursor/](.cursor/) | [.cursor/README.md](.cursor/README.md) |
 
-## Documentation index
+---
 
-Living roadmap and history live under **`docs/`**. Start with **[docs/README.md](docs/README.md)** for a full file index, then:
+## Documentation map (short)
 
-- **[docs/plan.md](docs/plan.md)** — objectives, checklist, M5 study flags  
-- **[docs/progress.md](docs/progress.md)** — work log, session notes, gaps  
-- **[docs/context/system-map.md](docs/context/system-map.md)** — architecture diagram  
-- **[docs/adr/](docs/adr/)** — architectural decision records  
-- **[docs/Taxonomy.md](docs/Taxonomy.md)** — theory lexicon for the inspector  
+| Doc | Best for |
+|-----|----------|
+| [docs/README.md](docs/README.md) | Full index of every doc file |
+| [docs/plan.md](docs/plan.md) | Checklist, M5 study flags, verification |
+| [docs/progress.md](docs/progress.md) | Day-to-day log and decisions |
+| [docs/context/system-map.md](docs/context/system-map.md) | Architecture diagram |
+| [docs/adr/](docs/adr/) | Formal “why we decided X” notes |
+| [docs/Taxonomy.md](docs/Taxonomy.md) | Theory vocabulary for the inspector |
 
-## Commands
+---
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Install `backend/` + `frontend/` (and Python deps for PDF/OMR) |
-| `make dev` | Backend + frontend |
-| `make dev-backend` | Backend only |
-| `make dev-frontend` | Frontend only |
-| `make dev-clean` | Kill listeners on 8000, 3000, 3001; clear Next dev lock |
-| `make test` | Backend Jest (`engine/`) |
+## Commands (from repo root)
+
+| Command | What it does |
+|---------|----------------|
+| `make install` | Dependencies for backend + frontend (+ Python for PDF path) |
+| `make dev` | Run engine + Next.js together |
+| `make dev-backend` | Engine only |
+| `make dev-frontend` | Next.js only |
+| `make dev-clean` | Free ports 8000, 3000, 3001 + Next dev lock |
+| `make test` | Backend Jest tests |
 | `make lint` | Backend ESLint |
-| `make build` | Engine `tsc` + Next production build |
-| `make test-engine` | CLI sample through engine |
+| `make build` | Compile engine + production Next build |
+| `make test-engine` | Sample file through CLI → `backend/output/` |
 | `make pdfalto` | Build vendored pdfalto under `miscellaneous/pdfalto/` |
 
-Frontend-only: `cd frontend && npm run test` · `npm run build`.
+**Frontend only:** `cd frontend && npm run test` and `npm run build`.
+
+---
 
 ## Related resources
 
-| Resource | Description |
-|----------|-------------|
-| [**HarmonyForge LLM Stress Test**](https://huggingface.co/spaces/dgeni2/HarmonyForge_LLM_Stress_Test) | LLM harmonic attempts vs checker-style evaluation |
-| [**HF Thematic Analysis Dashboard**](https://huggingface.co/spaces/dgeni2/HFThematicAnalysis) | Interview themes informing design |
+| Link | What it is |
+|------|------------|
+| [HarmonyForge LLM Stress Test](https://huggingface.co/spaces/dgeni2/HarmonyForge_LLM_Stress_Test) | LLM vs checker-style evaluation |
+| [HF Thematic Analysis Dashboard](https://huggingface.co/spaces/dgeni2/HFThematicAnalysis) | Interview themes that shaped the product |
+
+---
 
 ## License
 

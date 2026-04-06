@@ -1,18 +1,46 @@
-# `backend/engine/` — implementation detail
+# `engine/` — module map
 
-TypeScript **Logic Core**: parsing, inference, constraints, SATB validation, MusicXML I/O, and **Express** routes wired from **`server.ts`**.
+> **You are inside the TypeScript engine:** parsing, harmony logic, validation, MusicXML output, and the Express **route handlers** imported by **`server.ts`**.
 
-## Main areas
+---
 
-| Area | Role |
-|------|------|
-| `solver.ts` | Voice-leading search over chord slots |
-| `constraints.ts` / `validateSATB.ts` | Rule checks and trace-friendly validation |
-| `chordParser.ts` / `chordInference.ts` | Roman / diatonic harmony input and inference |
-| `parsers/` | MusicXML (partwise/timewise), MIDI, MXL, PDF intake (`fileIntake.ts`) |
-| `satbToMusicXML.ts` | Build partwise MusicXML from internal representation |
-| `schemas/` | JSON schemas for engine input/output |
+## Pipeline (mental model)
 
-Compiled output is emitted under **`engine/dist/`** when you run **`npm run build:engine`** from **`backend/`**.
+```text
+  parsers/*  ──►  chordInference  ──►  solver
+                         │                │
+                         └──────►  validateSATB*  ──►  satbToMusicXML
+```
 
-For how to run the server and CLI, see **[../README.md](../README.md)**.
+HTTP wiring and multer uploads live in **`server.ts`** (parent folder: see [../README.md](../README.md)).
+
+---
+
+## Main files and folders
+
+| Name | Plain-English role |
+|------|---------------------|
+| **`server.ts`** | Express app: routes, CORS, file upload |
+| **`solver.ts`** | Search for voice-leading assignments over chord slots |
+| **`constraints.ts`** · **`validateSATB.ts`** | Rule checks + trace-friendly validation for the inspector |
+| **`chordParser.ts`** · **`chordInference.ts`** | Read Roman / diatonic harmony or infer from melody |
+| **`parsers/`** | MusicXML (partwise/timewise), MIDI, MXL, PDF intake (`fileIntake.ts`) |
+| **`satbToMusicXML.ts`** | Turn internal representation into partwise MusicXML |
+| **`schemas/`** | JSON schemas describing engine I/O |
+
+---
+
+## Build output
+
+| | |
+|--|--|
+| **Compiled JS + types** | Written to **`engine/dist/`** |
+| **Command** | From **`backend/`**: `npm run build:engine` |
+
+---
+
+## Parent docs
+
+| Link | When to open |
+|------|----------------|
+| [../README.md](../README.md) | Run commands, ports, Python/PDF note, CORS |

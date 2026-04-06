@@ -1,51 +1,79 @@
-# HarmonyForge — documentation index
+# Documentation hub
 
-Canonical map of markdown under **`docs/`**. For repo layout and commands, start at the root **[README.md](../README.md)**.
+> **You are in `docs/`** — plans, architecture notes, and long-running logs.  
+> **New to the repo?** Start at the root [README.md](../README.md), then come back here when you need detail.
 
-## Core workflow
+---
 
-| Doc | Purpose |
-|-----|---------|
-| [plan.md](plan.md) | Objectives, research notes, numbered checklist (Logic Core, Sandbox, Theory Inspector, verification). |
-| [progress.md](progress.md) | RALPH work log, session notes, consolidated status, gaps. |
-| [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) | Focused roadmap and prompting questions for the last MVP feature cluster. |
+## Suggested reading order
 
-## Context and architecture
+```text
+1. Root README     →  what the product is + how to run
+2. plan.md         →  what is built vs still open (checklist)
+3. progress.md     →  how we got here (work log)
+4. system-map.md   →  how pieces connect (diagram)
+```
 
-| Doc | Purpose |
-|-----|---------|
-| [context/system-map.md](context/system-map.md) | System diagram and data flow between frontend, backend, and inspector. |
+---
 
-## Theory and AI prep
+## Doc map (everything in this folder)
 
-| Doc | Purpose |
-|-----|---------|
-| [Taxonomy.md](Taxonomy.md) | RAG lexicon for the Theory Inspector (theory sources ↔ engine behavior). |
-| [Theory-Inspector-Prep.md](Theory-Inspector-Prep.md) | Early inspector prep notes (genre ↔ taxonomy mapping; historical “no AI yet” status). |
+```mermaid
+flowchart LR
+  A[plan + progress] --> B[system-map + ADRs]
+  B --> C[Taxonomy + theory prep]
+  C --> D[verification prompts]
+  D --> E[engine test log]
+```
 
-## Verification and agent prompts
+---
 
-| Doc | Purpose |
-|-----|---------|
-| [verification-prompt.md](verification-prompt.md) | Copy-paste prompt to regression-test upload → document → sandbox. |
-| [PROMPT.md](PROMPT.md) | Stricter agent workflow: read plan/progress/system-map, run `make test` / `make lint`, fix until flow passes. |
+### Core workflow (read these first)
 
-## Engine and tests
+| File | Plain-English purpose |
+|------|------------------------|
+| [plan.md](plan.md) | Goals, research notes, and the numbered checklist (backend, frontend, inspector, verification). |
+| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. |
+| [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) | Tight list + prompting questions for the last MVP feature bundle. |
 
-| Doc | Purpose |
-|-----|---------|
-| [Engine-Test-Run-Log.md](Engine-Test-Run-Log.md) | Chord-progression smoke results and refinement notes (HFLitReview). |
+### Architecture
 
-## Architectural Decision Records (`adr/`)
+| File | Plain-English purpose |
+|------|------------------------|
+| [context/system-map.md](context/system-map.md) | Picture of how the browser app, engine API, and inspector talk to each other. |
 
-| ADR | Purpose |
-|-----|---------|
-| [adr/001-sandbox-display-mode.md](adr/001-sandbox-display-mode.md) | View (OSMD) vs edit (VexFlow) display mode decision. |
-| [adr/002-m4-mvp-onboarding-inspector-playback.md](adr/002-m4-mvp-onboarding-inspector-playback.md) | M4 MVP strategy: playback, onboarding, inspector wiring. |
+### Theory and AI prep
 
-## Application code (outside `docs/`)
+| File | Plain-English purpose |
+|------|------------------------|
+| [Taxonomy.md](Taxonomy.md) | Shared vocabulary linking textbooks to what the code actually does (feeds the inspector). |
+| [Theory-Inspector-Prep.md](Theory-Inspector-Prep.md) | Early design notes (genre ↔ taxonomy); partly historical. |
 
-| Path | Purpose |
-|------|---------|
-| [../frontend/](../frontend/) | Next.js Tactile Sandbox — see [frontend/README.md](../frontend/README.md). |
-| [../backend/](../backend/) | Deterministic engine + HTTP API — see [backend/README.md](../backend/README.md). |
+### Verification and automation prompts
+
+| File | Plain-English purpose |
+|------|------------------------|
+| [verification-prompt.md](verification-prompt.md) | Copy-paste checklist to regression-test upload → document → sandbox. |
+| [PROMPT.md](PROMPT.md) | Stricter “agent” instructions: read key docs, run `make test` / `make lint`, fix until green. |
+
+### Engine testing notes
+
+| File | Plain-English purpose |
+|------|------------------------|
+| [Engine-Test-Run-Log.md](Engine-Test-Run-Log.md) | Chord-progression smoke tests and follow-up ideas. |
+
+### Architectural Decision Records (`adr/`)
+
+| File | Plain-English purpose |
+|------|------------------------|
+| [adr/001-sandbox-display-mode.md](adr/001-sandbox-display-mode.md) | Why we switch between “view” (OSMD) and “edit” (VexFlow) modes in older paths. |
+| [adr/002-m4-mvp-onboarding-inspector-playback.md](adr/002-m4-mvp-onboarding-inspector-playback.md) | How we shipped onboarding, inspector wiring, and playback for the MVP milestone. |
+
+---
+
+## Code outside `docs/`
+
+| Location | README |
+|----------|--------|
+| [../frontend/](../frontend/) | [../frontend/README.md](../frontend/README.md) |
+| [../backend/](../backend/) | [../backend/README.md](../backend/README.md) |

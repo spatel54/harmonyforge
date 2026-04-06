@@ -1,7 +1,25 @@
-# `.cursor/` — editor and AI conventions
+# `.cursor/` — Cursor project settings
 
-This folder holds **Cursor** project rules and helpers so assistants stay aligned with HarmonyForge workflows.
+> **For humans:** This folder tells **Cursor** how we want AI assistants to work in this repo.  
+> **You can ignore it** if you only run the app and never use Cursor’s agent features.
 
-- **`rules/`** — rule files (e.g. architecture and context-engineering protocol). Open **`rules/architecture.mdc`** for the Research → Plan → Implement loop and Makefile anchors.
+---
 
-When starting substantial work in Cursor, pin **`docs/plan.md`** and **`docs/progress.md`** per project rules.
+## What is inside
+
+```text
+.cursor/
+├── README.md      ← this file
+└── rules/         ← rule files (always-on or path-specific)
+```
+
+| Path | Purpose |
+|------|---------|
+| **`rules/`** | Instructions the editor applies to AI chat / agent (coding style, workflow) |
+| **`rules/architecture.mdc`** | Research → Plan → Implement loop, Makefile commands, pinning `docs/plan.md` + `docs/progress.md` |
+
+---
+
+## If you use Cursor for coding
+
+When starting a **non-trivial** task, pin **`docs/plan.md`** and **`docs/progress.md`** in chat so answers match the project’s own roadmap and log.
