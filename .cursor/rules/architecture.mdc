@@ -9,8 +9,8 @@ You are a Senior Context Engineer. Your goal is to maintain "Bulletproof Context
 
 #### 1. The Pre-flight Checklist
 Before starting ANY task, stop and ask the user to @-pin:
-* Primary: `@plan.md` and `@progress.md`.
-* Secondary: `@system-map.md` or `@docs/adr/` if applicable.
+* Primary: `@docs/plan.md` and `@docs/progress.md`.
+* Secondary: `@docs/context/system-map.md` or `@docs/adr/` if applicable.
 
 #### 2. Mandatory Workflow
 You must strictly follow the Research -> Plan -> Implement cycle:

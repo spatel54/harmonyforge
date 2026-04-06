@@ -32,10 +32,10 @@
 
 | File | Role |
 |------|------|
-| `harmony-forge-redesign/src/lib/music/playbackUtils.ts` | `scoreToScheduledNotes`, `scheduledNotesToSeconds` |
-| `harmony-forge-redesign/src/hooks/usePlayback.ts` | Tone.Synth, Tone.Part, play/pause/stop |
-| `harmony-forge-redesign/src/app/sandbox/page.tsx` | Passes `score` to usePlayback; SandboxPlaybackBar |
-| `harmony-forge-redesign/src/lib/music/musicxmlParser.ts` | MusicXML → EditableScore; pitch format |
+| `frontend/src/lib/music/playbackUtils.ts` | `scoreToScheduledNotes`, `scheduledNotesToSeconds` |
+| `frontend/src/hooks/usePlayback.ts` | Tone.Synth, Tone.Part, play/pause/stop |
+| `frontend/src/app/sandbox/page.tsx` | Passes `score` to usePlayback; SandboxPlaybackBar |
+| `frontend/src/lib/music/musicxmlParser.ts` | MusicXML → EditableScore; pitch format |
 
 ---
 
@@ -66,9 +66,9 @@
 
 | File | Role |
 |------|------|
-| `harmony-forge-redesign/src/app/sandbox/page.tsx` | ScoreCanvas, displayMode (View/Edit), useScoreStore |
-| `harmony-forge-redesign/src/components/score/ScoreCanvas.tsx` | OSMD vs VexFlow branch; musicXML, score, vexFlowCrashed |
-| `harmony-forge-redesign/src/components/score/VexFlowScore.tsx` | VexFlow render; onNoteClick, selection |
+| `frontend/src/app/sandbox/page.tsx` | ScoreCanvas, displayMode (View/Edit), useScoreStore |
+| `frontend/src/components/score/ScoreCanvas.tsx` | OSMD vs VexFlow branch; musicXML, score, vexFlowCrashed |
+| `frontend/src/components/score/VexFlowScore.tsx` | VexFlow render; onNoteClick, selection |
 | `docs/adr/001-sandbox-display-mode.md` | View vs Edit decision |
 
 ---
@@ -98,10 +98,10 @@
 
 | File | Role |
 |------|------|
-| `harmony-forge-redesign/src/app/page.tsx` | Playground (Upload) — possible tour start |
-| `harmony-forge-redesign/src/app/document/page.tsx` | Document — step 2 |
-| `harmony-forge-redesign/src/app/sandbox/page.tsx` | Sandbox — step 3 |
-| `harmony-forge-redesign/design-system/` or `docs/design/` | Tour/tooltip patterns if any |
+| `frontend/src/app/page.tsx` | Playground (Upload) — possible tour start |
+| `frontend/src/app/document/page.tsx` | Document — step 2 |
+| `frontend/src/app/sandbox/page.tsx` | Sandbox — step 3 |
+| `frontend/design-system/` or `docs/design/` | Tour/tooltip patterns if any |
 
 ---
 
@@ -134,7 +134,7 @@
 
 | File | Role |
 |------|------|
-| `harmony-forge-redesign/src/components/organisms/TheoryInspectorPanel.tsx` | Chat UI, violation cards, chips |
+| `frontend/src/components/organisms/TheoryInspectorPanel.tsx` | Chat UI, violation cards, chips |
 | `Taxonomy.md` | RAG source; §1 Classical, §2 Jazz, §3 Pop |
 | `docs/Theory-Inspector-Prep.md` | Genre → Taxonomy mapping |
 | `engine/validateSATB.ts` | `validateSATBSequence`, violation types |

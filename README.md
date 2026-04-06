@@ -49,20 +49,17 @@ Open **http://localhost:3000**.
 
 ```bash
 make dev-clean     # Clear ports if "Address already in use"
-make test-engine   # CLI test: input/月亮代表我的心.xml → output/ (melody + flute + cello, major)
+make test-engine   # CLI test: backend/input/ → backend/output/ (melody + flute + cello, major)
 ```
 
 ## Project Structure
 
 | Path | Purpose |
 |------|---------|
-| `engine/` | Backend: constraint-satisfaction SATB solver, parsers (MusicXML, MIDI), chord inference, MusicXML output |
-| `harmony-forge-redesign/` | Tactile Sandbox frontend: Next.js, VexFlow, OSMD, Tone.js, Zustand |
-| `chamber-music-fullstack/` | Legacy/alternative full-stack implementation |
-| `input/` | Sample input files for CLI |
-| `output/` | Generated MusicXML from CLI |
-| `scripts/` | CLI runner for engine (`run-engine-cli.ts`) |
-| `Taxonomy.md` | Canonical music-theory lexicon for Theory Inspector RAG |
+| `backend/` | Node package: `engine/` (SATB solver, parsers, REST API), `scripts/run-engine-cli.ts`, `input/` / `output/` CLI fixtures |
+| `frontend/` | Tactile Sandbox: Next.js, RiffScore, Tone.js, Zustand, Theory Inspector UI |
+| `docs/` | Plans, progress, ADRs, `Taxonomy.md`, context maps |
+| `miscellaneous/` | Legacy `chamber-music-fullstack/`, vendored `pdfalto/`, ancillary scripts, local tool logs |
 
 ## Related Resources
 
@@ -84,12 +81,14 @@ The `docs/` folder holds plans, progress logs, ADRs, and architecture. For curre
 | `docs/Engine-Test-Run-Log.md` | Engine test matrix, chord progression coverage |
 | `docs/Theory-Inspector-Prep.md` | Genre → Taxonomy mapping, RAG integration |
 | `docs/verification-prompt.md` | End-to-end flow verification checklist |
+| `docs/PROMPT.md` | Agent-oriented E2E flow repair prompt |
+| `docs/Taxonomy.md` | Theory Inspector RAG lexicon |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `make install` | Install root + frontend dependencies |
+| `make install` | Install `backend/` + `frontend/` dependencies (and Python deps for PDF/OMR) |
 | `make dev` | Run backend + frontend (full stack) |
 | `make dev-backend` | Backend only (port 8000) |
 | `make dev-frontend` | Frontend only (port 3000) |
@@ -97,7 +96,7 @@ The `docs/` folder holds plans, progress logs, ADRs, and architecture. For curre
 | `make test` | Engine tests |
 | `make lint` | Engine ESLint |
 | `make build` | Build engine + Next.js production |
-| `make test-engine` | CLI: run engine on `input/` → `output/` |
+| `make test-engine` | CLI: run engine on `backend/input/` → `backend/output/` |
 
 ## License
 

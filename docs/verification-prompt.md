@@ -18,7 +18,7 @@ Verify the HarmonyForge end-to-end flow is ready for testing:
 2. **Tasks** (run in order; fix any failure before proceeding):
    - Run `make test` — all engine tests must pass
    - Run `make lint` — engine lint must pass
-   - Run `cd harmony-forge-redesign && npm run build` — frontend must build
+   - Run `cd frontend && npm run build` — frontend must build
    - Trace the data flow: useUploadStore (file, generatedMusicXML), parseMusicXML, VexFlowScore
    - Ensure redirects: /document without file → /; /sandbox without generatedMusicXML → /document
    - Ensure Document page parses .xml/.musicxml for preview; MIDI shows "Preview after Generate"
@@ -48,8 +48,8 @@ Verify the HarmonyForge end-to-end flow is ready for testing:
 ## Manual Test Steps (after verification)
 
 1. `make dev-clean` — clear ports 8000, 3000
-2. Terminal 1: `npm run dev:backend` (port 8000)
-3. Terminal 2: `cd harmony-forge-redesign && npm run dev` (port 3000)
+2. Terminal 1: `cd backend && npm run dev:backend` (port 8000)
+3. Terminal 2: `cd frontend && npm run dev` (port 3000)
 4. Open http://localhost:3000
 5. Upload 月亮代表我的心.xml (or any .xml/.mid)
 6. On Document: see preview, set mood (Major/Minor), pick instruments, click Generate Harmonies

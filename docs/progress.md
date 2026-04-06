@@ -11,6 +11,18 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ---
 
+## Work log — Repository layout (2026-04-06)
+
+Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/`, CLI `input/` / `output/`), **`frontend/`** (former `harmony-forge-redesign/`, flattened), **`docs/`** (includes **`docs/Taxonomy.md`**, **`docs/PROMPT.md`**), and **`miscellaneous/`** (`chamber-music-fullstack/`, `pdfalto/`, `run-amp.sh`, `.playwright-mcp/`). Root keeps **`Makefile`**, **`README.md`**, **`.gitignore`**, **`.cursor/`**. **`make dev`** / **`make install`** / **`make test`** run via **`backend/`** and **`frontend/`**; **`make pdfalto`** builds **`miscellaneous/pdfalto/`**; engine pdfalto discovery checks both **`pdfalto/pdfalto`** and **`miscellaneous/pdfalto/pdfalto`**. **Follow-up:** set deploy **root directory** to **`frontend/`** if a host still pointed at the old folder name; remove stale repo-root **`node_modules`** if present (no root **`package.json`**).
+
+---
+
+## Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)
+
+**Learnings:** Ported **`newfiles/`** patterns into **`frontend/`** without dropping M5: root layout keeps **`StudySessionProvider`** + **`StudyConsentGate`** and adds **`CoachmarkOverlay`** under **`ThemeProvider`**. **`TransitionOverlay`** uses merged book/notes + percent for **`parsing`/`generating`** and retains **`melody_only`**. Playground **`/`** uses **`OnboardingModal`** + **`completeOnboarding`** on dismiss; **`/onboarding`** uses **`HomeViewOnboarding`** (same upload/`to-preview-musicxml` path as home). **`useCoachmarkStore`** + **`STEP_ROUTES`** drive navigation; **`data-coachmark="1"`–`"10"`** on stable regions (document preview/ensemble/CTA, sandbox editor/inspector/export); steps without a dedicated node fall back in **`CoachmarkOverlay`**. **`llmClient`** resolves base URL from **`OPENAI_BASE_URL ?? OPENAI_URL`**; **`frontend/.env.example`** and theory-inspector offline copy mention these vars.
+
+---
+
 ## Approach
 
 1. **Fix parsing** (backend + frontend) — MusicXML partwise/timewise, no DTD loading, correct pitch mapping.
@@ -19,7 +31,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 4. **Fix frontend display** — Document preview renders reliably; **Sandbox primary editor** is **RiffScore** (third-party notation UI) with `EditableScore` in Zustand as the app’s canonical model; bidirectional sync via adapter + `useRiffScoreSync`. Legacy VexFlow/OSMD paths remain referenced historically below; current MVP editing path is RiffScore-centric.
 5. **Variable parts** — Generator outputs melody + harmony parts only (e.g. melody + flute + cello = 3 parts). Soprano instruments map to Alto voice; Alto/Tenor/Bass map to their voices.
 6. **Explainability** — Theory Inspector treats the **deterministic engine** as ground truth for **generated** harmony parts; **note explain** uses deterministic **full-notation** FACTs (pitch **and** rhythm/duration, roster, vertical stack, cross-part intervals, motion, **full-bar measure dump** for the clicked bar) plus optional trace; chat + highlights explain violations on harmony; taxonomy is RAG-style context; LLM is optional and must not invent rules beyond supplied context. The tutor does **not** receive staff images—it receives **structured text** (`SCORE_DIGEST`, `FACT:` lines, `FULL BAR`); prompts and **user-message ordering** are tuned so that block is treated as visible notation. **Melody** clicks get context without engine-origin block. **Editor focus for chat (2026-04):** **`InspectorScoreFocus`** (note | measure | whole part): **`Editor focus`** in `prompts.ts` + **`scoreSelectionContext`**; **follow-up** chat **prepends** the same FACT block to the user message (not only the system prompt). **`conversationHistory` for follow-ups (2026-04-04):** built **before** appending the new user bubble so the API does **not** receive two consecutive `user` messages (plain question then notation)—see **Work log — Tutor follow-up + panels + markdown**. Measure bar strip + staff labels + RiffScore multi-select inference; green **focus highlights** (`regionExplainContext.ts`). **Tutor audience depth (2026-04-03):** **No Beginner/Intermediate/Professional UI toggle**—fixed **`intermediate`** depth via **`DEFAULT_EXPLANATION_LEVEL`** and **`resolveExplanationLevel`** on inspector APIs; chat, suggest, and note-summary streams are **not** gated on choosing a level (see **Work log — Theory Inspector: default explanation depth**).
-7. **Source-transparent tutoring (2026-04)** — RAG lexicon (`Taxonomy.md`, `taxonomyIndex.ts`) maps **Fux**, **Aldwell & Schachter**, **Caplin**, and **Open Music Theory** to what the code actually does vs pedagogy-only claims. LLM system prompts (`prompts.ts`) require **brief citations** when stating rules (one best source per claim), **plain language first**, and **tight length** defaults so users learn without information overload.
+7. **Source-transparent tutoring (2026-04)** — RAG lexicon (`docs/Taxonomy.md`, `taxonomyIndex.ts`) maps **Fux**, **Aldwell & Schachter**, **Caplin**, and **Open Music Theory** to what the code actually does vs pedagogy-only claims. LLM system prompts (`prompts.ts`) require **brief citations** when stating rules (one best source per claim), **plain language first**, and **tight length** defaults so users learn without information overload.
 8. **Honest, non-sycophantic tutor (2026-04)** — Same `prompts.ts`: shared **`HONESTY_NO_SYCOPHANCY`** block for Auditor/Tutor/Stylist—no flattery or false agreement; **passing the checker ≠ musically ideal**; admit **thin context** and **gray areas**; **correct wrong premises** gently from facts; Stylist notes when a fix is **one option** or has **tradeoffs**.
 9. **M5 study prep (2026-04)** — **RQ1:** `study=reviewer_primary` or env → Document **Continue to sandbox (melody only)** skips `generate-from-file`. **RQ2:** `hfExplain=minimal` or env → stylist API/UI suppresses suggestion prose; `buildStylistStructuredPrompt` + server strip. **Logging:** opt-in `studyEventLog` + Sandbox **Research log** strip; optional **`NEXT_PUBLIC_HF_STUDY_REQUIRES_CONSENT`** modal. See **`@docs/plan.md` → M5 — User study**.
 
@@ -36,7 +48,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Dependent variables (outside app):** ownership / agency scales, trust or skepticism measures — collected via your survey instrument, not stored in HarmonyForge by default.
 
-**Verification:** `cd harmony-forge-redesign && npm run test` (`studyConfig.test.ts`); `?study=reviewer_primary` manual path; `?hfExplain=minimal` + stylist suggestion smoke test with `OPENAI_API_KEY`.
+**Verification:** `cd frontend && npm run test` (`studyConfig.test.ts`); `?study=reviewer_primary` manual path; `?hfExplain=minimal` + stylist suggestion smoke test with `OPENAI_API_KEY`.
 
 ---
 
@@ -55,7 +67,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 - **Toolbar:** RiffScore’s public API did not expose custom toolbar slots — we **patch** `riffscore` (via `patch-package`) to add `ui.toolbarPlugins`, then mount HarmonyForge actions (palettes, undo/redo, transpose, XML export, etc.) inside the native toolbar.
 - **Inspector (dual-mode + data):** **Comparison gate** in `theoryInspectorMode.ts`: `resolveOriginalEnginePitch` prefers `Note.originalGeneratedPitch` then Zustand baseline map; `computeTheoryInspectorMode` → `origin-justifier` | `harmonic-guide` | `melody-context`. Baseline captured in `theoryInspectorBaseline.ts` on sandbox load; `applyOriginalGeneratedPitches` stamps harmony notes; RiffScore pull preserves provenance by note id; clipboard **extractNotes** strips provenance on paste. UI: `TheoryInspectorPanel` uses Origin Justifier / Harmonic Guide copy; slim Harmonic Guide card when pitch unchanged. API: `theoryInspectorNoteMode` on `/api/theory-inspector` + **`prompts.ts`**: **`CITATION_AND_BREVITY`**, **`HONESTY_NO_SYCOPHANCY`**, persona rules (Caplin guardrails; avoid bullet dumps unless asked).
 - **Inspector (multi-staff FACTs):** `noteExplainContext.ts` — `buildScorePartRosterLines`, `buildCrossPartIntervalFacts`, additive vertical lines labeled **input vs generated** with `part.name` and staff index; SATB FACT lines take optional `voiceStaffNames` and pairwise intervals from clicked voice to each other voice. **Note explain routing:** `scoreToAuditedSlots(score, { requireExactlyFourParts: true })` so **only exactly four parts** use the SATB slot path; **five or more staves** use full additive context (no hidden 5th–8th staff drop). **`runAudit`** still uses `scoreToAuditedSlots(score)` without that flag (first four mapped parts only until engine supports full multi-voice audit).
-- **Frontend tests:** `harmony-forge-redesign` — `vitest` + `npm run test` (`noteExplainContext.test.ts`).
+- **Frontend tests:** `frontend` — `vitest` + `npm run test` (`noteExplainContext.test.ts`).
 
 ### Steps completed in this arc (high level)
 
@@ -66,7 +78,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 | **Stability** | Fixed React “getSnapshot / maximum update depth” by using **per-field** `useScoreStore` selectors in `RiffScoreEditor` (no object literal selector). |
 | **Theory Inspector** | Dual-mode (`inspectorMode`, `theoryInspectorMode.ts`); `originalGeneratedPitch` on `Note`, sandbox stamp + RiffScore preserve; tutor `theoryInspectorNoteMode`; **2026-04 (UX):** note panel **deterministic blocks → Tutor summary → Ideas to try next** (plain-language section titles), **`aiSuggestions`** via `<<<SUGGESTIONS>>>` + `noteInsightAiSplit.ts`; **multi-part** roster + cross-part interval FACTs; `resolveSatbPartIndices` + `requireExactlyFourParts` for note-explain SATB gate; SATB FACTs show part names; vitest for `noteExplainContext` + `noteInsightAiSplit`. **2026-04-02:** Source-aligned `Taxonomy.md` + `taxonomyIndex.ts` + `prompts.ts` (Fux / A&S / Caplin / OMT) with engine-mapping honesty; `engine/solver.ts` + `engine/constraints.ts` + `engine/types.ts` comments; chamber `harmonize-core.ts` Caplin disclaimer. **2026-04 (follow-up):** `prompts.ts` — `CITATION_AND_BREVITY` + **`HONESTY_NO_SYCOPHANCY`**. **2026-04-03:** **Free-form chat** in the same panel (empty default messages, no auto chips after chat/audit; persistent composer; `streamingMessageId` for chat-only typing indicator). **2026-04-04:** **Editor focus for chat** — `InspectorScoreFocus` + `scoreSelectionContext`; **`Editor focus`** block in all inspector personas’ system prompts; **measure bar strip** + **clickable staff labels** + RiffScore **`selectAll('measure'|'staff')`** + multi-select **inference**; **`buildMeasureFocusFacts` / `buildPartFocusFacts`** (`regionExplainContext.ts`, vitest); green **focus** note overlays; panel **This measure / This part** card; `setSelectedNoteInsight(null)` preserves measure/part focus. **2026-04-03 (later):** **LLM notation export** — `SCORE_DIGEST`, `AUTHORITATIVE NOTATION`, **FULL BAR** measure dump; note stream **evidence-first** `userMessage`; chat **prepends** FACT block; SATB path measure dump; **ChatBubble** / **SandboxPlaybackBar** dark-theme contrast; full-notation prompt framing (not pitch-only). **2026-04-04 (later):** **Follow-up chat** — `conversationHistory` excludes the in-flight user message (no duplicate plain-then-rich user pair); panels **What this click means** + **Verifiable score export**; short **`currentPitchGuideExplanation`**; **`react-markdown`** via **`MarkdownText`** for chat + tutor blocks. **2026-04-03 (default depth):** Removed **Beginner / Intermediate / Professional** toggle; fixed **`intermediate`** via **`lib/ai/explanationLevel.ts`** (`DEFAULT_EXPLANATION_LEVEL`, `resolveExplanationLevel`); APIs no longer **400** on missing `explanationLevel`; Zustand **`explanationLevel`** + localStorage hydration removed; **`TheoryInspectorPanel`** drops the level strip; chat input locks only while a **chat** stream is active (`streamingMessageId`). |
 | **Score canvas (staff IDs)** | **2026-04:** `extractStaffLabelLayout` in `riffscorePositions.ts`; `RiffScoreEditor` part-name overlays or **Staves (top → bottom)** fallback. |
-| **Config** | `harmony-forge-redesign/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
+| **Config** | `frontend/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
 | **Ops** | Documented `make dev`; **`make dev-clean`** clears ports **8000 / 3000 / 3001** and Next **`.next/dev/lock`** when restarting (see **Work log — 2026-04-03**). |
 | **Playback scrub** | `PlaybackScrubOverlay` + `playbackScrub.ts` + `riffscorePlaybackBridge.ts`; **`patch-package`** aligns RiffScore **toolbar Play**, **Space**, **P** with scrub via **`__HF_RIFFSCORE_PLAY_FROM`**; **manual QA** for regressions still advised — see **Playback scrub** subsection below. |
 
@@ -88,7 +100,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
    - **`playScore` entry** — assign **`lastPlayPosition`** immediately so API and internal stay aligned.
    - **Position callback** during `scheduleScorePlayback` — mirror **`lastPlayPosition`** on each tick; **stop** / **end** reset `lastPlayPosition` and clear pending where applicable.
    - **`useEffect`** listens for **`riffscore-clear-playback-anchor`** to null internal `playbackPosition` (works with HF event after scrub).
-5. **Bridge module** — `harmony-forge-redesign/src/lib/music/riffscorePlaybackBridge.ts` — `setPendingRiffScorePlayFrom`; documents toolbar + **Space** + **P**.
+5. **Bridge module** — `frontend/src/lib/music/riffscorePlaybackBridge.ts` — `setPendingRiffScorePlayFrom`; documents toolbar + **Space** + **P**.
 6. **CSS** — Native RiffScore playback cursor hidden (`opacity: 0`); user sees HF line only.
 
 **Steps completed (files):**
@@ -101,7 +113,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 | Hide native cursor | `components/score/RiffScoreEditor.tsx` (inline `<style>`) |
 | RiffScore fork patch | `patches/riffscore+1.0.0-alpha.9.patch` (includes existing `toolbarPlugins` + playback hooks) |
 
-**Verification:** `cd harmony-forge-redesign && npm run test` (`playbackScrub` tests + rest). **Manual:** scrub → toolbar Play; scrub → **Space**; scrub → **P**; pause/resume; stop clears pending.
+**Verification:** `cd frontend && npm run test` (`playbackScrub` tests + rest). **Manual:** scrub → toolbar Play; scrub → **Space**; scrub → **P**; pause/resume; stop clears pending.
 
 **Current failure / open issues (actively watch):**
 
@@ -116,7 +128,7 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 **Objective (product):** Pitch-only transparency: Mode A explains **engine snapshot** (with trace-backed checks where available); Mode B explains **how the live pitch sits** against vertical sonority and neighbors. Relational FACTs cover same-beat stack and prev/next musical moments (SATB slot + additive barline neighbors).
 
-**Files (primary):** Repo-root `Taxonomy.md`, `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts`, `harmony-forge-redesign/src/lib/music/theoryInspectorMode.ts`, `theoryInspectorBaseline.ts`, `theoryInspectorSlots.ts`, **`noteExplainContext.ts`** (`SCORE_DIGEST`, `formatAuthoritativeDurationFact`, `formatScoreDigestForFoundHit`, `describeNotationForTutor`, additive + **`buildMeasureFocusFacts`** full-bar appendix), **`regionExplainContext.ts`** (measure/part FACTs + note id collection), `scoreTypes.ts` (`originalGeneratedPitch`), `riffscoreAdapter.ts`, `useRiffScoreSync.ts`, `scoreUtils.ts` (paste drops provenance), **`useTheoryInspector.ts`** (evidence-first tutor `userMessage`, chat FACT prefix, SATB measure dump, **follow-up `conversationHistory` without duplicate user turn**), `useTheoryInspectorStore.ts` (`InspectorScoreFocus`), `TheoryInspectorPanel.tsx` (**`MarkdownText`** on summary/suggestions/origin/click-meaning), `app/api/theory-inspector/route.ts` (`scoreSelectionContext`), **`lib/ai/prompts.ts`** (`Editor focus`, `SCORE_DIGEST` / FULL BAR rules), `lib/ai/noteInsightAiSplit.ts`, `riffscorePositions.ts` (`extractStaffLabelLayout`), **`components/molecules/ChatBubble.tsx`**, **`components/molecules/MarkdownText.tsx`**, **`components/molecules/SandboxPlaybackBar.tsx`**, `RiffScoreEditor.tsx` (staff labels, measure strip, focus highlights), `ScoreCanvas.tsx`, `app/sandbox/page.tsx` (baseline + stamp + inspector wiring), `vitest.config.ts`, **`noteExplainContext.test.ts`**, `noteInsightAiSplit.test.ts`, **`regionExplainContext.test.ts`**.
+**Files (primary):** `docs/Taxonomy.md`, `frontend/src/lib/ai/taxonomyIndex.ts`, `frontend/src/lib/music/theoryInspectorMode.ts`, `theoryInspectorBaseline.ts`, `theoryInspectorSlots.ts`, **`noteExplainContext.ts`** (`SCORE_DIGEST`, `formatAuthoritativeDurationFact`, `formatScoreDigestForFoundHit`, `describeNotationForTutor`, additive + **`buildMeasureFocusFacts`** full-bar appendix), **`regionExplainContext.ts`** (measure/part FACTs + note id collection), `scoreTypes.ts` (`originalGeneratedPitch`), `riffscoreAdapter.ts`, `useRiffScoreSync.ts`, `scoreUtils.ts` (paste drops provenance), **`useTheoryInspector.ts`** (evidence-first tutor `userMessage`, chat FACT prefix, SATB measure dump, **follow-up `conversationHistory` without duplicate user turn**), `useTheoryInspectorStore.ts` (`InspectorScoreFocus`), `TheoryInspectorPanel.tsx` (**`MarkdownText`** on summary/suggestions/origin/click-meaning), `app/api/theory-inspector/route.ts` (`scoreSelectionContext`), **`lib/ai/prompts.ts`** (`Editor focus`, `SCORE_DIGEST` / FULL BAR rules), `lib/ai/noteInsightAiSplit.ts`, `riffscorePositions.ts` (`extractStaffLabelLayout`), **`components/molecules/ChatBubble.tsx`**, **`components/molecules/MarkdownText.tsx`**, **`components/molecules/SandboxPlaybackBar.tsx`**, `RiffScoreEditor.tsx` (staff labels, measure strip, focus highlights), `ScoreCanvas.tsx`, `app/sandbox/page.tsx` (baseline + stamp + inspector wiring), `vitest.config.ts`, **`noteExplainContext.test.ts`**, `noteInsightAiSplit.test.ts`, **`regionExplainContext.test.ts`**.
 
 **Still thin vs aspirational copy:** Mode A “axiomatic” lines like “resolved the leading tone” are **not** fully supplied by the engine today — `validate-satb-trace` is **violation-oriented**; richer generative rationale remains a **future engine / ADR** item unless we add more client-side heuristics (e.g. chord-tone classification without Roman numerals).
 
@@ -130,9 +142,9 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 **B. Approach taken**
 
 1. **Ground claims in real sources** — Used **NotebookLM** on the **HF LitReview** notebook to sanity-check paraphrases for Fux (*Gradus*, Mann ed.), Aldwell & Schachter (*Harmony and Voice Leading*), Caplin (*Classical Form*), and **Open Music Theory** (Gotham et al.).
-2. **Document what code actually does** — Added a **source spine and engine mapping** in `Taxonomy.md`: hard constraints ↔ `engine/constraints.ts` / `validate-satb-trace`; motion heuristic ↔ `engine/solver.ts` (L1 MIDI sum = **parsimony proxy**, not species counterpoint); Caplin vocabulary ↔ honesty (primary `engine/` path does **not** run full segmentation); chamber-only `planStructuralHierarchy` labeled a **heuristic sketch** in `chamber-music-fullstack/backend/src/harmonize-core.ts`.
-3. **Sync RAG strings** — `harmony-forge-redesign/src/lib/ai/taxonomyIndex.ts` classical section mirrors the spine; violation entries cite **A&S / OMT / engine files** for range and spacing.
-4. **LLM behavior** — `harmony-forge-redesign/src/lib/ai/prompts.ts`: shared **`CITATION_AND_BREVITY`**; Auditor/Tutor/Stylist tuned for **brief source tags** when stating rules, **plain language first**, **no citation stacking**, default **3–8 sentences** for typical replies; note modes updated; Caplin guardrails retained.
+2. **Document what code actually does** — Added a **source spine and engine mapping** in `Taxonomy.md`: hard constraints ↔ `engine/constraints.ts` / `validate-satb-trace`; motion heuristic ↔ `engine/solver.ts` (L1 MIDI sum = **parsimony proxy**, not species counterpoint); Caplin vocabulary ↔ honesty (primary `engine/` path does **not** run full segmentation); chamber-only `planStructuralHierarchy` labeled a **heuristic sketch** in `miscellaneous/chamber-music-fullstack/backend/src/harmonize-core.ts`.
+3. **Sync RAG strings** — `frontend/src/lib/ai/taxonomyIndex.ts` classical section mirrors the spine; violation entries cite **A&S / OMT / engine files** for range and spacing.
+4. **LLM behavior** — `frontend/src/lib/ai/prompts.ts`: shared **`CITATION_AND_BREVITY`**; Auditor/Tutor/Stylist tuned for **brief source tags** when stating rules, **plain language first**, **no citation stacking**, default **3–8 sentences** for typical replies; note modes updated; Caplin guardrails retained.
 5. **LLM honesty** — Same file: **`HONESTY_NO_SYCOPHANCY`** injected into all personas—no flattery; **constraint-satisfied ≠ musically ideal**; state when context/facts are **thin** or reference is **incomplete**; **gray areas** and **tradeoffs** (esp. Stylist); **correct wrong theory** from evidence, not agreeableness.
 6. **Engine comments** — `engine/solver.ts` (motion score), `engine/constraints.ts` (A&S authority), `engine/types.ts` (range pedagogy).
 
@@ -145,9 +157,9 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - [x] `engine/solver.ts`, `constraints.ts`, `types.ts` — comment honesty  
 - [x] `harmonize-core.ts` — `planStructuralHierarchy` disclaimer  
 - [x] `docs/plan.md`, `docs/progress.md`, `docs/context/system-map.md` — synced for theory/RAG narrative + honest/non-sycophantic tutor (`HONESTY_NO_SYCOPHANCY`)  
-- [x] `make test` + `harmony-forge-redesign && npm run test` passed after engine/taxonomy/prompt edits  
+- [x] `make test` + `frontend && npm run test` passed after engine/taxonomy/prompt edits  
 - [x] **Theory Inspector UX + staff labels (2026-04):** panel order: **Tutor summary** then **Ideas to try next** (after verifiable export); **Ideas** + tutor stream require **what + why** per suggestion; **What this click means** hammers **why** the axiomatic engine placed the original harmony pitch (`buildAxiomaticEngineWhyParagraph` / additive copy); plain-language blocks, `<<<SUGGESTIONS>>>` split (`noteInsightAiSplit.ts`, `NoteInsight.aiSuggestions`), `extractStaffLabelLayout` + `RiffScoreEditor` labels, `useLayoutEffect` autoscroll — see **Theory Inspector UX (2026-04)** above; docs re-synced  
-- [x] **Theory Inspector free-form chat (2026-04-03):** persistent composer, empty default messages, no auto chips after chat/audit, `streamingMessageId` + history fix, optional note context on `sendMessage`; `harmony-forge-redesign` tests + build pass  
+- [x] **Theory Inspector free-form chat (2026-04-03):** persistent composer, empty default messages, no auto chips after chat/audit, `streamingMessageId` + history fix, optional note context on `sendMessage`; `frontend` tests + build pass  
 - [x] **Docs sync (2026-04-03):** `@progress.md` work log + table row; `@plan.md` status blurb + §3 checkbox; `@docs/context/system-map.md` banner + Theory Inspector row + data-flow §7  
 - [x] **Docs sync (2026-04-04):** `@progress.md` — **Work log — Theory Inspector: editor focus for chat + measure/part (2026-04-04)**, consolidated table + Context-Aware file list + approach §6 + current-failures item 11; `@plan.md` status blurb + §3 checkbox + verification test name; `@docs/context/system-map.md` banner + Theory Inspector / RiffScore rows + data-flow §7  
 - [x] **Theory Inspector LLM grounding + UI contrast (2026-04-03):** `SCORE_DIGEST`, `AUTHORITATIVE NOTATION`, `FULL BAR` measure dump; evidence-first `userMessage` on note stream; chat prepends FACT block; SATB parity; `prompts.ts` + `NOTE_EXPLAIN_TUTOR_BRIEF`; `ChatBubble` / `SandboxPlaybackBar` dark-theme text tokens; vitest updates; **Work log** + **current failure #12** in `@progress.md`  
@@ -175,7 +187,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 
 | Item | Location |
 |------|-----------|
-| Panel copy + order + suggestions cards | `harmony-forge-redesign/src/components/organisms/TheoryInspectorPanel.tsx` |
+| Panel copy + order + suggestions cards | `frontend/src/components/organisms/TheoryInspectorPanel.tsx` |
 | `hasApiKey` for offline copy | same (reads `useTheoryInspectorStore`) |
 | `aiSuggestions` on model | `useTheoryInspectorStore.ts` |
 | Stream/json split | `useTheoryInspector.ts` + `NOTE_EXPLAIN_TUTOR_BRIEF` |
@@ -184,7 +196,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 | Staff geometry | `lib/music/riffscorePositions.ts` — `extractStaffLabelLayout` |
 | Overlays + fallback strip | `components/score/RiffScoreEditor.tsx` |
 
-**Verification:** `cd harmony-forge-redesign && npm run test` (includes `noteInsightAiSplit`); `npm run build` passes. **`npm run lint`** still reports broader repo debt (including pre-existing `RiffScoreEditor` `useMemo` / React Compiler warnings)—not introduced solely by this slice.
+**Verification:** `cd frontend && npm run test` (includes `noteInsightAiSplit`); `npm run build` passes. **`npm run lint`** still reports broader repo debt (including pre-existing `RiffScoreEditor` `useMemo` / React Compiler warnings)—not introduced solely by this slice.
 
 **Current status / failure we addressed:** Console error from **changing `useEffect` dependency array length** under Turbopack—**workaround shipped** (`useLayoutEffect` without deps). **Still open:** prettier scroll triggers without tripping compiler; full-project lint green; optional **scroll/resize** re-measure if staff labels drift inside nested scroll containers (only add if QA shows drift).
 
@@ -211,8 +223,8 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - [x] `engine/parsers/fileIntake.ts` + tests (mocked `spawnSync`); PDF pipeline wiring; remove Audiveris narrative
 - [x] `parsedScoreToPartwiseMelodyMusicXML` + `POST /api/to-preview-musicxml` in `engine/server.ts`
 - [x] `useUploadStore.previewMusicXML` / `setPreviewMusicXML`; `setFile` clears preview
-- [x] `harmony-forge-redesign/src/app/page.tsx` — async preview fetch before navigate for pdf/mxl/mid/midi
-- [x] `harmony-forge-redesign/src/app/document/page.tsx` — consume `storePreviewXml` + parse like XML
+- [x] `frontend/src/app/page.tsx` — async preview fetch before navigate for pdf/mxl/mid/midi
+- [x] `frontend/src/app/document/page.tsx` — consume `storePreviewXml` + parse like XML
 - [x] Binary resolution + `PATH` in `dev:backend`; `requirements.txt` Python/OMR notes
 - [x] In-page upload error UI; oemer stderr excerpt in failure payload; longer OMR timeout
 
@@ -231,7 +243,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 
 **Approach (this slice):**
 
-1. **Run the full stack reliably** — Use repo **`Makefile`** targets only: `make dev` runs engine (`tsx watch engine/server.ts`, port **8000**) and Next (`harmony-forge-redesign`, port **3000**). If **EADDRINUSE** or Next **`.next/dev/lock`** errors appear, run **`make dev-clean`** first (kills listeners on 8000/3000/3001 and removes the lock), then `make dev`.
+1. **Run the full stack reliably** — Use repo **`Makefile`** targets only: `make dev` runs engine (`tsx watch engine/server.ts`, port **8000**) and Next (`frontend`, port **3000**). If **EADDRINUSE** or Next **`.next/dev/lock`** errors appear, run **`make dev-clean`** first (kills listeners on 8000/3000/3001 and removes the lock), then `make dev`.
 2. **Theory Inspector = note explain + user-driven chat** — The panel already had note-click FACTs and streamed **Tutor summary** / **Ideas to try next**; we **surfaced the existing Zustand chat** in the same scroll area with a **persistent composer** so users type their own questions (no demo thread, no placeholder suggestion text in the input, no automatic quick-reply chip rows after each assistant reply or after SATB audit).
 3. **Ground free chat when a note is selected** — `sendMessage` originally passed **`violationContext`** + **`theoryInspectorNoteMode`**; **2026-04-04** extended this to **`scoreSelectionContext`** from unified **`inspectorScoreFocus`** and fixed the **Tutor prompt** so focus facts are actually read (see **Work log — editor focus**, below).
 4. **Chat / note stream UX** — **`streamingMessageId`** is set only for the **free-form chat** placeholder message; note-insight tutor streaming clears it, so the bottom input stays usable while a note summary generates, and the pulsing “typing” dots appear only for **chat** streams.
@@ -243,7 +255,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 | **TheoryInspectorPanel** | Removed demo **`DEFAULT_MESSAGES`** (default `messages` = `[]`). Note-detail cards when a note is selected; **`messages.map`** renders audit/violation/chat history below; **always-visible** input row with **empty `placeholder`**, `aria-label="Theory Inspector message"`; typing indicator when **`isStreaming && streamingMessageId != null`**. |
 | **Sandbox** | Wires **`messages`**, **`inputValue`**, **`setInputValue`**, **`onSend`**, **`onChipClick(chip, score)`**, **`streamingMessageId`**. |
 | **useTheoryInspector** | Stops injecting **quick-reply `chips` messages** after streamed/JSON chat responses and after **`runAudit`** violations; builds **conversation history after user message, before empty AI placeholder** (avoids sending the in-flight empty bubble as history); exports **`streamingMessageId`**. |
-| **Verification** | `cd harmony-forge-redesign && npm run test` and **`npm run build`** pass after these edits. |
+| **Verification** | `cd frontend && npm run test` and **`npm run build`** pass after these edits. |
 | **GitHub issues (process)** | Creating/updating issues from the agent shell was **not possible** without `gh` or `GITHUB_TOKEN` and with a **private** repo (API 404 unauthenticated). A **PDF → MusicXML** issue spec was drafted for manual/MCP creation; tracking remains **`plan.md` → 1.9m** until CI/venv guarantees land. |
 
 **Current failure we are still working on (unchanged as primary product risk):**
@@ -272,7 +284,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 - [x] `useTheoryInspectorStore.ts` — `InspectorScoreFocus`, `inspectorScoreFocus`, `setInspectorScoreFocus`; safe **`setSelectedNoteInsight(null)`**  
 - [x] `regionExplainContext.ts` + `regionExplainContext.test.ts`  
 - [x] `RiffScoreEditor.tsx`, `ScoreCanvas.tsx`, `sandbox/page.tsx`, `TheoryInspectorPanel.tsx`  
-- [x] `cd harmony-forge-redesign && npm run test` + **`npm run build`** pass; **`make test`** (engine) pass  
+- [x] `cd frontend && npm run test` + **`npm run build`** pass; **`make test`** (engine) pass  
 
 **Verification:** Vitest includes **`regionExplainContext`**; production Next build succeeds.
 
@@ -300,17 +312,17 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 
 | Item | Location |
 |------|-----------|
-| `SCORE_DIGEST`, `formatScoreDigestLine`, `formatScoreDigestForFoundHit` | `harmony-forge-redesign/src/lib/music/noteExplainContext.ts` |
+| `SCORE_DIGEST`, `formatScoreDigestLine`, `formatScoreDigestForFoundHit` | `frontend/src/lib/music/noteExplainContext.ts` |
 | `FULL BAR` append via `buildMeasureFocusFacts` | `noteExplainContext.ts` (additive path); `useTheoryInspector.ts` (SATB evidence) |
 | `AUTHORITATIVE NOTATION` line | `formatAuthoritativeDurationFact` in `noteExplainContext.ts`; SATB + additive |
 | Stream `userMessage` order + follow-up prefix | `useTheoryInspector.ts` (`streamTutorNoteInsight`, `sendMessage`) |
-| Tutor / editor-focus prompt rules | `harmony-forge-redesign/src/lib/ai/prompts.ts` |
+| Tutor / editor-focus prompt rules | `frontend/src/lib/ai/prompts.ts` |
 | `NOTE_EXPLAIN_TUTOR_BRIEF` | `useTheoryInspector.ts` |
 | `NoteInsight` Block B comment | `useTheoryInspectorStore.ts` |
 | AI bubble + playback bar colors | `ChatBubble.tsx`, `SandboxPlaybackBar.tsx` |
 | Vitest | `noteExplainContext.test.ts` (`formatScoreDigestLine`, additive expectations) |
 
-**Verification:** `cd harmony-forge-redesign && npm run test` (Vitest) passes after these edits.
+**Verification:** `cd frontend && npm run test` (Vitest) passes after these edits.
 
 **Current failure / risk we are working on:** Some LLM replies may **still** ignore embedded FACT lines and claim duration or notation was not provided—**observed in the wild** even after the above. **Mitigations shipped:** redundancy (`SCORE_DIGEST` + AUTHORITATIVE + FULL BAR), evidence-before-instructions, user-message repeat on follow-ups. **Additional mitigation (2026-04-04):** **`sendMessage`** no longer puts the **current** user turn into **`conversationHistory`** before the API call—previously the model saw **two consecutive `user` messages** (plain question, then full notation block), which primed “I can’t see the notation” hedging; see **Work log — Tutor follow-up + panels + markdown (2026-04-04)**. **Still open / next levers:** (a) **Refresh `inspectorScoreFocus` evidence** when the score changes after click (stale FACTs until re-click); (b) **server-side logging** of prompt lengths / truncated bodies if a gateway strips input; (c) **multimodal** (staff screenshot + vision model) only if product explicitly chooses image-based grounding; (d) regression tests that mock API payload shape (optional).
 
@@ -331,13 +343,13 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 
 | Item | Location |
 |------|-----------|
-| History snapshot before user bubble | `harmony-forge-redesign/src/hooks/useTheoryInspector.ts` — `sendMessage` |
+| History snapshot before user bubble | `frontend/src/hooks/useTheoryInspector.ts` — `sendMessage` |
 | Short prose + `describeNotationForTutor` | same — `explainNotePitch` / `buildFallbackNoteInsight` |
 | Panel titles + subtitles | `TheoryInspectorPanel.tsx` |
 | `react-markdown` + `MarkdownText` | `package.json` / `package-lock.json`, `MarkdownText.tsx` |
 | Chat bubbles | `ChatBubble.tsx` |
 
-**Verification:** `make test` (engine Jest); `cd harmony-forge-redesign && npm run test` + `npm run build`; ESLint on touched files clean. **`make lint-frontend`** still fails on **pre-existing** repo debt (`.claude/helpers`, `RiffScoreEditor` React Compiler / `useMemo`, etc.)—not introduced by this slice.
+**Verification:** `make test` (engine Jest); `cd frontend && npm run test` + `npm run build`; ESLint on touched files clean. **`make lint-frontend`** still fails on **pre-existing** repo debt (`.claude/helpers`, `RiffScoreEditor` React Compiler / `useMemo`, etc.)—not introduced by this slice.
 
 **Current failure / what we are still working on (post-slice):**
 
@@ -359,7 +371,7 @@ This section records the **explanation-level removal** slice so handovers stay a
 
 #### Approach
 
-1. **Single default constant** — `harmony-forge-redesign/src/lib/ai/explanationLevel.ts`: `DEFAULT_EXPLANATION_LEVEL = "intermediate"`; `resolveExplanationLevel(unknown)` returns a valid level or the default; `isExplanationLevel` unchanged for validation; removed **`EXPLANATION_LEVELS`** UI list, **`EXPLANATION_LEVEL_STORAGE_KEY`**, and **`readStoredExplanationLevel`** (no persisted user choice).
+1. **Single default constant** — `frontend/src/lib/ai/explanationLevel.ts`: `DEFAULT_EXPLANATION_LEVEL = "intermediate"`; `resolveExplanationLevel(unknown)` returns a valid level or the default; `isExplanationLevel` unchanged for validation; removed **`EXPLANATION_LEVELS`** UI list, **`EXPLANATION_LEVEL_STORAGE_KEY`**, and **`readStoredExplanationLevel`** (no persisted user choice).
 2. **Server** — `POST /api/theory-inspector` and `POST /api/theory-inspector/suggest`: after auth/intake checks, **`explanationLevel = resolveExplanationLevel(body.explanationLevel)`**; pass resolved value into **`buildSystemPrompt`** / **`buildStylistStructuredPrompt`** (prompts still branch on level string via `appendExplanationLevel`).
 3. **Client** — `useTheoryInspector.ts`: import **`DEFAULT_EXPLANATION_LEVEL`**; remove gates that blocked **`sendMessage`**, **`requestSuggestion`**, and **`streamTutorNoteInsight`** when `hasApiKey && !explanationLevel`; always include **`explanationLevel: DEFAULT_EXPLANATION_LEVEL`** in JSON bodies when the live path needs it (chat with key, suggest, note stream).
 4. **Zustand** — `useTheoryInspectorStore.ts`: delete **`explanationLevel`**, **`setExplanationLevel`**, **`hydrateExplanationLevelFromStorage`**; drop re-export of **`ExplanationLevel`** from the store.
@@ -370,17 +382,17 @@ This section records the **explanation-level removal** slice so handovers stay a
 
 | Item | Location |
 |------|-----------|
-| Default + resolver + storage cleanup | `harmony-forge-redesign/src/lib/ai/explanationLevel.ts` |
-| Store: remove level state | `harmony-forge-redesign/src/store/useTheoryInspectorStore.ts` |
-| Hooks: gates removed; default in POST bodies | `harmony-forge-redesign/src/hooks/useTheoryInspector.ts` |
-| Panel: strip removed; input lock semantics | `harmony-forge-redesign/src/components/organisms/TheoryInspectorPanel.tsx` |
-| API defaulting | `harmony-forge-redesign/src/app/api/theory-inspector/route.ts`, `.../suggest/route.ts` |
-| Molecule comment | `harmony-forge-redesign/src/components/molecules/ViolationCard.tsx` |
+| Default + resolver + storage cleanup | `frontend/src/lib/ai/explanationLevel.ts` |
+| Store: remove level state | `frontend/src/store/useTheoryInspectorStore.ts` |
+| Hooks: gates removed; default in POST bodies | `frontend/src/hooks/useTheoryInspector.ts` |
+| Panel: strip removed; input lock semantics | `frontend/src/components/organisms/TheoryInspectorPanel.tsx` |
+| API defaulting | `frontend/src/app/api/theory-inspector/route.ts`, `.../suggest/route.ts` |
+| Molecule comment | `frontend/src/components/molecules/ViolationCard.tsx` |
 
 #### Verification
 
-- `cd harmony-forge-redesign && npm run test` — **Vitest** (30 tests) **passed** after the change.
-- `npx tsc --noEmit` in **`harmony-forge-redesign/`** — **passed**.
+- `cd frontend && npm run test` — **Vitest** (30 tests) **passed** after the change.
+- `npx tsc --noEmit` in **`frontend/`** — **passed**.
 - **`npm run lint`** — **not** green for the **whole** redesign tree (**pre-existing** debt: **RiffScoreEditor**, **StudySessionProvider**, **`.claude/helpers`**, etc.); this slice did not target lint cleanup.
 
 #### Current failure / what we are still working on (post-slice)
@@ -408,7 +420,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 
 **Secondary / technical debt:**
 
-4. **Monorepo / Next warning:** Turbopack **multiple lockfiles** (repo root vs `harmony-forge-redesign/`); resolve via `turbopack.root` or lockfile consolidation.
+4. **Monorepo / Next warning:** Turbopack **multiple lockfiles** (repo root vs `frontend/`); resolve via `turbopack.root` or lockfile consolidation.
 
 5. **Doc drift (legacy):** Older sections below may still read OSMD/VexFlow-first; **RiffScore-first** is current for editing.
 
@@ -496,7 +508,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 **Active work / blockers:**
 1. **PDF → MusicXML (unresolved OMR)** — Stabilize **oemer** (venv Python 3.11/3.12, checkpoints, `OEMER_BIN`) or choose an alternate path; see **Multi-format intake & PDF → Document preview** and **`requirements.txt`**. Preview/generate wiring exists; **melody extraction from arbitrary PDF** does not yet meet “it just works.”
 2. **RiffScore sample URLs (404)** — wire or proxy `/audio/piano/*.mp3` (or disable sampler UI) so built-in playback matches user expectations.
-3. **OpenAI in dev** — ensure `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) live in `harmony-forge-redesign/.env.local` and restart `make dev`; verify `GET /api/theory-inspector` → `hasApiKey: true`.
+3. **OpenAI in dev** — ensure `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) live in `frontend/.env.local` and restart `make dev`; verify `GET /api/theory-inspector` → `hasApiKey: true`.
 4. **Turbopack lockfile warning** — align Next workspace root (`turbopack.root` or single lockfile strategy).
 5. **Tutor follow-up quality (residual, 2026-04-04)** — **History duplicate-user bug fixed**; manual QA on melody “half note?” follow-ups; optional **live-score evidence refresh** on send still not implemented. **`make lint-frontend`** remains red on legacy paths—use ESLint on touched files or accept debt until cleanup pass.
 
@@ -561,7 +573,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
   - `N` arms note input (quarter default)
   - `0` inserts rest at cursor, or converts selected notes to rests
   - `?` toggles inline shortcut cheat sheet
-- Build verification: `npm run build` in `harmony-forge-redesign` passes.
+- Build verification: `npm run build` in `frontend` passes.
 
 ## Session Log (2026-04-02)
 
@@ -593,7 +605,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 - Added an Inspector `Engine Evidence` card (raw trace lines) per clicked harmony note so users can inspect source findings directly.
 
 **Env for LLM:**
-- Added `harmony-forge-redesign/.env.example` + `.env.local` template; `.gitignore` exception so `.env.example` is committed.
+- Added `frontend/.env.example` + `.env.local` template; `.gitignore` exception so `.env.example` is committed.
 
 ## Session Log (2026-04-02 — Theory Inspector pitch duality)
 
@@ -609,7 +621,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 
 ## Session Log (2026-04-04)
 
-**Theory Inspector — tutor follow-up, panel purpose, markdown:** Shipped **`sendMessage` conversationHistory fix** (snapshot before user bubble), **What this click means** + **Verifiable score export** panels with de-duplicated copy, **`react-markdown`** + **`MarkdownText`** for chat and tutor UI. **Docs:** **`@progress.md`** — new **Work log — Tutor follow-up + panels + markdown**, updates to approach §6, consolidated table, Context-Aware file list, failure #12, handover template, **Current Focus**; **`@plan.md`** — status blurb + §3 checkboxes; **`@docs/context/system-map.md`** — banner, Theory Inspector row, data-flow §7. **Verification:** `make test`, `harmony-forge-redesign` `npm run test` + `npm run build`; **`make lint-frontend`** still red on pre-existing paths.
+**Theory Inspector — tutor follow-up, panel purpose, markdown:** Shipped **`sendMessage` conversationHistory fix** (snapshot before user bubble), **What this click means** + **Verifiable score export** panels with de-duplicated copy, **`react-markdown`** + **`MarkdownText`** for chat and tutor UI. **Docs:** **`@progress.md`** — new **Work log — Tutor follow-up + panels + markdown**, updates to approach §6, consolidated table, Context-Aware file list, failure #12, handover template, **Current Focus**; **`@plan.md`** — status blurb + §3 checkboxes; **`@docs/context/system-map.md`** — banner, Theory Inspector row, data-flow §7. **Verification:** `make test`, `frontend` `npm run test` + `npm run build`; **`make lint-frontend`** still red on pre-existing paths.
 
 ## Session Log (2026-04-02 — PDF preview + intake hardening)
 
@@ -708,7 +720,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 **Backend–frontend integration:**
 - Backend: `http://localhost:8000` (engine/server.ts, CORS allows localhost:3000)
 - Frontend: `http://localhost:3000` (Next.js, uses `NEXT_PUBLIC_API_URL` or defaults to localhost:8000)
-- Added `harmony-forge-redesign/.env.example` for `NEXT_PUBLIC_API_URL`
+- Added `frontend/.env.example` for `NEXT_PUBLIC_API_URL`
 - Run: `make dev-clean && make dev` (kills 8000/3000/3001, starts full stack)
 
 **Score preview and sandbox rendering:**
@@ -758,12 +770,12 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 - [x] Updated docs to reference `Taxonomy.md` as RAG source
 
 ### Phase 4: Frontend Integration (Design Baseline)
-- [x] Identified `harmony-forge-redesign/` as the Tactile Sandbox frontend to design around
+- [x] Identified `frontend/` as the Tactile Sandbox frontend to design around
 - [x] Documented frontend stack: Next 16, React 19, Tailwind, VexFlow, Tone, Zustand, Framer Motion
 - [x] Documented existing components: TheoryInspectorPanel, ScoreCanvas, ScoreDropzone, EnsembleBuilderPanel, ExportModal
 - [x] Documented frontend pages (see table below)
 
-**Frontend pages (design baseline)** — `harmony-forge-redesign/src/app/`:
+**Frontend pages (design baseline)** — `frontend/src/app/`:
 
 | Route | Page | Role |
 |-------|------|------|
@@ -848,7 +860,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 - **Generated output**: Backend emits partwise MusicXML 2.0 (additive harmonies: melody + selected instruments) that preserves source melody rhythm and reaches the sandbox intact.
 - **Browser verification**: Live browser test passed for upload, document preview/config, generate request (`POST /api/generate-from-file` → `200`), sandbox navigation, and score render.
 
-**Known follow-up (non-blocking):** Blank canvas fixed — ScoreCanvas prefers OSMD when musicXML exists. VexFlow edit tools (click-on-staff, note selection) inactive when OSMD used; re-enable when VexFlow reliable. `harmony-forge-redesign` has unrelated frontend lint debt outside the critical path; `make lint` remains backend-focused.
+**Known follow-up (non-blocking):** Blank canvas fixed — ScoreCanvas prefers OSMD when musicXML exists. VexFlow edit tools (click-on-staff, note selection) inactive when OSMD used; re-enable when VexFlow reliable. `frontend` has unrelated frontend lint debt outside the critical path; `make lint` remains backend-focused.
 
 **To test:** Run `make dev-clean`, then `make dev-backend` (port 8000) and `make dev-frontend` (port 3000). Upload MusicXML (e.g. 月亮代表我的心.xml), configure mood + instruments, click Generate Harmonies.
 
@@ -989,13 +1001,13 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 **Immediate (2026-04 — see Consolidated status):**
 1. **PDF→MusicXML (oemer)** — Pin **Python 3.11/3.12 venv**, `make install`, prefetch or manually install **oemer checkpoints**, set **`OEMER_BIN`**; or spike alternate OMR (**1.9m** in `@plan.md`).
 2. **RiffScore playback samples** — Serve or proxy `/audio/piano/*.mp3` (or disable built-in sampler UX) so piano playback is not 404/no-op.
-3. **LLM in dev** — `OPENAI_API_KEY` in `harmony-forge-redesign/.env.local`; restart `make dev`; confirm `GET /api/theory-inspector` → `hasApiKey: true`.
+3. **LLM in dev** — `OPENAI_API_KEY` in `frontend/.env.local`; restart `make dev`; confirm `GET /api/theory-inspector` → `hasApiKey: true`.
 4. **Turbopack / lockfiles** — Resolve multi-lockfile warning (e.g. `turbopack.root` or single-lockfile layout).
 
 **Deferred:** JSON-based score deltas for backend sync (Theory Inspector integration).
 
 **Historical (completed — pre–RiffScore-primary era may reference OSMD/VexFlow toggles):**
-1. ~~**Fix Next.js dev server**~~ — Resolved: run `npm install` in `harmony-forge-redesign/`
+1. ~~**Fix Next.js dev server**~~ — Resolved: run `npm install` in `frontend/`
 2. ~~**Render MusicXML in ScoreCanvas**~~ — Done: parseMusicXML, VexFlowScore, useScoreStore
 3. ~~**Selection + active tool**~~ — Done: useToolStore, ScorePalette onToolSelect, Escape/click to clear
 4. ~~**Wire Edit tools**~~ — Done: Undo, Redo, Cut, Copy, Paste, Delete
@@ -1005,7 +1017,7 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 8. ~~**Resolve VexFlow TickMismatch**~~ — Done (2g.1 era): measure padding; OSMD when `musicXML` for reliable display
 9. ~~**Sandbox View/Edit + VexFlow tools**~~ — Done historically; **current primary editor is RiffScore** (see Consolidated status).
 10. ~~**App-level audio (`usePlayback`)**~~ — Done: rest-aware/measure-aware scheduling; coexists with RiffScore internal playback (separate concern).
-11. **Optional: reduce frontend lint debt** — Remaining `harmony-forge-redesign` lint errors may be outside hot path
+11. **Optional: reduce frontend lint debt** — Remaining `frontend` lint errors may be outside hot path
 12. ~~**Sandbox metadata**~~ — Done: playback bar `sourceFileName` + `extractMusicXMLMetadata`
 13. ~~**Theory Inspector wiring**~~ — Done: routes + validation context + optional OpenAI; **harmony-only** highlights and suggest path refined in 2026-04-02.
 
@@ -1027,5 +1039,5 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 - **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, export, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
 - **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`patch-package`** on `riffscore` for `ui.toolbarPlugins`. Theory Inspector: deterministic engine + taxonomy context; **harmony-only** in-score UX; optional OpenAI via `.env.local`. **Intake:** `engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity.
 - **Current status / failures:** (1) **PDF→MusicXML / oemer unresolved** — OMR env fragile (Python version, checkpoint download, PATH); wiring done, reliability not. (2) RiffScore `/audio/piano/*.mp3` **404** in dev. (3) LLM off until `OPENAI_API_KEY` + restart. (4) Turbopack multi-lockfile warning. (5) **Tutor text grounding** — mitigated by **follow-up chat history fix** + text export (**Work log — Tutor follow-up + panels + markdown (2026-04-04)**); residual model/stale-focus risk in **current failures #12**. (6) **`make lint-frontend`** not green (pre-existing debt). (7) older doc bullets may still describe OSMD/VexFlow-first sandbox — use **Consolidated status (2026-04)** + **Multi-format intake & PDF → Document preview** as source of truth.
-- **Key files:** `engine/parsers/fileIntake.ts`, `engine/satbToMusicXML.ts` (`parsedScoreToPartwiseMelodyMusicXML`), `engine/server.ts`, `harmony-forge-redesign/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `requirements.txt`, `package.json` (`dev:backend` PATH).
+- **Key files:** `engine/parsers/fileIntake.ts`, `engine/satbToMusicXML.ts` (`parsedScoreToPartwiseMelodyMusicXML`), `engine/server.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `requirements.txt`, `package.json` (`dev:backend` PATH).
 - **Run:** `make dev-clean && make dev` → http://localhost:3000 (Next) + engine on :8000. `make test-engine` for CLI. **`make pdfalto`** + **`make install`** (Python) for PDF path.
