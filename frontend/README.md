@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HarmonyForge — frontend (Tactile Sandbox)
 
-## Getting Started
+Next.js app: upload → document → sandbox, **RiffScore** as the primary score editor, **Theory Inspector** (tutor, audit, stylist), optional **M5 study** arms.
 
-First, run the development server:
+## Run
+
+From **repo root** (recommended):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+make install    # if not already
+make dev        # backend :8000 + this app :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Or frontend only:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd frontend
+npm install
+npm run dev     # http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The browser must reach the engine at **`NEXT_PUBLIC_API_URL`** (default `http://localhost:8000`).
 
-## Learn More
+## Environment
 
-To learn more about Next.js, take a look at the following resources:
+Copy **`.env.example`** → **`.env.local`**. Important keys:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **`OPENAI_API_KEY`** — Theory Inspector LLM paths (optional; offline fallbacks exist).
+- **`OPENAI_BASE_URL`** or **`OPENAI_URL`** — compatible API base when not using default OpenAI.
+- **`NEXT_PUBLIC_API_URL`** — engine origin for client-side calls.
+- **M5:** `NEXT_PUBLIC_HF_STUDY_CONDITION`, `NEXT_PUBLIC_HF_SUGGESTION_EXPLANATION_MODE`, `NEXT_PUBLIC_HF_STUDY_REQUIRES_CONSENT` — see **`docs/plan.md`** (M5 section).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Routes
 
-## Deploy on Vercel
+| Route | Role |
+|-------|------|
+| `/` | Playground: upload, optional onboarding modal, link to tour |
+| `/onboarding` | Same upload flow with onboarding always available |
+| `/document` | Preview, mood/instruments, generate (or melody-only in reviewer arm) |
+| `/sandbox` | RiffScore editing, playback, export, Theory Inspector |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+API routes live under **`src/app/api/`** (e.g. proxy to engine, theory-inspector, preview MusicXML).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Source layout (high level)
+
+| Area | Role |
+|------|------|
+| `src/app/` | App Router pages, layouts, API routes |
+| `src/components/` | UI (inspector, sandbox, document, study, etc.) |
+| `src/lib/` | AI clients, study config, music/score helpers |
+| `src/store/` | Zustand stores (upload, score, inspector, coachmarks, …) |
+| `src/hooks/` | React hooks (playback, RiffScore sync, …) |
+
+**Score model:** **`EditableScore`** in the store is canonical; **`useRiffScoreSync`** (and related adapters) keep RiffScore and the store aligned.
+
+## RiffScore patch
+
+**`riffscore`** is patched via **`patch-package`** (see `patches/` and root **`package.json`** `postinstall`). After changing RiffScore version or patches, run `npm install` so the patch applies.
+
+## Test and build
+
+```bash
+cd frontend
+npm run test    # Vitest
+npm run build   # production build
+```
+
+From repo root, **`make build`** also builds the engine and this app.
+
+## Docs
+
+- **[../docs/plan.md](../docs/plan.md)** — feature checklist and verification.
+- **[../docs/progress.md](../docs/progress.md)** — work log and decisions.
+- **[../docs/README.md](../docs/README.md)** — full documentation index.

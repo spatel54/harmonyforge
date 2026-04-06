@@ -1,5 +1,33 @@
 # Progress (RALPH Loop)
 
+### How to read this file
+
+This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Handover). Newest context often appears in **work log** sections near the top and in **Consolidated status**. Older **session logs** stay for archaeology—use search or the links below rather than reading top-to-bottom once.
+
+### Quick links
+
+- [End Goal](#end-goal)
+- [Work log — Repository layout (2026-04-06)](#wl-repo-layout)
+- [Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)](#wl-onboarding-coachmarks)
+- [Approach](#approach)
+- [Research protocol (M5)](#research-protocol-m5--in-app-conditions-reference)
+- [Consolidated status (2026-04)](#consolidated-status-2026-04)
+- [Steps Done So Far](#steps-done-so-far)
+- [Current Focus](#current-focus)
+- [Current Status](#current-status)
+- [Next Steps](#next-steps)
+- [Learnings](#learnings)
+- [State Handover](#state-handover)
+
+### Last updated (2026-04-06)
+
+- **Docs / README pass:** Root and per-folder READMEs aligned with **RiffScore-first** editing, `/onboarding`, Makefile, and env pointers.
+- **Theory Inspector — audit UI:** SATB audit summary is a **single compact system line**; violations still drive **highlights on the score** (not a long card list).
+- **Sandbox:** **`runAudit`** / audit spam guarded so heavy checks do not re-fire unnecessarily on each inspector open (once-per-open style behavior).
+- **Onboarding / tour:** Playground modal, **`/onboarding`**, **`CoachmarkOverlay`** + header Tour, `data-coachmark` anchors; **`llmClient`** accepts **`OPENAI_BASE_URL` or `OPENAI_URL`**.
+
+For checklist and verification steps, pair this file with **[plan.md](plan.md)** and **[README.md](../README.md)**.
+
 ## End Goal
 
 Full flow working — **Upload → Document (preview + config) → Generate Harmonies → Sandbox** with editable score and working audio playback (Noteflight/MuseScore-style). The engine **adds** harmony parts to the user's melody (melody + flute + cello = 3 parts), rather than replacing it. User configures mood and instruments on Document page; generated MusicXML loads into the note editor for editing, playback, and export.
@@ -11,11 +39,15 @@ Full flow working — **Upload → Document (preview + config) → Generate Harm
 
 ---
 
+<a id="wl-repo-layout"></a>
+
 ## Work log — Repository layout (2026-04-06)
 
 Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/`, CLI `input/` / `output/`), **`frontend/`** (former `harmony-forge-redesign/`, flattened), **`docs/`** (includes **`docs/Taxonomy.md`**, **`docs/PROMPT.md`**), and **`miscellaneous/`** (`chamber-music-fullstack/`, `pdfalto/`, `run-amp.sh`, `.playwright-mcp/`). Root keeps **`Makefile`**, **`README.md`**, **`.gitignore`**, **`.cursor/`**. **`make dev`** / **`make install`** / **`make test`** run via **`backend/`** and **`frontend/`**; **`make pdfalto`** builds **`miscellaneous/pdfalto/`**; engine pdfalto discovery checks both **`pdfalto/pdfalto`** and **`miscellaneous/pdfalto/pdfalto`**. **Follow-up:** set deploy **root directory** to **`frontend/`** if a host still pointed at the old folder name; remove stale repo-root **`node_modules`** if present (no root **`package.json`**).
 
 ---
+
+<a id="wl-onboarding-coachmarks"></a>
 
 ## Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)
 
@@ -51,6 +83,8 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 **Verification:** `cd frontend && npm run test` (`studyConfig.test.ts`); `?study=reviewer_primary` manual path; `?hfExplain=minimal` + stylist suggestion smoke test with `OPENAI_API_KEY`.
 
 ---
+
+<a id="consolidated-status-2026-04"></a>
 
 ## Consolidated status (2026-04) — end goal, approach, done work, active gaps
 

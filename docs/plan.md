@@ -1,8 +1,27 @@
 # Plan
 
-> **Current status:** Logic Core complete (1.1–1.9). **First-run UX (2026-04-06):** playground shows **`OnboardingModal`** until dismissed; **`/onboarding`** repeats upload + always-visible modal; optional **product tour** via **`CoachmarkOverlay`** + header **Tour** (persisted steps; `data-coachmark` anchors on upload, document, sandbox); **`llmClient`** accepts **`OPENAI_BASE_URL` or `OPENAI_URL`**. M5 study providers and contextual **`OnboardingCoachmark`** on document/sandbox unchanged. Tactile Sandbox editing is **RiffScore-first** (`frontend/`): `EditableScore` in Zustand syncs bidirectionally with RiffScore; rests normalized; **riffscore** extended via **`patch-package`** (`ui.toolbarPlugins` + **playback scrub** hooks — `__HF_RIFFSCORE_PLAY_FROM`) for native-toolbar HarmonyForge actions and **Play/Space/P** alignment with scrub. **Document preview:** raw `.xml`/`.musicxml` via FileReader; **PDF / MXL / MIDI** via **`POST /api/to-preview-musicxml`** + Zustand **`previewMusicXML`** when intake succeeds. **Additive harmonies:** Engine adds harmony parts to melody. **Flow:** Upload → Document → Generate → Sandbox. **Theory Inspector:** `/api/theory-inspector` + `/api/theory-inspector/suggest`; **dual-mode** + plain-language UI; **fixed tutor audience depth** — **`intermediate`** via **`DEFAULT_EXPLANATION_LEVEL`** / **`resolveExplanationLevel`** (Beginner/Intermediate/Professional **toggle removed**); **note-click** tutor stream sends **exported notation first** (`SCORE_DIGEST`, `FACT: AUTHORITATIVE NOTATION`, vertical FACTs, **`FULL BAR`** from `buildMeasureFocusFacts`), then **Response rules**; **free-form chat** repeats **`scoreSelectionContext` at the top of the user message** on follow-ups (in addition to **Editor focus** in the system prompt). **Follow-up chat (2026-04-04):** **`conversationHistory`** is built **before** adding the new user message so the API does not get **two consecutive `user` turns** (plain question without FACTs, then full block)—reduces “I can’t see the notation” hedging. **Deterministic panels:** **What this click means** (short prose via `describeNotationForTutor`) + **Verifiable score export** (monospace FACT block); **`react-markdown`** + **`MarkdownText`** for user/AI bubbles and tutor summary/suggestions. **InspectorScoreFocus** + `regionExplainContext.ts` for measure/part. **Dark theme:** AI **ChatBubble** + playback bar pagination use **`hf-text-primary`** / **`hf-detail`**. RAG + **`CITATION_AND_BREVITY`** + **`HONESTY_NO_SYCOPHANCY`**. **Tests:** vitest — `noteExplainContext`, `noteInsightAiSplit`, `regionExplainContext`, `playbackScrub`. **Active gaps:** **PDF→MusicXML (oemer)**; RiffScore `/audio/piano/*.mp3` 404s; Turbopack multi-lockfile; **residual LLM variance** / stale focus if score edits after click; **`make lint-frontend`** not green (**RiffScoreEditor** compiler/memo + `.claude` helpers). **Playback scrub:** implementation shipped (**`patch-package`** + `PlaybackScrubOverlay`); **field-verify** toolbar Play, **Space**, **P** after scrub; watch **dual playback paths** and **global pending** if regressions appear — see **`@docs/progress.md` → Playback scrub**.
->
-> **Milestones:** M3 (XAI Backend & Architecture) complete (19/19 closed). M4 (Frontend) consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) and now complete for MVP scope (audio, onboarding, inspector wiring). **M5 (User Study):** in-app study arms + RQ2 toggle + opt-in event log shipped (see **M5 — User study** below); protocol/surveys remain researcher-owned.
+### How to use this doc
+
+Skim **Status at a glance** below, then use the numbered **Plan** checklist for implementation detail. **Living narrative** (session notes, deep dives, regressions) lives in **[progress.md](progress.md)**. **Architecture** diagram: **[context/system-map.md](context/system-map.md)**. **Full doc index:** **[docs/README.md](README.md)**.
+
+### Status at a glance
+
+- **Logic Core (backend):** Items **1.1–1.9** shipped; **1.9m** (production-grade PDF→MusicXML / oemer) remains the main pipeline risk.
+- **Tactile Sandbox (frontend):** **RiffScore-first** editing — `EditableScore` in Zustand is the canonical score model; **`patch-package`** extends RiffScore (toolbar plugins, playback scrub via `__HF_RIFFSCORE_PLAY_FROM`). VexFlow/OSMD remain in the tree for legacy paths and fallbacks where noted in [progress.md](progress.md).
+- **Flow:** Upload → Document → Generate → Sandbox; optional **`/onboarding`** and product **tour** (`CoachmarkOverlay`, persisted steps).
+- **Theory Inspector:** `/api/theory-inspector` and `/suggest`; dual mode; fixed tutor depth (**intermediate**); notation-first FACT blocks + follow-up chat ordering; SATB audit surfaces as a **compact system line** plus **score highlights** (not a tall stack of violation cards). See [progress.md](progress.md) for UI and prompt churn.
+- **M5 (user study):** RQ1 (`reviewer_primary` / melody-only) and RQ2 (`minimal` stylist prose) plus opt-in logging — see **M5 — User study** below.
+- **Active gaps (short):** PDF/OMR reliability; RiffScore asset 404s for some piano samples; **`make lint-frontend`** not green; residual LLM/focus edge cases after heavy edits.
+
+### Current snapshot (detail)
+
+- **First-run UX:** Playground shows **`OnboardingModal`** until dismissed; **`llmClient`** resolves **`OPENAI_BASE_URL` ?? `OPENAI_URL`** (see `frontend/.env.example`).
+- **Preview:** Raw `.xml`/`.musicxml` in-browser; **PDF / MXL / MIDI** via **`POST /api/to-preview-musicxml`** and Zustand **`previewMusicXML`** when intake succeeds.
+- **Inspector UX:** Deterministic panels (**What this click means**, **Verifiable score export**); **`react-markdown`** on bubbles; **InspectorScoreFocus** + **`regionExplainContext`** for measure/part; dark-theme tokens on chat and playback bar.
+- **Tests (frontend):** Vitest covers `noteExplainContext`, `noteInsightAiSplit`, `regionExplainContext`, `playbackScrub`, `studyConfig`, etc.
+- **Playback scrub:** Shipped — verify toolbar **Play**, **Space**, and **P** after scrub; see [progress.md](progress.md) for regression notes.
+
+**Milestones:** M3 complete. M4 consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) (MVP scope). **M5:** instrumentation in-repo; protocol/surveys are researcher-owned.
 
 ## M5 — User study (RQ1 / RQ2) — app instrumentation
 
@@ -38,7 +57,7 @@ Build **HarmonyForge** — a Glass Box co-creative system that bridges the "Repa
 
 From HF LitReview notebook: 57 sources on AI-driven symbolic music generation. Key findings:
 
-**Frontend baseline**: `frontend/` (Next 16, React 19, VexFlow, Tone, Zustand) provides the Tactile Sandbox UI. MVP will integrate backend and Theory Inspector with this existing design.
+**Frontend baseline**: `frontend/` (Next.js, React, **RiffScore** as the primary editor, Tone.js for playback, Zustand for score and UI state) provides the Tactile Sandbox. VexFlow and OSMD remain for historical tooling and some fallback/display paths; the **canonical editing path** is RiffScore + `EditableScore` sync.
 
 - Modern frameworks prioritize **musical structure and coherence** via subtask decomposition (high-level planning vs. note-level creation).
 - "Glass Box" explainability and **deterministic logic** build user trust by aligning outputs with established music theory.
@@ -79,9 +98,9 @@ Build order (from MVP scope):
    - [ ] **1.9m** **Unresolved:** **Production-ready PDF→MusicXML** — stabilize **oemer** (Python 3.10–12 venv, ONNX checkpoints downloaded or manual install, `OEMER_BIN`) and/or evaluate alternate OMR; validate in docs/CI; page-1-only PDF remains a known limitation until multi-page merge is designed.
 
 2. **Tactile Sandbox (Frontend)** — Design around existing `frontend/`
-   - **Pages (design baseline)**: `/` Playground (upload) → `/document` Config (mood, instruments) → `/sandbox` Edit (ScoreCanvas, Theory Inspector). See `@progress.md` Phase 4 for full page table.
+   - **Pages (design baseline)**: `/` Playground (upload) → `/document` Config (mood, instruments) → `/sandbox` Edit (**RiffScore** editor, Theory Inspector). See [progress.md](progress.md) Phase 4 for full page table.
    - [x] Fix Next.js dev server (was missing `node_modules`; run `npm install`)
-   - [x] Frontend already has: VexFlow, ScoreCanvas, TheoryInspectorPanel, ScoreDropzone, EnsembleBuilderPanel
+   - [x] Frontend already has: **RiffScore** (primary sandbox editor), TheoryInspectorPanel, ScoreDropzone, EnsembleBuilderPanel; legacy VexFlow / OSMD / ScoreCanvas pieces remain where historical code paths reference them
    - [x] **2a** Document page config: Add mood (major/minor) selector to EnsembleBuilderPanel. Lift instrument selections + mood; pass to backend on Generate.
    - [x] **2b** Wire backend API: `POST /api/generate-from-file` with multipart file + JSON config (instruments, mood); store MusicXML for sandbox.
    - [x] **2c** Enable direct note manipulation: MusicXML render (VexFlowScore), selection, edit tools (Undo/Redo/Cut/Copy/Paste/Delete), duration/pitch/articulation/dynamics/measure/score tools. See Tactile Sandbox Note Editor plan.
