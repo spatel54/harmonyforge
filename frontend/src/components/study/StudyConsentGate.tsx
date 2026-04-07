@@ -57,7 +57,8 @@ export function StudyConsentGate({ children }: { children: React.ReactNode }) {
           style={{ color: "var(--hf-text-secondary)" }}
         >
           This build may record anonymous interaction events (e.g. button
-          clicks, suggestion accept/reject) on this device only, for research.
+          clicks, suggestion accept/reject, tutor idea actions) on this device
+          only, for research.
           No score contents or audio are uploaded by this log. You can export
           or discard the log at the end of the session.
         </p>

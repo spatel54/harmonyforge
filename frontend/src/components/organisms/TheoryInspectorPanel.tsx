@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { X, SendHorizontal } from "lucide-react";
+import { X, SendHorizontal, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatBubble } from "@/components/molecules/ChatBubble";
 import { MarkdownText } from "@/components/molecules/MarkdownText";
@@ -15,6 +15,7 @@ import type {
 } from "@/store/useTheoryInspectorStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
+import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -51,6 +52,9 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onRejectCorrection?: (correctionId: string) => void;
   onAcceptAllCorrections?: (batchId: string) => void;
   onRejectAllCorrections?: (batchId: string) => void;
+  /** Apply tutor <<<IDEA_ACTIONS>>> pitch edits */
+  onAcceptIdeaAction?: (action: IdeaAction) => void;
+  onRejectIdeaAction?: (action: IdeaAction) => void;
 }
 
 /**
@@ -99,12 +103,14 @@ export const TheoryInspectorPanel = React.forwardRef<
       onRejectCorrection,
       onAcceptAllCorrections,
       onRejectAllCorrections,
+      onAcceptIdeaAction,
+      onRejectIdeaAction,
       className,
       ...props
     },
     ref,
   ) => {
-    const chatRef = React.useRef<HTMLDivElement>(null);
+    const chatScrollRef = React.useRef<HTMLDivElement>(null);
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
     const suppressSuggestionProse = isMinimalSuggestionExplanation();
     const chatInputLocked = isStreaming && streamingMessageId != null;
@@ -228,7 +234,7 @@ export const TheoryInspectorPanel = React.forwardRef<
     // No dependency array: React Compiler / Turbopack can rewrite multi-entry effect deps and trigger
     // "final argument changed size" errors. Scrolling after every paint is cheap for this small panel.
     React.useLayoutEffect(() => {
-      const el = chatRef.current;
+      const el = chatScrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     });
 
@@ -315,14 +321,13 @@ export const TheoryInspectorPanel = React.forwardRef<
           </div>
         )}
 
-        {/* ── Chat Area — Node ra6HT ───────────────────────── */}
-        <div
-          ref={chatRef}
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
-          role="log"
-          aria-live="polite"
-          aria-label="Theory Inspector — note details and chat"
-        >
+        {/* ── Body: note details (top) + chat (bottom), equal split ── */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div
+            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
+            style={{ borderBottom: "1px solid var(--hf-detail)" }}
+            aria-label="Theory Inspector — note details and recommendations"
+          >
           {!noteInsight &&
             inspectorScoreFocus &&
             (inspectorScoreFocus.kind === "measure" ||
@@ -581,34 +586,126 @@ export const TheoryInspectorPanel = React.forwardRef<
                         No suggestions in this reply yet.
                       </span>
                     )}
+                    {noteInsight.ideaActions &&
+                      noteInsight.ideaActions.length > 0 &&
+                      tutorEnabled &&
+                      !isStreaming && (
+                        <div
+                          className="mt-[10px] flex flex-col gap-[6px]"
+                          aria-label="Implementable idea actions"
+                        >
+                          <div
+                            className="font-mono text-[9px]"
+                            style={{ color: "var(--hf-text-secondary)" }}
+                          >
+                            One-click pitch edits (from tutor JSON)
+                          </div>
+                          {noteInsight.ideaActions.map((a) => {
+                            const status =
+                              noteInsight.ideaActionStatuses?.[a.id] ?? "pending";
+                            const resolved = status !== "pending";
+                            return (
+                              <div
+                                key={a.id}
+                                className="flex items-center gap-[8px] rounded-[4px] px-[8px] py-[6px]"
+                                style={{
+                                  backgroundColor: resolved
+                                    ? "transparent"
+                                    : "color-mix(in srgb, var(--hf-accent) 10%, transparent)",
+                                  border: "1px solid var(--hf-detail)",
+                                  opacity: resolved ? 0.65 : 1,
+                                }}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div
+                                    className="font-body text-[12px] leading-snug"
+                                    style={{ color: "var(--hf-text-primary)" }}
+                                  >
+                                    {a.summary}
+                                  </div>
+                                  <div
+                                    className="font-mono text-[10px] mt-[2px]"
+                                    style={{ color: "var(--hf-text-secondary)" }}
+                                    title={a.noteId}
+                                  >
+                                    {a.suggestedPitch}
+                                  </div>
+                                </div>
+                                {resolved ? (
+                                  <span
+                                    className="font-mono text-[9px] shrink-0 uppercase"
+                                    style={{ color: "var(--hf-text-secondary)" }}
+                                  >
+                                    {status}
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-[4px] shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => onAcceptIdeaAction?.(a)}
+                                      className="flex items-center justify-center w-[26px] h-[26px] rounded transition-colors hover:bg-green-900/25 focus-visible:outline-2 focus-visible:outline-offset-1"
+                                      style={{ color: "#2e7d32" }}
+                                      aria-label={`Accept: set pitch to ${a.suggestedPitch}`}
+                                    >
+                                      <Check className="w-[14px] h-[14px]" strokeWidth={2.5} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => onRejectIdeaAction?.(a)}
+                                      className="flex items-center justify-center w-[26px] h-[26px] rounded transition-colors hover:bg-red-900/25 focus-visible:outline-2 focus-visible:outline-offset-1"
+                                      style={{ color: "var(--semantic-violation)" }}
+                                      aria-label="Reject this idea"
+                                    >
+                                      <X className="w-[14px] h-[14px]" strokeWidth={2.5} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                   </div>
                 </div>
               </>
           ) : null}
+          </div>
 
-          {messages.map((msg) => renderChatMessage(msg))}
-
-          {/* Chat stream typing (note insight uses its own “Generating summary…” copy) */}
-          {isStreaming && streamingMessageId != null && (
+          <div
+            className="flex-1 min-h-0 flex flex-col min-h-0"
+            aria-label="Theory Inspector — chat column"
+          >
             <div
-              className="flex items-center gap-[4px] px-[12px] py-[6px]"
-              aria-label="AI is typing"
-              role="status"
+              ref={chatScrollRef}
+              className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
+              role="log"
+              aria-live="polite"
+              aria-label="Theory Inspector — chat"
             >
-              <span
-                className="w-[6px] h-[6px] rounded-full animate-pulse"
-                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }}
-              />
-              <span
-                className="w-[6px] h-[6px] rounded-full animate-pulse"
-                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }}
-              />
-              <span
-                className="w-[6px] h-[6px] rounded-full animate-pulse"
-                style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }}
-              />
+              {messages.map((msg) => renderChatMessage(msg))}
+
+              {isStreaming && streamingMessageId != null && (
+                <div
+                  className="flex items-center gap-[4px] px-[12px] py-[6px]"
+                  aria-label="AI is typing"
+                  role="status"
+                >
+                  <span
+                    className="w-[6px] h-[6px] rounded-full animate-pulse"
+                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-[6px] h-[6px] rounded-full animate-pulse"
+                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-[6px] h-[6px] rounded-full animate-pulse"
+                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }}
+                  />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div

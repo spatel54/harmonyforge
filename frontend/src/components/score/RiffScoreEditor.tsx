@@ -18,6 +18,7 @@ import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import {
   extractNotePositions,
   extractStaffLabelLayout,
+  findNoteInputPreviewLayout,
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
@@ -55,6 +56,8 @@ export interface RiffScoreEditorProps {
   ) => void;
   /** Exposes flush + RiffScore-native undo/redo for sandbox / Theory Inspector. */
   onSessionReady?: (session: RiffScoreSessionHandles) => void;
+  /** Show scientific pitch next to RiffScore’s note-input preview ghost */
+  noteInputPitchLabelEnabled?: boolean;
 }
 
 const TOOLBAR_PALETTES = [
@@ -102,6 +105,7 @@ export function RiffScoreEditor({
   onInspectorSelectPart,
   onInspectorInferredRegion,
   onSessionReady,
+  noteInputPitchLabelEnabled = false,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -111,6 +115,11 @@ export function RiffScoreEditor({
   const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [showPaletteMenu, setShowPaletteMenu] = useState(false);
+  const [inputPreviewLabel, setInputPreviewLabel] = useState<{
+    pitch: string;
+    left: number;
+    top: number;
+  } | null>(null);
   const [visiblePalettes, setVisiblePalettes] = useState<Set<ToolbarPalette>>(
     () => new Set(TOOLBAR_PALETTES),
   );
@@ -469,6 +478,36 @@ export function RiffScoreEditor({
       resizeObserver.disconnect();
     };
   }, [isReady, score, rsToHf]);
+
+  useEffect(() => {
+    if (!noteInputPitchLabelEnabled || !isReady || !score) {
+      setInputPreviewLabel(null);
+      return;
+    }
+    let frame = 0;
+    const loop = () => {
+      const el = containerRef.current;
+      if (el) {
+        const layout = findNoteInputPreviewLayout(el, score);
+        setInputPreviewLabel((prev) => {
+          if (
+            prev?.pitch === layout?.pitch &&
+            prev?.left === layout?.left &&
+            prev?.top === layout?.top
+          ) {
+            return prev;
+          }
+          return layout;
+        });
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(frame);
+      setInputPreviewLabel(null);
+    };
+  }, [noteInputPitchLabelEnabled, isReady, score]);
 
   // Subscribe to selection events for onNoteClick + optional measure/part inference
   useEffect(() => {
@@ -879,6 +918,22 @@ export function RiffScoreEditor({
               }}
             />
           ))}
+        </div>
+      )}
+
+      {noteInputPitchLabelEnabled && inputPreviewLabel && (
+        <div
+          className="absolute pointer-events-none font-mono text-[11px] font-semibold z-[8] whitespace-nowrap"
+          style={{
+            left: inputPreviewLabel.left,
+            top: inputPreviewLabel.top,
+            color: "var(--hf-accent)",
+            textShadow: "0 0 4px var(--hf-bg), 0 0 8px var(--hf-bg)",
+          }}
+          aria-live="polite"
+          aria-label={`Input pitch ${inputPreviewLabel.pitch}`}
+        >
+          {inputPreviewLabel.pitch}
         </div>
       )}
 

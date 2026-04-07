@@ -2,23 +2,24 @@
 
 ### How to use this doc
 
-Skim **Status at a glance** below, then use the numbered **Plan** checklist for implementation detail. **Living narrative** (session notes, deep dives, regressions) lives in **[progress.md](progress.md)**. **Architecture** diagram: **[context/system-map.md](context/system-map.md)**. **Full doc index:** **[docs/README.md](README.md)**.
+Skim **Status at a glance** below, then use the numbered **Plan** checklist for implementation detail. **Living narrative** (session notes, deep dives, regressions) lives in **[progress.md](progress.md)**. **Architecture** diagram: **[context/system-map.md](context/system-map.md)**. **Full doc index:** **[docs/README.md](README.md)**. **Production deploy:** **[deployment.md](deployment.md)**.
 
 ### Status at a glance
 
 - **Logic Core (backend):** Items **1.1–1.9** shipped; **1.9m** (production-grade PDF→MusicXML / oemer) remains the main pipeline risk.
 - **Tactile Sandbox (frontend):** **RiffScore-first** editing — `EditableScore` in Zustand is the canonical score model; **`patch-package`** extends RiffScore (toolbar plugins, playback scrub via `__HF_RIFFSCORE_PLAY_FROM`). VexFlow/OSMD remain in the tree for legacy paths and fallbacks where noted in [progress.md](progress.md).
 - **Flow:** Upload → Document → Generate → Sandbox; optional **`/onboarding`** and product **tour** (`CoachmarkOverlay`, persisted steps).
-- **Theory Inspector:** `/api/theory-inspector` and `/suggest`; dual mode; fixed tutor depth (**intermediate**); notation-first FACT blocks + follow-up chat ordering; SATB audit surfaces as a **compact system line** plus **score highlights** (not a tall stack of violation cards). See [progress.md](progress.md) for UI and prompt churn.
+- **Theory Inspector:** `/api/theory-inspector` and `/suggest`; dual mode; fixed tutor depth (**intermediate**); notation-first FACT blocks + follow-up chat ordering; SATB audit surfaces as a **compact system line** plus **score highlights** (not a tall stack of violation cards). **2026-04-06:** split **note vs chat** panes; **`<<<IDEA_ACTIONS>>>`** one-click applies + **`NOTE_IDS_FOR_IDEA_ACTIONS`** in evidence + **`ideaActionResolve`** fallback; ghost/input pitch labels. See [progress.md](progress.md) → [Work log — Theory Inspector…](progress.md#wl-inspector-split-ideas-2026-04-06).
 - **M5 (user study):** RQ1 (`reviewer_primary` / melody-only) and RQ2 (`minimal` stylist prose) plus opt-in logging — see **M5 — User study** below.
 - **Active gaps (short):** PDF/OMR reliability; RiffScore asset 404s for some piano samples; **`make lint-frontend`** not green; residual LLM/focus edge cases after heavy edits.
+- **Docs & deploy (2026-04-07):** README set + **[docs/README.md](README.md)** index + **[deployment.md](deployment.md)** (Vercel `frontend/` root, engine host, env/CORS). Root **[node_modules/README.md](../node_modules/README.md)** + **`.gitignore`** exception for tracked explainer only — see [progress.md](progress.md) work log.
 
 ### Current snapshot (detail)
 
 - **First-run UX:** Playground shows **`OnboardingModal`** until dismissed; **`llmClient`** resolves **`OPENAI_BASE_URL` ?? `OPENAI_URL`** (see `frontend/.env.example`).
 - **Preview:** Raw `.xml`/`.musicxml` in-browser; **PDF / MXL / MIDI** via **`POST /api/to-preview-musicxml`** and Zustand **`previewMusicXML`** when intake succeeds.
-- **Inspector UX:** Deterministic panels (**What this click means**, **Verifiable score export**); **`react-markdown`** on bubbles; **InspectorScoreFocus** + **`regionExplainContext`** for measure/part; dark-theme tokens on chat and playback bar.
-- **Tests (frontend):** Vitest covers `noteExplainContext`, `noteInsightAiSplit`, `regionExplainContext`, `playbackScrub`, `studyConfig`, etc.
+- **Inspector UX:** Deterministic panels (**What this click means**, **Verifiable score export**); **`react-markdown`** on bubbles; **InspectorScoreFocus** + **`regionExplainContext`** for measure/part; dark-theme tokens on chat and playback bar; **split column** (note details + ideas vs chat); **IDEA_ACTIONS** rows with Accept/Reject; optional **inspector debug strip** when apply fails.
+- **Tests (frontend):** Vitest covers `noteExplainContext`, `noteInsightAiSplit`, **`ideaActionResolve`**, **`staffPreviewPitch`**, `regionExplainContext`, `playbackScrub`, `studyConfig`, etc.
 - **Playback scrub:** Shipped — verify toolbar **Play**, **Space**, and **P** after scrub; see [progress.md](progress.md) for regression notes.
 
 **Milestones:** M3 complete. M4 consolidated in [#79](https://github.com/salt-family/harmonyforge/issues/79) (MVP scope). **M5:** instrumentation in-repo; protocol/surveys are researcher-owned.
@@ -143,6 +144,7 @@ Build order (from MVP scope):
    - [x] **Tutor text export + message ordering (2026-04-03):** **`SCORE_DIGEST`**, **`FACT: AUTHORITATIVE NOTATION`**, **`FULL BAR`** (measure-level `buildMeasureFocusFacts` appended to note evidence); **note-click** `userMessage` = evidence **then** **Response rules**; **chat** prepends full FACT block before user text; **SATB** path includes digest + full bar; **`prompts.ts`** / **`NOTE_EXPLAIN_TUTOR_BRIEF`** — full notation, no “pitch-only”; **UI** — **`ChatBubble`** AI variant + **`SandboxPlaybackBar`** pagination contrast for dark theme. See `@progress.md` → **Work log — LLM “sees” the score (2026-04-03)**.
    - [x] **Tutor follow-up + panels + markdown (2026-04-04):** **`sendMessage`** — snapshot **`conversationHistory`** before **`addMessage(userMsg)`** (no duplicate plain-then-rich user pair to the LLM). **Panels** — **What this click means** + **Verifiable score export**; shortened **`currentPitchGuideExplanation`**. **`react-markdown`** + **`MarkdownText.tsx`** — **`ChatBubble`** user/ai; tutor summary, ideas, origin, click-meaning in **`TheoryInspectorPanel`**. See `@progress.md` → **Work log — Tutor follow-up + panels + markdown (2026-04-04)**. **Open:** optional **live evidence refresh** on send; **residual** model/stale-focus risk; **`make lint-frontend`** debt.
    - [x] **Default explanation depth (2026-04-03):** Removed **Beginner / Intermediate / Professional** panel toggle; **`lib/ai/explanationLevel.ts`** — **`DEFAULT_EXPLANATION_LEVEL`**, **`resolveExplanationLevel`**; **`POST /api/theory-inspector`** and **`/api/theory-inspector/suggest`** default missing/invalid `explanationLevel`; **`useTheoryInspectorStore`** no longer persists level; **`useTheoryInspector`** / **`TheoryInspectorPanel`** — no gating before chat, suggest, or note tutor summary. See **`@docs/progress.md` → Work log — Theory Inspector: default explanation depth**.
+   - [x] **Inspector split layout + actionable ideas + ghost pitch labels (2026-04-06):** **`TheoryInspectorPanel`** — equal **top / bottom** panes (note details + ideas vs chat scroll); auto-scroll only the chat pane. **Ideas:** optional tutor block **`<<<IDEA_ACTIONS>>>`** JSON (`ideaActionSchema.ts`, **`splitNoteInsightAiContent`**); **`NoteInsight.ideaActions`** + **`patchSelectedNoteInsight`**; Accept applies via **`applySuggestion`**; Reject keeps row visible; study log **`idea_action_accepted` / `idea_action_rejected`**. **Ghosts:** stylist **`RiffScoreSuggestionOverlay`** always shows **`suggestedPitch`** label; note-input mode shows preview pitch via **`findNoteInputPreviewLayout`** + **`staffPreviewPitch.ts`**. **Apply reliability:** **`NOTE_IDS_FOR_IDEA_ACTIONS`** **`FACT:`** lines in additive + SATB tutor payload; **`resolveIdeaActionNoteId`** (`ideaActionResolve.ts`) when JSON `noteId` is wrong; sandbox **`setInspectorDebugStatus`** on failure. **Vitest:** **`ideaActionResolve.test.ts`**, **`staffPreviewPitch.test.ts`**, **`noteInsightAiSplit.test.ts`**. **Open:** ambiguous part-name fallback, off-beat suggestions — see [progress.md — Work log (2026-04-06)](progress.md#wl-inspector-split-ideas-2026-04-06).
 
 4. **Supporting Features** *(M4 #79 — MVP by 3/27)*
    - [ ] Multi-clef & instrument transposition; multi-instrument selection
@@ -154,7 +156,7 @@ Build order (from MVP scope):
 ## Verification
 
 - `make test` — Backend unit and integration tests pass
-- `cd frontend && npm run test` — Vitest (`noteExplainContext`, `noteInsightAiSplit`, **`regionExplainContext`**, **`playbackScrub`**, **`studyConfig`**, and other frontend unit tests)
+- `cd frontend && npm run test` — Vitest (`noteExplainContext`, `noteInsightAiSplit`, **`ideaActionResolve`**, **`staffPreviewPitch`**, **`regionExplainContext`**, **`playbackScrub`**, **`studyConfig`**, and other frontend unit tests)
 - `make lint` — Backend ESLint passes
 - `make build` — Engine build plus Next production build pass
 - `make test-engine` — CLI runs engine on `input/月亮代表我的心.xml` → `output/月亮代表我的心_flute_cello.xml` (melody + flute + cello, major)
@@ -167,3 +169,4 @@ Build order (from MVP scope):
 - **Known active limitation (2026-03-24):** VexFlow edit renderer still fails to produce visible notation for some generated scores; Sandbox now auto-falls back to safe OSMD preview in Edit mode to avoid blank-canvas regressions while preserving app usability.
 - **PDF / OMR (2026-04-02):** Manual upload flow should call **`/api/to-preview-musicxml`** for non-XML formats; success requires **pdfalto** built, **Poppler**, and working **oemer** (see `requirements.txt`). **Failure is expected** until oemer checkpoints + Python stack are pinned — see **`@progress.md` → Multi-format intake & PDF → Document preview**.
 - **M5 study prep:** Open `http://localhost:3000/?study=reviewer_primary` → upload MusicXML → Document shows **Continue to sandbox (melody only)** → Sandbox has melody-only score. Optional `?hfExplain=minimal` → stylist suggestions omit prose in panel (requires `OPENAI_API_KEY`). Opt-in **Research log** on Sandbox copies JSON when logging is enabled.
+- **Production deploy (2026-04-07):** Follow **[deployment.md](deployment.md)** — backend on separate host, Vercel **root directory = `frontend`**, **`NEXT_PUBLIC_API_URL`** + **`CORS_ORIGIN`** aligned; smoke-test upload → generate → sandbox on the live URLs.

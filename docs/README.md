@@ -12,6 +12,7 @@
 2. plan.md         →  what is built vs still open (checklist)
 3. progress.md     →  how we got here (work log)
 4. system-map.md   →  how pieces connect (diagram)
+5. deployment.md   →  Vercel + engine host + env / CORS (production)
 ```
 
 ---
@@ -24,6 +25,7 @@ flowchart LR
   B --> C[Taxonomy + theory prep]
   C --> D[verification prompts]
   D --> E[engine test log]
+  A --> F[deployment]
 ```
 
 ---
@@ -33,7 +35,7 @@ flowchart LR
 | File | Plain-English purpose |
 |------|------------------------|
 | [plan.md](plan.md) | Goals, research notes, and the numbered checklist (backend, frontend, inspector, verification). |
-| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. |
+| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. **Theory Inspector (2026-04-06):** [split panel, IDEA_ACTIONS, ghost labels, apply fix](progress.md#wl-inspector-split-ideas-2026-04-06). |
 | [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) | Tight list + prompting questions for the last MVP feature bundle. |
 
 ### Architecture
@@ -41,6 +43,12 @@ flowchart LR
 | File | Plain-English purpose |
 |------|------------------------|
 | [context/system-map.md](context/system-map.md) | Picture of how the browser app, engine API, and inspector talk to each other. |
+
+### Deployment
+
+| File | Plain-English purpose |
+|------|------------------------|
+| [deployment.md](deployment.md) | Host the **engine** on its own service, **Next.js** on Vercel with **`frontend/`** as root, set **`NEXT_PUBLIC_API_URL`** and **`CORS_ORIGIN`**, and keep secrets out of `NEXT_PUBLIC_*`. |
 
 ### Theory and AI prep
 

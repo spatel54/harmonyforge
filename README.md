@@ -123,6 +123,7 @@ flowchart LR
 | [docs/plan.md](docs/plan.md) | Checklist, M5 study flags, verification |
 | [docs/progress.md](docs/progress.md) | Day-to-day log and decisions |
 | [docs/context/system-map.md](docs/context/system-map.md) | Architecture diagram |
+| [docs/deployment.md](docs/deployment.md) | Production: Vercel + engine host, env vars, CORS |
 | [docs/adr/](docs/adr/) | Formal “why we decided X” notes |
 | [docs/Taxonomy.md](docs/Taxonomy.md) | Theory vocabulary for the inspector |
 

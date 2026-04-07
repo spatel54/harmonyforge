@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
+import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
@@ -45,6 +46,10 @@ export interface NoteInsight {
   aiExplanation?: string;
   /** Parsed from tutor reply after <<<SUGGESTIONS>>> */
   aiSuggestions?: string;
+  /** Optional structured pitch edits after <<<IDEA_ACTIONS>>> */
+  ideaActions?: IdeaAction[];
+  /** Per-action accept/reject for ideaActions (key = action id) */
+  ideaActionStatuses?: Record<string, "pending" | "accepted" | "rejected">;
 
   insightKind: NoteInsightKind;
   currentPitch: string;
@@ -108,6 +113,8 @@ export interface TheoryInspectorState {
 
   selectedNoteInsight: NoteInsight | null;
   setSelectedNoteInsight: (insight: NoteInsight | null) => void;
+  /** Merge into current note insight (no-op if none selected). */
+  patchSelectedNoteInsight: (patch: Partial<NoteInsight>) => void;
 
   inspectorScoreFocus: InspectorScoreFocus | null;
   setInspectorScoreFocus: (focus: InspectorScoreFocus | null) => void;
@@ -176,6 +183,20 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
           selectedNoteInsight: null,
           inspectorScoreFocus:
             s.inspectorScoreFocus?.kind === "note" ? null : s.inspectorScoreFocus,
+        };
+      }),
+
+    patchSelectedNoteInsight: (patch) =>
+      set((s) => {
+        const cur = s.selectedNoteInsight;
+        if (!cur) return s;
+        const next = { ...cur, ...patch };
+        return {
+          selectedNoteInsight: next,
+          inspectorScoreFocus:
+            s.inspectorScoreFocus?.kind === "note"
+              ? { kind: "note", insight: next }
+              : s.inspectorScoreFocus,
         };
       }),
 

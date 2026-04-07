@@ -168,7 +168,8 @@ export function describeSimpleInterval(semitonesAbs: number): string {
   return octaves > 0 ? `${core} (spanning ${octaves} extra octave(s) overall)` : core;
 }
 
-function startBeatOfNoteIndex(measure: Measure, noteIdx: number): number {
+/** Beat offset of note `noteIdx` within the measure (for aligning parts at the same moment). */
+export function startBeatOfNoteIndex(measure: Measure, noteIdx: number): number {
   let b = 0;
   for (let i = 0; i < noteIdx; i++) {
     b += noteBeats(measure.notes[i]!);
@@ -480,6 +481,25 @@ export function buildAdditiveNoteContextLines(
         `FACT: At that beat, ${role}: pitch ${n.pitch} — ${describeNotationForTutor(n, mb)}`,
       );
     }
+  }
+
+  lines.push(
+    "",
+    "=== NOTE_IDS_FOR_IDEA_ACTIONS (copy a noteId below **exactly** into <<<IDEA_ACTIONS>>> JSON; never invent ids) ===",
+  );
+  for (let i = 0; i < score.parts.length; i++) {
+    const part = score.parts[i]!;
+    const meas = part.measures[measureIdx];
+    if (!meas) continue;
+    const sn = soundingNoteAtBeatStart(meas, beat);
+    if (sn.kind !== "hit") continue;
+    const role =
+      score.parts.length > 1 && i === 0
+        ? `Melody (staff ${i + 1})`
+        : `staff ${i + 1}`;
+    lines.push(
+      `FACT: NOTE_ID ${role} "${part.name}" pitch=${sn.note.isRest ? "REST" : sn.note.pitch} noteId=${sn.note.id}`,
+    );
   }
 
   const cur = hMeas.notes[clickedNoteIdx];

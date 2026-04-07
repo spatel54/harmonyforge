@@ -7,6 +7,8 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 ### Quick links
 
 - [End Goal](#end-goal)
+- [Work log — Documentation, deployment, repo hygiene (2026-04-07)](#wl-docs-deploy-2026-04-07)
+- [Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)
 - [Work log — Repository layout (2026-04-06)](#wl-repo-layout)
 - [Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)](#wl-onboarding-coachmarks)
 - [Approach](#approach)
@@ -19,12 +21,17 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
-### Last updated (2026-04-06)
+### Last updated (2026-04-07)
 
-- **Docs / README pass:** Root and per-folder READMEs aligned with **RiffScore-first** editing, `/onboarding`, Makefile, and env pointers.
-- **Theory Inspector — audit UI:** SATB audit summary is a **single compact system line**; violations still drive **highlights on the score** (not a long card list).
-- **Sandbox:** **`runAudit`** / audit spam guarded so heavy checks do not re-fire unnecessarily on each inspector open (once-per-open style behavior).
-- **Onboarding / tour:** Playground modal, **`/onboarding`**, **`CoachmarkOverlay`** + header Tour, `data-coachmark` anchors; **`llmClient`** accepts **`OPENAI_BASE_URL` or `OPENAI_URL`**.
+- **Theory Inspector — full session write-up:** See **[Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)** for end goal, approach, file-level steps, and **what was broken vs fixed** (IDEA_ACTIONS `noteId` / silent apply failure). **Residual risks** are listed there and in **[Current Focus](#current-focus)**.
+- **Theory Inspector UX (shipped 2026-04-06):** Panel split (**note/recommendations** top, **chat** bottom); **`<<<IDEA_ACTIONS>>>`** JSON + Accept/Reject; **`NOTE_IDS_FOR_IDEA_ACTIONS`** in tutor evidence + **`resolveIdeaActionNoteId`** fallback + inspector debug line on failure; stylist ghost **always-visible pitch**; note-input **preview pitch** label; study log **`idea_action_accepted` / `idea_action_rejected`**.
+- **Documentation overhaul (completed):** Root [README.md](../README.md) reworked (RiffScore-first, journey diagrams, Makefile, folder map). Per-folder guides: [frontend/README.md](../frontend/README.md), [backend/README.md](../backend/README.md), [miscellaneous/README.md](../miscellaneous/README.md), [.cursor/README.md](../.cursor/README.md), [backend/engine/README.md](../backend/engine/README.md). [docs/README.md](README.md) expanded into a full index; [plan.md](plan.md) gained reader-facing **Status at a glance** + **Current snapshot** (replacing the wall-of-text blockquote); this file gained **How to read**, **Quick links** (with stable anchors), and **Last updated** stubs.
+- **Second README pass (visual / onboarding):** Tables, ASCII + Mermaid diagrams, “start here” paths, plain-language callouts across the same README set.
+- **Deployment playbook (new doc):** [deployment.md](deployment.md) — Vercel (**`frontend/`** root), separate backend host, **`NEXT_PUBLIC_*` vs secrets**, **`CORS_ORIGIN`** on the engine, preview-deploy caveat.
+- **Root `node_modules` hygiene:** [node_modules/README.md](../node_modules/README.md) explains non-canonical root installs; root [`.gitignore`](../.gitignore) ignores `/node_modules/*` but **keeps** `!/node_modules/README.md` so the explainer can be committed without tracking dependencies.
+- **Git workflow:** `origin/main` diverged from local once (remote “AI engine” description commit vs local README commit); reconciled with **`git pull --rebase origin main`** then **`git push`** — recommend `git config pull.rebase true` (or pass **`--rebase`** per pull) to avoid the “Need to specify how to reconcile” prompt.
+
+**Still the active product blockers (unchanged):** see **[Current Focus](#current-focus)** — PDF/OMR (**1.9m**), RiffScore **`/audio/piano/*.mp3` 404s**, **`make lint-frontend`** not green, residual tutor/focus edge cases. Doc work does **not** close those; it orients contributors and deployers.
 
 For checklist and verification steps, pair this file with **[plan.md](plan.md)** and **[README.md](../README.md)**.
 
@@ -52,6 +59,104 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 ## Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)
 
 **Learnings:** Ported **`newfiles/`** patterns into **`frontend/`** without dropping M5: root layout keeps **`StudySessionProvider`** + **`StudyConsentGate`** and adds **`CoachmarkOverlay`** under **`ThemeProvider`**. **`TransitionOverlay`** uses merged book/notes + percent for **`parsing`/`generating`** and retains **`melody_only`**. Playground **`/`** uses **`OnboardingModal`** + **`completeOnboarding`** on dismiss; **`/onboarding`** uses **`HomeViewOnboarding`** (same upload/`to-preview-musicxml` path as home). **`useCoachmarkStore`** + **`STEP_ROUTES`** drive navigation; **`data-coachmark="1"`–`"10"`** on stable regions (document preview/ensemble/CTA, sandbox editor/inspector/export); steps without a dedicated node fall back in **`CoachmarkOverlay`**. **`llmClient`** resolves base URL from **`OPENAI_BASE_URL ?? OPENAI_URL`**; **`frontend/.env.example`** and theory-inspector offline copy mention these vars.
+
+---
+
+<a id="wl-docs-deploy-2026-04-07"></a>
+
+## Work log — Documentation, deployment, and repo hygiene (2026-04-07)
+
+### End goal (restated for this thread)
+
+Ship and maintain **HarmonyForge** as a **glass-box** symbolic harmony tool: **Upload → Document → Generate → Sandbox** with **RiffScore**-centric editing, reliable engine API, optional **Theory Inspector** (LLM explain/suggest only), and **M5** study switches when needed. Long-term gaps (PDF/OMR, frontend lint debt, playback assets) remain on the **product** track, not the **docs** track.
+
+### Approach we took here
+
+1. **Documentation as product:** Make onboarding for humans and agents cheap — one root story, folder READMEs, indexed `docs/`, readable **plan** header, navigable **progress**.
+2. **Honesty about architecture:** Call out **two deployables** (Next frontend + Express backend) so Vercel-only expectations do not strand the engine.
+3. **Secrets hygiene:** Encode in-repo guidance that **`OPENAI_*`** stays server-side and **`NEXT_PUBLIC_*`** is public; never document committing **`.env.local`**.
+4. **Repo cleanliness:** Discourage accidental root **`node_modules`** tracking while preserving a tracked explainer **`node_modules/README.md`**.
+
+### Steps completed (this thread)
+
+| Step | Outcome |
+|------|---------|
+| README + docs plan | Executed attached “Documentation and README overhaul” plan (without editing the plan file in-repo): root README, **plan.md** / **progress.md** top matter, **docs/README.md** index, **frontend** / **backend** / **miscellaneous** / **.cursor** / **backend/engine** READMEs; consistency grep for stale paths. |
+| Visual README pass | Second pass: Mermaid/ASCII, “start here” tables, callouts, skimmable env and route tables. |
+| Deployment guidance | Captured step-by-step **Vercel + engine host + env + CORS** in **[deployment.md](deployment.md)** (was previously chat-only). |
+| `node_modules` README | Added **[../node_modules/README.md](../node_modules/README.md)**; root **`.gitignore`** exception so only that file under root `node_modules/` is intended to be tracked. |
+| Git | Divergent **main**: local “node_modules README” vs remote “AI engine” description — resolved via **rebase** and push. |
+
+### Current failure / blockers (product — not introduced by docs work)
+
+The **documentation session did not fix** runtime or CI failures. **Current Focus** below remains authoritative; in short:
+
+| Blocker | Nature |
+|---------|--------|
+| **PDF → MusicXML / oemer** | **1.9m** — unreliable for “any PDF” in the wild; needs env/tooling hardening or alternate OMR. |
+| **RiffScore piano sample 404s** | UX/audio expectation gap for built-in sampler URLs. |
+| **`make lint-frontend`** | Not green; RiffScore/editor/compiler debt. |
+| **Tutor / focus** | Residual LLM grounding after heavy edits; optional live evidence refresh still open. |
+
+**Deployment “failure mode” to watch:** If only Vercel is configured, the UI will load but **browser calls to the engine will fail** until **`NEXT_PUBLIC_API_URL`** points at a live backend and **`CORS_ORIGIN`** on the engine matches the Vercel origin. Preview deployments need a **multi-origin** or **staging API** story; single **`CORS_ORIGIN`** does not cover every `*.vercel.app` preview URL.
+
+### Learnings
+
+- **Rebase vs merge** on divergent **main**: `git pull --rebase origin main` avoided a merge commit noise when both sides had one commit off the same parent.
+- **Tracking `node_modules`:** Ignoring `node_modules/*` with one negated `README.md` is a workable pattern; teammates may still need **`git rm -r --cached node_modules`** once if history already tracked packages.
+
+---
+
+<a id="wl-inspector-split-ideas-2026-04-06"></a>
+
+## Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)
+
+### End goal (this thread)
+
+Improve **Theory Inspector** on `/sandbox` so that:
+
+1. **Layout:** Note-level panels and “Ideas to try next” stay visually separate from **free-form chat** (two scroll regions).
+2. **Actionable ideas:** When the tutor proposes a **concrete pitch change**, the user can **Accept** (apply immediately to `EditableScore` / RiffScore sync) or **Reject** (dismiss but keep the row visible).
+3. **Ghost / preview clarity:** Stylist **ghost noteheads** show **scientific pitch** (e.g. `G4`) without requiring hover; **note-input** hover shows the **preview pitch** next to RiffScore’s phantom notehead.
+
+Underlying product end goal (unchanged): **Upload → Document → Generate → Sandbox** with **glass-box** explanations and **expressive sovereignty** — the musician stays author; AI explains and suggests, deterministic engine + editor state remain ground truth.
+
+### Approach
+
+- **Split UI:** `TheoryInspectorPanel` uses two equal `flex-1` panes: top = measure/part card + full `noteInsight` stack (including Ideas); bottom = `messages` + typing indicator. **`useLayoutEffect` auto-scroll** only the **chat** pane so long note content does not reset chat scroll.
+- **Machine-readable idea applies:** Tutor may append **`<<<IDEA_ACTIONS>>>`** + JSON array validated by **`ideaActionSchema.ts`** (`id`, `noteId`, `suggestedPitch`, `summary`). Parsed in **`splitNoteInsightAiContent`** (`noteInsightAiSplit.ts`); stored on **`NoteInsight`** (`ideaActions`, `ideaActionStatuses`); **`patchSelectedNoteInsight`** updates accept/reject state.
+- **Same apply path as Stylist:** Sandbox **`handleAcceptIdeaAction`** calls **`flushToZustand`**, **`applySuggestion`** + **`applyScore`** (same as structured suggestions).
+- **Reliability fix (post-QA):** Evidence previously lacked **editor `noteId`s**, so the model invented JSON ids and **`getNoteById` returned null** → **silent no-op**. Mitigation: **`NOTE_IDS_FOR_IDEA_ACTIONS`** **`FACT:`** lines in **additive** (`buildAdditiveNoteContextLines`) and **SATB** (`useTheoryInspector` evidence); prompt requires **verbatim** copy; **`resolveIdeaActionNoteId`** (`ideaActionResolve.ts`) falls back to **unique part name in `summary` + same measure/beat as clicked note**; **`setInspectorDebugStatus`** explains failures.
+- **Ghost labels:** **`RiffScoreSuggestionOverlay`** — always-on mono label; **`findNoteInputPreviewLayout`** + **`staffPreviewPitch.ts`** + **`requestAnimationFrame`** in **`RiffScoreEditor`** when **`noteInputPitchLabelEnabled`** (from sandbox **`isNoteInputMode`**).
+- **M5 / study:** **`idea_action_accepted` / `idea_action_rejected`** in **`studyEventLog.ts`**; consent copy in **`StudyConsentGate.tsx`**.
+
+### Steps completed (implementation checklist)
+
+| Area | What shipped |
+|------|----------------|
+| Panel layout | [`TheoryInspectorPanel.tsx`](../frontend/src/components/organisms/TheoryInspectorPanel.tsx) — top/bottom panes, `chatScrollRef` |
+| Parse + types | [`ideaActionSchema.ts`](../frontend/src/lib/ai/ideaActionSchema.ts), [`noteInsightAiSplit.ts`](../frontend/src/lib/ai/noteInsightAiSplit.ts), [`useTheoryInspectorStore.ts`](../frontend/src/store/useTheoryInspectorStore.ts) — `ideaActions`, `patchSelectedNoteInsight` |
+| Tutor prompt | [`useTheoryInspector.ts`](../frontend/src/hooks/useTheoryInspector.ts) — `NOTE_EXPLAIN_TUTOR_BRIEF` + `NOTE_IDS_FOR_IDEA_ACTIONS` in SATB evidence; streaming merge preserves statuses |
+| Evidence IDs | [`noteExplainContext.ts`](../frontend/src/lib/music/noteExplainContext.ts) — `NOTE_IDS_FOR_IDEA_ACTIONS` block; **`startBeatOfNoteIndex`** exported |
+| Apply + UX | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) — `handleAcceptIdeaAction` / `handleRejectIdeaAction`, resolver, debug status |
+| Resolver | [`ideaActionResolve.ts`](../frontend/src/lib/music/ideaActionResolve.ts) + [`ideaActionResolve.test.ts`](../frontend/src/lib/music/ideaActionResolve.test.ts) |
+| Stylist ghost | [`RiffScoreSuggestionOverlay.tsx`](../frontend/src/components/score/RiffScoreSuggestionOverlay.tsx) |
+| Input preview | [`staffPreviewPitch.ts`](../frontend/src/lib/music/staffPreviewPitch.ts), [`riffscorePositions.ts`](../frontend/src/lib/music/riffscorePositions.ts) — `findNoteInputPreviewLayout`, [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx), [`ScoreCanvas.tsx`](../frontend/src/components/organisms/ScoreCanvas.tsx) |
+| Tests | Vitest: `noteInsightAiSplit.test.ts`, `staffPreviewPitch.test.ts`, `ideaActionResolve.test.ts` (`cd frontend && npm test`) |
+| Docs | [`plan.md`](plan.md) (snapshot + checklist + vitest line); [`docs/README.md`](README.md) quick link to this work log; this **Learnings** subsection |
+
+### Failure we hit — and current status
+
+| Issue | Status |
+|-------|--------|
+| **Accept on “One-click pitch edits” did nothing** | **Addressed:** Root cause was **missing / wrong `noteId`** in JSON. **NOTE_ID FACT lines** + **resolver** + **user-visible debug message**; users should **re-open the note** once so the tutor sees the new block (old streamed replies lack `NOTE_IDS`). |
+| **Ambiguous resolver** | **Open / residual:** Fallback matches **part name substring** in `summary` at **clicked note’s measure+beat**. Fails if **no unique match**, **two parts share a name fragment**, or the suggestion targets a **different beat** than the click. |
+| **Input preview pitch vs RiffScore DOM** | **Open / residual:** Label derives from **staff line + preview `NoteHead` geometry**; internal SVG changes could desync. |
+| **Product blockers (unchanged)** | PDF/OMR (**1.9m**), RiffScore **piano 404s**, **`make lint-frontend`** not green, tutor/focus edge cases — see **Current Focus** below. |
+
+### Ops note
+
+- **Run app:** `make dev` (backend **:8000**, Next **:3000**). **Stop:** `make dev-clean` clears those ports and Next dev lock.
 
 ---
 
@@ -115,6 +220,7 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 | **Config** | `frontend/.env.example` (committed); `.env.local` template; `.gitignore` allows `.env.example` while ignoring secrets. |
 | **Ops** | Documented `make dev`; **`make dev-clean`** clears ports **8000 / 3000 / 3001** and Next **`.next/dev/lock`** when restarting (see **Work log — 2026-04-03**). |
 | **Playback scrub** | `PlaybackScrubOverlay` + `playbackScrub.ts` + `riffscorePlaybackBridge.ts`; **`patch-package`** aligns RiffScore **toolbar Play**, **Space**, **P** with scrub via **`__HF_RIFFSCORE_PLAY_FROM`**; **manual QA** for regressions still advised — see **Playback scrub** subsection below. |
+| **Docs & deploy (2026-04-07)** | Root + folder READMEs (two passes: accuracy then visual/onboarding); **docs/README.md** index; **plan.md** reader header; **progress.md** navigation; **[deployment.md](deployment.md)** (Vercel `frontend/` root, engine host, env/CORS); **[node_modules/README.md](../node_modules/README.md)** + root **`.gitignore`** negation; GitHub **rebase** workflow note. |
 
 ### Playback scrub — draggable playhead & “Play starts where I dropped” (2026-04)
 
@@ -539,14 +645,17 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 
 **Primary editor:** Sandbox notation is **RiffScore**-driven with Zustand-backed `EditableScore` sync — not the older VexFlow-first story (see **Consolidated status (2026-04)** above for truth).
 
+**Docs / ops (2026-04-07):** Onboarding and deploy guidance are now in-repo (README set + **[deployment.md](deployment.md)**). **Next operational step** for production is to **execute** that playbook (backend URL → Vercel env → `CORS_ORIGIN`), not more prose. If `node_modules/` was ever fully tracked, run **`git rm -r --cached node_modules`** once, then **`git add node_modules/README.md .gitignore`** and commit.
+
 **Active work / blockers:**
 1. **PDF → MusicXML (unresolved OMR)** — Stabilize **oemer** (venv Python 3.11/3.12, checkpoints, `OEMER_BIN`) or choose an alternate path; see **Multi-format intake & PDF → Document preview** and **`requirements.txt`**. Preview/generate wiring exists; **melody extraction from arbitrary PDF** does not yet meet “it just works.”
 2. **RiffScore sample URLs (404)** — wire or proxy `/audio/piano/*.mp3` (or disable sampler UI) so built-in playback matches user expectations.
 3. **OpenAI in dev** — ensure `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) live in `frontend/.env.local` and restart `make dev`; verify `GET /api/theory-inspector` → `hasApiKey: true`.
 4. **Turbopack lockfile warning** — align Next workspace root (`turbopack.root` or single lockfile strategy).
 5. **Tutor follow-up quality (residual, 2026-04-04)** — **History duplicate-user bug fixed**; manual QA on melody “half note?” follow-ups; optional **live-score evidence refresh** on send still not implemented. **`make lint-frontend`** remains red on legacy paths—use ESLint on touched files or accept debt until cleanup pass.
+6. **Idea actions (`<<<IDEA_ACTIONS>>>`) — residual (2026-04-06)** — **Apply path fixed** for common cases (verbatim `NOTE_ID` + name/beat fallback). Still watch: **stale tutor replies** (re-click note after deploy), **ambiguous part names** in `summary`, **off-beat suggestions**, and **model omitting** `NOTE_IDS` despite prompt. Manual QA on multi-part additive scores (e.g. Clarinet + Viola) recommended.
 
-**Recently cleared (not a blocker):** **Theory Inspector explanation-level toggle** removed (2026-04-03); tutor depth is fixed to **`intermediate`** by default—no UI step before chat or suggest.
+**Recently cleared (not a blocker):** **Theory Inspector explanation-level toggle** removed (2026-04-03); tutor depth is fixed to **`intermediate`** by default—no UI step before chat or suggest. **Inspector split layout + IDEA_ACTIONS + ghost pitch labels + note-input preview label** shipped 2026-04-06; **silent Accept** fixed same pass via **NOTE_IDS** + **`resolveIdeaActionNoteId`**.
 
 **Still valuable from earlier milestones:** Onboarding, session persistence, engine on `:8000`, chord-chart export path, `usePlayback`-based app audio (where still used) — coexist with RiffScore’s internal playback.
 
@@ -914,6 +1023,12 @@ If a **new** regression appears (e.g. inspector **400**s from older clients omit
 ---
 
 ## Learnings
+
+### Theory Inspector layout & ghost labels (2026-04-06)
+- **Split scroll:** Keep `useLayoutEffect` auto-scroll on the **chat** pane only so long note-insight content does not reset chat scroll position.
+- **IDEA_ACTIONS:** Prose bullets stay human-readable; machine apply requires a **second delimiter** and strict JSON so partial tutor output does not break the Ideas markdown block.
+- **NOTE_ID contract:** Tutor evidence must expose **`FACT: NOTE_ID … noteId=<uuid>`** under **`NOTE_IDS_FOR_IDEA_ACTIONS`**; otherwise the model **invents** ids and **`getNoteById`** fails. Client **`resolveIdeaActionNoteId`** is a safety net, not a substitute for good exports.
+- **Input preview pitch:** RiffScore preview heads are already flagged by **`isPreviewNotehead`**; staff line **`getBoundingClientRect`** centers must align with notehead rects (container-relative) for **`pitchFromStaffGeometry`** to match click placement.
 
 ### Milestone 3/4 Issues (2026-03-23)
 - **M3 (XAI Backend & Architecture)**: Complete — 19/19 issues closed. Genre preset, harmony validation API, engine refinement, Theory Inspector RAG prep all done.

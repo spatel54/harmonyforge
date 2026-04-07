@@ -22,6 +22,7 @@ import {
   noteBeats,
   parseMeasureBeats,
   getInsertIndexAtBeat,
+  getNoteById,
 } from "@/lib/music/scoreUtils";
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
@@ -47,6 +48,9 @@ import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { StudyLogExportBar } from "@/components/study/StudyLogExportBar";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
+import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
+import { resolveIdeaActionNoteId } from "@/lib/music/ideaActionResolve";
+import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import {
   RiffScoreSessionContext,
   type RiffScoreSessionHandles,
@@ -164,6 +168,76 @@ function TactileSandboxPageInner({
       suggestionStore.rejectAll(batchId);
     },
     [suggestionStore],
+  );
+
+  const patchSelectedNoteInsight = useTheoryInspectorStore(
+    (s) => s.patchSelectedNoteInsight,
+  );
+
+  const handleAcceptIdeaAction = React.useCallback(
+    (action: IdeaAction) => {
+      riffSessionRef.current?.flushToZustand();
+      const live = useScoreStore.getState().score;
+      if (!live) {
+        setInspectorDebugStatus("Could not apply: no score loaded.");
+        return;
+      }
+      const insight = useTheoryInspectorStore.getState().selectedNoteInsight;
+      const resolvedNoteId = resolveIdeaActionNoteId(live, action, insight);
+      if (!resolvedNoteId) {
+        setInspectorDebugStatus(
+          `Could not apply: note id "${action.noteId}" not in score. Re-open this note so the tutor sees NOTE_IDS_FOR_IDEA_ACTIONS, or use a summary that names the target staff (e.g. Clarinet).`,
+        );
+        return;
+      }
+      const found = getNoteById(live, resolvedNoteId);
+      if (!found) {
+        setInspectorDebugStatus("Could not apply: resolved note disappeared.");
+        return;
+      }
+      setInspectorDebugStatus("");
+      logStudyEvent("idea_action_accepted", {
+        actionId: action.id,
+        noteId: resolvedNoteId,
+      });
+      const correction: ScoreCorrection = {
+        id: action.id,
+        noteId: resolvedNoteId,
+        partId: found.part.id,
+        measureIndex: found.measureIndex,
+        noteIndex: found.noteIndex,
+        originalPitch: found.note.pitch,
+        suggestedPitch: action.suggestedPitch,
+        ruleLabel: action.summary.slice(0, 120),
+        rationale: "",
+      };
+      applyScore(applySuggestion(live, correction));
+      const ins = useTheoryInspectorStore.getState().selectedNoteInsight;
+      patchSelectedNoteInsight({
+        ideaActionStatuses: {
+          ...(ins?.ideaActionStatuses ?? {}),
+          [action.id]: "accepted",
+        },
+      });
+    },
+    [applyScore, patchSelectedNoteInsight],
+  );
+
+  const handleRejectIdeaAction = React.useCallback(
+    (action: IdeaAction) => {
+      logStudyEvent("idea_action_rejected", {
+        actionId: action.id,
+        noteId: action.noteId,
+      });
+      const ins = useTheoryInspectorStore.getState().selectedNoteInsight;
+      patchSelectedNoteInsight({
+        ideaActionStatuses: {
+          ...(ins?.ideaActionStatuses ?? {}),
+          [action.id]: "rejected",
+        },
+      });
+    },
+    [patchSelectedNoteInsight],
   );
 
   const { cursor, setCursor, clearCursor } = useEditCursorStore();
@@ -1131,6 +1205,7 @@ function TactileSandboxPageInner({
                 isInspectorOpen ? handleInspectorInferredRegion : undefined
               }
               onRiffScoreSessionReady={handleRiffScoreSessionReady}
+              noteInputPitchLabelEnabled={isNoteInputMode}
             />
             {layersPanelOpen && score && (
               <div
@@ -1223,6 +1298,8 @@ function TactileSandboxPageInner({
                   ? (msgId) => suggestFixForViolation(score, msgId)
                   : undefined
               }
+              onAcceptIdeaAction={handleAcceptIdeaAction}
+              onRejectIdeaAction={handleRejectIdeaAction}
             />
           </div>
         )}

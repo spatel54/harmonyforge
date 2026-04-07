@@ -9,6 +9,7 @@
 
 import type { NotePosition, EditableScore } from "./scoreTypes";
 import type { IdMap } from "./riffscoreAdapter";
+import { pitchFromStaffGeometry } from "./staffPreviewPitch";
 
 /**
  * Extract note positions from the RiffScore rendered SVG.
@@ -207,8 +208,8 @@ function findNoteSelection(
   return null;
 }
 
-/** Check if an element is a preview/phantom notehead that should be excluded. */
-function isPreviewNotehead(el: Element): boolean {
+/** Check if an element is a preview/phantom notehead (RiffScore input cursor). */
+export function isPreviewNotehead(el: Element): boolean {
   // RiffScore wraps preview noteheads in a <g style="pointerEvents: none">
   const parent = el.parentElement;
   if (parent && (parent as HTMLElement).style?.pointerEvents === "none") {
@@ -293,4 +294,99 @@ function collectAllNoteheads(svg: SVGElement): Element[] {
   }
 
   return elements;
+}
+
+/** Layout hint for floating pitch label next to the note-input preview ghost. */
+export interface NoteInputPreviewLayout {
+  pitch: string;
+  left: number;
+  top: number;
+}
+
+/**
+ * Finds RiffScore’s pointer-events-none preview notehead and maps its vertical
+ * position to scientific pitch using staff line geometry (container coordinates).
+ */
+export function findNoteInputPreviewLayout(
+  container: HTMLElement,
+  score: EditableScore,
+): NoteInputPreviewLayout | null {
+  const svg =
+    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
+    container.querySelector<SVGSVGElement>("svg");
+
+  if (!svg) return null;
+
+  const containerRect = container.getBoundingClientRect();
+  const scrollTop = container.scrollTop || 0;
+  const scrollLeft = container.scrollLeft || 0;
+
+  const staffGroups = svg.querySelectorAll("g.staff");
+  if (staffGroups.length === 0) return null;
+
+  for (let si = 0; si < staffGroups.length; si++) {
+    const staffGroup = staffGroups[si];
+    const part = score.parts[si];
+    if (!part) continue;
+
+    let previewEl: SVGGraphicsElement | null = null;
+    staffGroup.querySelectorAll("text.NoteHead").forEach((el) => {
+      if (isPreviewNotehead(el) && el instanceof SVGGraphicsElement) {
+        previewEl = el;
+      }
+    });
+    if (!previewEl) {
+      staffGroup.querySelectorAll("text").forEach((el) => {
+        if (
+          isSmuflNotehead(el) &&
+          isPreviewNotehead(el) &&
+          el instanceof SVGGraphicsElement
+        ) {
+          previewEl = el;
+        }
+      });
+    }
+    if (!previewEl) continue;
+
+    const horizLines = [...staffGroup.querySelectorAll("line")].filter((l) => {
+      const y1 = parseFloat(l.getAttribute("y1") || "NaN");
+      const y2 = parseFloat(l.getAttribute("y2") || "NaN");
+      return Number.isFinite(y1) && Number.isFinite(y2) && Math.abs(y1 - y2) < 1.5;
+    });
+
+    const lineCenters = horizLines
+      .map((l) => {
+        const r = l.getBoundingClientRect();
+        return r.top + r.height / 2 - containerRect.top + scrollTop;
+      })
+      .sort((a, b) => a - b);
+
+    const lineYsFive: number[] = [];
+    for (const y of lineCenters) {
+      if (
+        lineYsFive.length === 0 ||
+        Math.abs(y - lineYsFive[lineYsFive.length - 1]) > 1.5
+      ) {
+        lineYsFive.push(y);
+      }
+    }
+    if (lineYsFive.length < 5) continue;
+
+    const rect = previewEl.getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2 - containerRect.top + scrollTop;
+    const pitch = pitchFromStaffGeometry(
+      part.clef,
+      lineYsFive.slice(0, 5),
+      centerY,
+    );
+    if (!pitch) continue;
+
+    const left = rect.right - containerRect.left + scrollLeft + 4;
+    const top = rect.top - containerRect.top + scrollTop - 2;
+
+    return { pitch, left, top };
+  }
+
+  return null;
 }

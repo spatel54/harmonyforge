@@ -20,6 +20,8 @@ export type StudyEventName =
   | "run_audit"
   | "explain_more"
   | "suggest_fix"
+  | "idea_action_accepted"
+  | "idea_action_rejected"
   | "study_logging_opt_in"
   | "study_logging_opt_out";
 

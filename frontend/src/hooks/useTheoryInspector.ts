@@ -102,7 +102,8 @@ const NOTE_EXPLAIN_TUTOR_BRIEF =
   "CURRENT SCORE FACTS are a **full notation snapshot** for this moment; treat them as authoritative. Lines starting **FACT: AUTHORITATIVE NOTATION** or **FACT: Clicked event** state the **notated note length**—if either appears, you **must** answer half-note vs quarter etc. from them; never say duration is missing. When a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
   "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
   "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
-  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.”";
+  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.” " +
+  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\"}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet).";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -996,15 +997,35 @@ export function useTheoryInspector() {
           throw new Error(data.error ?? `HTTP ${response.status}`);
         }
         const contentType = response.headers.get("Content-Type") ?? "";
-        if (contentType.includes("application/json")) {
-          const data = (await response.json()) as { content?: string };
-          const raw = data.content ?? "";
-          const { explanation, suggestions } = splitNoteInsightAiContent(raw);
+        const mergeInsightFromRaw = (raw: string) => {
+          const { explanation, suggestions, ideaActions } =
+            splitNoteInsightAiContent(raw);
+          const prev = useTheoryInspectorStore.getState().selectedNoteInsight;
+          const preservedStatuses =
+            prev && base.noteId === prev.noteId && prev.ideaActionStatuses
+              ? Object.fromEntries(
+                  Object.entries(prev.ideaActionStatuses).filter(([k]) =>
+                    ideaActions.some((a) => a.id === k),
+                  ),
+                )
+              : {};
           store.setSelectedNoteInsight({
             ...base,
             aiExplanation: explanation,
             aiSuggestions: suggestions || undefined,
+            ideaActions:
+              ideaActions.length > 0 ? ideaActions : undefined,
+            ideaActionStatuses:
+              Object.keys(preservedStatuses).length > 0
+                ? preservedStatuses
+                : undefined,
           });
+        };
+
+        if (contentType.includes("application/json")) {
+          const data = (await response.json()) as { content?: string };
+          const raw = data.content ?? "";
+          mergeInsightFromRaw(raw);
         } else {
           const reader = response.body?.getReader();
           if (!reader) throw new Error("No response body");
@@ -1014,12 +1035,7 @@ export function useTheoryInspector() {
             const { done, value } = await reader.read();
             if (done) break;
             accumulated += decoder.decode(value, { stream: true });
-            const { explanation, suggestions } = splitNoteInsightAiContent(accumulated);
-            store.setSelectedNoteInsight({
-              ...base,
-              aiExplanation: explanation,
-              aiSuggestions: suggestions || undefined,
-            });
+            mergeInsightFromRaw(accumulated);
           }
         }
       } catch (err) {
@@ -1028,6 +1044,8 @@ export function useTheoryInspector() {
           ...base,
           aiExplanation: `Could not generate AI note explanation: ${message}`,
           aiSuggestions: undefined,
+          ideaActions: undefined,
+          ideaActionStatuses: undefined,
         });
       } finally {
         store.setIsStreaming(false);
@@ -1282,6 +1300,15 @@ export function useTheoryInspector() {
         ...satbMeasureLines,
         "",
         `Chord moment ${slotIndex + 1} · current four lines (high → low): ${slot.voices.soprano} · ${slot.voices.alto} · ${slot.voices.tenor} · ${slot.voices.bass}`,
+        "",
+        "=== NOTE_IDS_FOR_IDEA_ACTIONS (copy a noteId below **exactly** into <<<IDEA_ACTIONS>>> JSON; never invent ids) ===",
+        ...(satbResolved
+          ? (["soprano", "alto", "tenor", "bass"] as const).map((vk) => {
+              const nid = slot.noteIds[vk];
+              const label = satbResolved.names[vk];
+              return `FACT: NOTE_ID ${vk} ("${label}") pitch=${slot.voices[vk]} noteId=${nid ?? "null"}`;
+            })
+          : []),
       ];
 
       const insightKind: NoteInsightKind =

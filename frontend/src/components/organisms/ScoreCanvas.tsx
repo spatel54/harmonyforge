@@ -34,6 +34,7 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
       | { kind: "part"; staffIndex: number },
   ) => void;
   onRiffScoreSessionReady?: (session: RiffScoreSessionHandles) => void;
+  noteInputPitchLabelEnabled?: boolean;
 }
 
 /**
@@ -58,6 +59,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onInspectorSelectPart,
       onInspectorInferredRegion,
       onRiffScoreSessionReady,
+      noteInputPitchLabelEnabled = false,
       className,
       ...props
     },
@@ -419,6 +421,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onInspectorSelectPart={onInspectorSelectPart}
               onInspectorInferredRegion={onInspectorInferredRegion}
               onSessionReady={onRiffScoreSessionReady}
+              noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
             />
           </div>
         )}

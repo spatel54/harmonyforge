@@ -183,6 +183,20 @@ function GhostNoteCorrection({
         </svg>
       </button>
 
+      {/* Always-visible pitch label (scientific notation) */}
+      <div
+        className="absolute pointer-events-none font-mono text-[9px] font-semibold z-[5] whitespace-nowrap leading-none"
+        style={{
+          left: ghostX + Math.max(position.w, 14) + 6,
+          top: ghostY + Math.max(position.h, 10) / 2 - 5,
+          color: "var(--semantic-warning)",
+          textShadow: "0 0 3px var(--hf-bg), 0 0 6px var(--hf-bg)",
+        }}
+        aria-hidden="true"
+      >
+        {correction.suggestedPitch}
+      </div>
+
       {/* Highlight tint on original note */}
       <div
         className="absolute rounded pointer-events-none"
