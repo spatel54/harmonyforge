@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export interface BrandTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {}
+export type BrandTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 
 /**
  * BrandTitle Atom

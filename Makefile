@@ -2,7 +2,7 @@
 # Use these commands for cross-language tests and evaluation.
 # See .cursor/rules/architecture.mdc: AI should rely on Makefile to trigger tests.
 
-.PHONY: install dev dev-clean dev-backend dev-frontend test lint lint-frontend verify build test-engine pdfalto
+.PHONY: install dev dev-clean dev-backend dev-frontend test lint lint-frontend verify verify-strict build test-engine pdfalto
 
 # Install dependencies (update when package.json / requirements.txt exist)
 install:
@@ -46,6 +46,9 @@ dev-frontend:
 # Run tests + lint (pre-flight before manual flow test)
 verify: test lint build
 
+# Same as verify plus frontend ESLint (may fail until lint debt is cleared)
+verify-strict: verify lint-frontend
+
 # Run tests
 test:
 	@if [ -f backend/package.json ] && grep -q '"test"' backend/package.json; then cd backend && npm test; \
@@ -68,6 +71,5 @@ build:
 
 # Test algorithmic engine: input MusicXML → output with melody + harmonies (flute, cello, major)
 test-engine:
-	@mkdir -p backend/input backend/output
-	@cp -f frontend/public/samples/月亮代表我的心.xml backend/input/ 2>/dev/null || true
+	@mkdir -p backend/output
 	@cd backend && npx tsx scripts/run-engine-cli.ts

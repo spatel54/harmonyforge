@@ -71,7 +71,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
     const handleRiffScoreError = React.useCallback((err?: Error) => {
       console.error("[ScoreCanvas] RiffScore error", err);
       setRiffScoreCrashed(true);
-    }, []);
+    }, [setRiffScoreCrashed]);
 
     React.useEffect(() => {
       setRiffScoreCrashed(false);

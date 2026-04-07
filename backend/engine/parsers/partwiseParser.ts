@@ -6,6 +6,7 @@
 
 import { XMLParser } from "fast-xml-parser";
 import type { ParsedScore, PitchClass } from "../types.js";
+import { pitchToMidi } from "../types.js";
 
 const PITCH_CLASSES: PitchClass[] = [
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -66,9 +67,123 @@ function findPartwiseRoot(obj: Record<string, unknown>): Record<string, unknown>
   return key ? (obj[key] as Record<string, unknown>) : null;
 }
 
+function buildPartIdToName(partList: Record<string, unknown> | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!partList || typeof partList !== "object") return map;
+  for (const sp of arr(partList["score-part"])) {
+    if (!sp || typeof sp !== "object") continue;
+    const o = sp as Record<string, unknown>;
+    const id = o["@_id"];
+    const name = o["part-name"];
+    if (typeof id === "string" && typeof name === "string") map.set(id, name);
+  }
+  return map;
+}
+
+interface PartwiseMelodyExtraction {
+  melodyNotes: Array<{
+    pitch: string;
+    beat: number;
+    duration?: number;
+    measure?: number;
+  }>;
+  currentBeat: number;
+  divisions: number;
+  keyContext: { tonic: PitchClass; mode: "major" | "minor" };
+  timeSignature: { beats: number; beatType: number };
+  totalMeasures: number;
+}
+
+function extractMelodyFromMeasures(measures: Record<string, unknown>[]): PartwiseMelodyExtraction | null {
+  if (measures.length === 0) return null;
+
+  let divisions = 4;
+  let keyContext: { tonic: PitchClass; mode: "major" | "minor" } = {
+    tonic: "C",
+    mode: "major",
+  };
+  let timeSignature = { beats: 4, beatType: 4 };
+  const melodyNotes: PartwiseMelodyExtraction["melodyNotes"] = [];
+  let currentBeat = 0;
+
+  for (const measure of measures) {
+    const m = measure as Record<string, unknown>;
+    const attrEl = m.attributes as Record<string, unknown> | undefined;
+    if (attrEl && typeof attrEl === "object") {
+      const d = getNum(attrEl.divisions, 4);
+      if (!isNaN(d)) divisions = d;
+      const keyObj = attrEl.key as Record<string, unknown> | undefined;
+      if (keyObj && typeof keyObj === "object") {
+        const fifths = getNum(keyObj.fifths, 0);
+        const mode = typeof keyObj.mode === "string" ? keyObj.mode : "";
+        keyContext = fifthsToKey(fifths, mode || undefined);
+      }
+      const timeObj = attrEl.time as Record<string, unknown> | undefined;
+      if (timeObj && typeof timeObj === "object") {
+        timeSignature = {
+          beats: getNum(timeObj.beats, 4),
+          beatType: getNum(timeObj["beat-type"], 4),
+        };
+      }
+    }
+
+    const notes = arr(m.note);
+    for (const note of notes) {
+      const n = note as Record<string, unknown>;
+      if (!n || typeof n !== "object") continue;
+      if ("rest" in n && n.rest != null) {
+        const dur = getNum(n.duration, 0);
+        currentBeat += dur / divisions;
+        continue;
+      }
+      if ("grace" in n && n.grace != null) continue;
+
+      const pitch = n.pitch as Record<string, unknown> | undefined;
+      if (!pitch || typeof pitch !== "object") continue;
+
+      const step = typeof pitch.step === "string" ? pitch.step : "C";
+      const alter = getNum(pitch.alter, 0);
+      const octave = getNum(pitch.octave, 4);
+
+      let dur = getNum(n.duration, divisions);
+      if (dur <= 0) dur = divisions;
+      const chord = n.chord;
+
+      melodyNotes.push({
+        pitch: pitchToStr(step, alter, octave),
+        beat: currentBeat,
+        duration: dur / divisions,
+        measure: getNum(m["@_number"], melodyNotes.length + 1),
+      });
+      if (!chord) currentBeat += dur / divisions;
+    }
+  }
+
+  if (melodyNotes.length === 0) return null;
+
+  return {
+    melodyNotes,
+    currentBeat,
+    divisions,
+    keyContext,
+    timeSignature,
+    totalMeasures: measures.length,
+  };
+}
+
+/** Mean MIDI pitch of extracted notes (for choosing melody part). */
+function meanMidiOfNotes(notes: PartwiseMelodyExtraction["melodyNotes"]): number {
+  if (notes.length === 0) return 0;
+  let sum = 0;
+  for (const n of notes) {
+    sum += pitchToMidi(n.pitch);
+  }
+  return sum / notes.length;
+}
+
 /**
  * Parse score-partwise MusicXML into ParsedScore.
- * Extracts melody from the first part.
+ * When multiple parts exist, picks the part with the highest mean pitch (tie: more notes)—better for melody vs bass on P1.
  * Handles namespaced XML, grace notes (skipped), chords (first pitch).
  */
 export function parsePartwiseMusicXML(xml: string): ParsedScore | null {
@@ -83,96 +198,47 @@ export function parsePartwiseMusicXML(xml: string): ParsedScore | null {
     const parts = arr(root.part);
     if (parts.length === 0) return null;
 
-    let melodyPartName: string | undefined;
     const partList = root["part-list"] as Record<string, unknown> | undefined;
-    if (partList && typeof partList === "object") {
-      const scoreParts = arr(partList["score-part"]);
-      const first = scoreParts[0];
-      if (first && typeof first === "object") {
-        const name = (first as { "part-name"?: string })["part-name"];
-        if (typeof name === "string") melodyPartName = name;
-      }
+    const idToName = buildPartIdToName(partList);
+
+    type Candidate = PartwiseMelodyExtraction & { partId: string; meanMidi: number };
+    const candidates: Candidate[] = [];
+
+    for (const partEl of parts) {
+      const p = partEl as Record<string, unknown>;
+      const partId = typeof p["@_id"] === "string" ? p["@_id"] : "";
+      const measures = arr(p.measure) as Record<string, unknown>[];
+      const extracted = extractMelodyFromMeasures(measures);
+      if (!extracted) continue;
+      candidates.push({
+        ...extracted,
+        partId,
+        meanMidi: meanMidiOfNotes(extracted.melodyNotes),
+      });
     }
 
-    const firstPart = parts[0] as Record<string, unknown> | undefined;
-    const measures = arr(firstPart?.measure);
-    if (measures.length === 0) return null;
+    if (candidates.length === 0) return null;
 
-    let divisions = 4;
-    let keyContext: { tonic: PitchClass; mode: "major" | "minor" } = {
-      tonic: "C",
-      mode: "major",
-    };
-    let timeSignature = { beats: 4, beatType: 4 };
-    const melodyNotes: Array<{
-      pitch: string;
-      beat: number;
-      duration?: number;
-      measure?: number;
-    }> = [];
-    let currentBeat = 0;
+    candidates.sort((a, b) => b.meanMidi - a.meanMidi || b.melodyNotes.length - a.melodyNotes.length);
+    const best = candidates[0]!;
 
-    for (const measure of measures) {
-      const m = measure as Record<string, unknown>;
-      const attrEl = m.attributes as Record<string, unknown> | undefined;
-      if (attrEl && typeof attrEl === "object") {
-        const d = getNum(attrEl.divisions, 4);
-        if (!isNaN(d)) divisions = d;
-        const keyObj = attrEl.key as Record<string, unknown> | undefined;
-        if (keyObj && typeof keyObj === "object") {
-          const fifths = getNum(keyObj.fifths, 0);
-          const mode = typeof keyObj.mode === "string" ? keyObj.mode : "";
-          keyContext = fifthsToKey(fifths, mode || undefined);
-        }
-        const timeObj = attrEl.time as Record<string, unknown> | undefined;
-        if (timeObj && typeof timeObj === "object") {
-          timeSignature = {
-            beats: getNum(timeObj.beats, 4),
-            beatType: getNum(timeObj["beat-type"], 4),
-          };
-        }
-      }
-
-      const notes = arr(m.note);
-      for (const note of notes) {
-        const n = note as Record<string, unknown>;
-        if (!n || typeof n !== "object") continue;
-        if ("rest" in n && n.rest != null) {
-          const dur = getNum(n.duration, 0);
-          currentBeat += dur / divisions;
-          continue;
-        }
-        if ("grace" in n && n.grace != null) continue;
-
-        const pitch = n.pitch as Record<string, unknown> | undefined;
-        if (!pitch || typeof pitch !== "object") continue;
-
-        const step = typeof pitch.step === "string" ? pitch.step : "C";
-        const alter = getNum(pitch.alter, 0);
-        const octave = getNum(pitch.octave, 4);
-
-        let dur = getNum(n.duration, divisions);
-        if (dur <= 0) dur = divisions;
-        const chord = n.chord;
-
-        melodyNotes.push({
-          pitch: pitchToStr(step, alter, octave),
-          beat: currentBeat,
-          duration: dur / divisions,
-          measure: getNum(m["@_number"], melodyNotes.length + 1),
-        });
-        if (!chord) currentBeat += dur / divisions;
+    let melodyPartName: string | undefined;
+    if (best.partId && idToName.has(best.partId)) {
+      melodyPartName = idToName.get(best.partId);
+    } else if (parts.length === 1) {
+      const firstSp = partList ? arr(partList["score-part"])[0] : undefined;
+      if (firstSp && typeof firstSp === "object") {
+        const pn = (firstSp as { "part-name"?: string })["part-name"];
+        if (typeof pn === "string") melodyPartName = pn;
       }
     }
-
-    if (melodyNotes.length === 0) return null;
 
     return {
-      key: keyContext,
-      melody: melodyNotes,
-      timeSignature,
-      totalBeats: currentBeat,
-      totalMeasures: measures.length,
+      key: best.keyContext,
+      melody: best.melodyNotes,
+      timeSignature: best.timeSignature,
+      totalBeats: best.currentBeat,
+      totalMeasures: best.totalMeasures,
       melodyPartName,
     };
   } catch {

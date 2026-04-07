@@ -65,6 +65,10 @@ npm run lint           # ESLint
 
 Some flows call **pdfalto**, **Poppler**, and **oemer** from Node. If you care about PDF upload quality, install Python packages from **`requirements.txt`** and read the open work in [docs/plan.md](../docs/plan.md) (section **1.9m** — production-ready PDF→MusicXML).
 
+**Reproducible OMR (optional):** a reference **Dockerfile** lives at [`docker/oemer-omr.Dockerfile`](docker/oemer-omr.Dockerfile) (Python 3.11 + `requirements.txt` + `oemer==0.1.8 --no-deps`). It does not replace **`PDFALTO_BIN`** / **Poppler** on the host; use it to validate oemer installs or as a template for containerized workers. Pre-download ONNX checkpoints from the [oemer checkpoints release](https://github.com/BreezeWhite/oemer/releases/tag/checkpoints) when the runtime has no outbound HTTPS, then point **`OEMER_BIN`** at a venv where `oemer` runs (Python **3.10–3.12** recommended).
+
+**Symbolic intake:** `engine/parsers/fileIntake.ts` ZIP-sniffs MXL, detects **PDF** (`%PDF`) and **SMF MIDI** (`MThd`), accepts **`.mxml`** and UTF-8 **MusicXML** even when the filename is `.txt` or extensionless. Root detection lives in **`engine/parsers/musicXmlMarkers.ts`** (namespace-prefixed `<ns:score-partwise>` / `<ns:score-timewise>`, same idea as `newfiles/harmonize-core.ts` validation, without loading DTDs).
+
 ---
 
 ## CORS (when deploying)

@@ -6,17 +6,17 @@ export function readMelodyXmlForReviewer(
   file: File,
   storePreviewXml: string | null,
 ): Promise<string> {
+  if (storePreviewXml && storePreviewXml.trim().length > 0) {
+    return Promise.resolve(storePreviewXml);
+  }
   const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-  if (["xml", "musicxml"].includes(ext)) {
+  if (["xml", "musicxml", "mxml"].includes(ext)) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(new Error("Could not read score file."));
       reader.readAsText(file, "utf-8");
     });
-  }
-  if (storePreviewXml && storePreviewXml.trim().length > 0) {
-    return Promise.resolve(storePreviewXml);
   }
   return Promise.reject(
     new Error(

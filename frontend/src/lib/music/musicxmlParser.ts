@@ -6,6 +6,7 @@
 
 import type { EditableScore, Note, Measure, Part } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
+import { looksLikeMusicXml } from "./musicXmlMarkers";
 
 /** Fallback when part name is generic SATB (engine default labels). */
 const PART_CLEFS: Record<string, string> = {
@@ -172,12 +173,48 @@ function findAllByLocalName(parent: Document | Element, localName: string): Elem
 }
 
 /**
+ * Read MusicXML key signature (circle-of-fifths fifths) from one <attributes> block.
+ * Returns undefined if this block has no <key>; 0 if <key> exists but <fifths> is empty.
+ */
+function readKeyFifthsFromAttributes(attributesEl: Element | null): number | undefined {
+  if (!attributesEl) return undefined;
+  const keyEl = attributesEl.querySelector("key") ?? findByLocalName(attributesEl, "key");
+  if (!keyEl) return undefined;
+  const fifthsEl = keyEl.querySelector("fifths") ?? findByLocalName(keyEl, "fifths");
+  const text = fifthsEl?.textContent?.trim();
+  if (text === undefined || text === "") return 0;
+  const n = parseInt(text, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Apply all <attributes> in measure order; update running key when any block declares <key>. */
+function advanceKeyFromMeasureAttributes(
+  measureEl: Element,
+  running: number | undefined,
+): number | undefined {
+  let next = running;
+  const blocks = findAllByLocalName(measureEl, "attributes");
+  for (const attr of blocks) {
+    const k = readKeyFifthsFromAttributes(attr);
+    if (k !== undefined) next = k;
+  }
+  return next;
+}
+
+/**
  * Parse MusicXML string into EditableScore.
  * Supports backend's timewise SATB format (P1–P4) and score-partwise (e.g. MuseScore).
  * Handles namespaced MusicXML (e.g. MuseScore 4.x exports).
  */
 export function parseMusicXML(xml: string): EditableScore | null {
   if (typeof window === "undefined") return null;
+  if (!xml || !xml.trim()) return null;
+  if (!looksLikeMusicXml(xml)) {
+    console.warn(
+      "[parseMusicXML] Input does not look like MusicXML (expected score-partwise or score-timewise root)",
+    );
+    return null;
+  }
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "text/xml");
   const parseError = doc.querySelector("parsererror");
@@ -231,6 +268,7 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
   });
 
   let divisions = 4;
+  let measureKeySig: number | undefined;
 
   for (let mIdx = 0; mIdx < measures.length; mIdx++) {
     const measureEl = measures[mIdx];
@@ -238,6 +276,8 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
     if (attrDivs) {
       divisions = parseInt(attrDivs.textContent ?? "4", 10);
     }
+
+    measureKeySig = advanceKeyFromMeasureAttributes(measureEl, measureKeySig);
 
     for (let pIdx = 0; pIdx < partIds.length; pIdx++) {
       const partId = partIds[pIdx];
@@ -256,7 +296,9 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
         beatsEl?.textContent?.trim() && beatTypeEl?.textContent?.trim()
           ? `${beatsEl.textContent.trim()}/${beatTypeEl.textContent.trim()}`
           : undefined;
-      parts[pIdx].measures.push({ id: generateId("m"), notes, timeSignature });
+      const measure: Measure = { id: generateId("m"), notes, timeSignature };
+      if (measureKeySig !== undefined) measure.keySignature = measureKeySig;
+      parts[pIdx].measures.push(measure);
     }
   }
 
@@ -288,7 +330,9 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
         ? Array.from(partEl.querySelectorAll("measure"))
         : findAllByLocalName(partEl, "measure");
 
+    let partKeySig: number | undefined;
     for (const measureEl of measureEls) {
+      partKeySig = advanceKeyFromMeasureAttributes(measureEl, partKeySig);
       const notes = extractNotesFromElement(
         measureEl,
         inferTransposition(partName),
@@ -299,7 +343,9 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
         beatsEl?.textContent?.trim() && beatTypeEl?.textContent?.trim()
           ? `${beatsEl.textContent.trim()}/${beatTypeEl.textContent.trim()}`
           : undefined;
-      measures.push({ id: generateId("m"), notes, timeSignature });
+      const measure: Measure = { id: generateId("m"), notes, timeSignature };
+      if (partKeySig !== undefined) measure.keySignature = partKeySig;
+      measures.push(measure);
     }
     maxMeasures = Math.max(maxMeasures, measures.length);
     parts.push({

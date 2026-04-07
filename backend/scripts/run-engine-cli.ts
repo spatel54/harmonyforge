@@ -8,7 +8,7 @@
  *   npx tsx scripts/run-engine-cli.ts --instruments "Soprano:Flute,Bass:Cello"
  *
  * Options:
- *   -i, --input <path>    Input .xml, .musicxml, .mxl, .mid/.midi, or .pdf (default: input/月亮代表我的心.xml)
+ *   -i, --input <path>    Input .xml, .musicxml, .mxl, .mid/.midi, or .pdf (default: frontend/public/samples/tour_demo.xml)
  *   -o, --output <path>   Output path (default: output/<name>_flute_cello.xml)
  *   --mood <major|minor>  Key mode (default: major)
  *   --instruments <spec>  Comma-separated Voice:Instrument (e.g. "Soprano:Flute,Bass:Cello")
@@ -19,14 +19,14 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { intakeFileToParsedScore } from "../engine/parsers/fileIntake.js";
 import { ensureChords } from "../engine/chordInference.js";
-import { generateSATB } from "../engine/solver.js";
+import { generateSATB, SolverBudgetExceededError } from "../engine/solver.js";
 import { satbToMusicXML } from "../engine/satbToMusicXML.js";
 import type { Voice } from "../engine/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-const DEFAULT_INPUT = join(ROOT, "input", "月亮代表我的心.xml");
+const DEFAULT_INPUT = join(ROOT, "..", "frontend", "public", "samples", "tour_demo.xml");
 const DEFAULT_INSTRUMENTS: Record<Voice, string[]> = {
   Soprano: ["Flute"],
   Alto: [],
@@ -98,11 +98,20 @@ function main(): number {
   const parsed = intake.parsed;
 
   const withChords = ensureChords(parsed, mood);
-  const result = generateSATB({
-    key: withChords.key,
-    chords: withChords.chords,
-    melody: withChords.melody,
-  });
+  let result;
+  try {
+    result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+  } catch (e) {
+    if (e instanceof SolverBudgetExceededError) {
+      console.error(e.message);
+      return 1;
+    }
+    throw e;
+  }
 
   if (!result) {
     console.error("Could not find valid SATB arrangement");

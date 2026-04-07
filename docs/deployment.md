@@ -35,8 +35,13 @@ Pair this with **[progress.md](progress.md)** (current blockers) and **[plan.md]
 | Variable | Purpose |
 |----------|---------|
 | **`CORS_ORIGIN`** | Must match your **frontend origin** exactly (scheme + host, no path), e.g. `https://my-app.vercel.app`. Default in code is `http://localhost:3000`. |
+| **`PORT`** | Listen port (many hosts inject this). Default **8000** in code. |
 
-Optional PDF/OMR: **`PDFALTO_BIN`**, **`POPPLER_PDFTOPPM`**, **`OEMER_BIN`** — see [plan.md](plan.md) section **1.9m**.
+**Generation limits (long scores):** **`HF_MAX_CHORD_SLOTS`** (default 128) widens the chord grid so inference stays tractable; **`HF_SOLVER_MAX_NODES`** / **`HF_SOLVER_MAX_MS`** cap SATB backtracking. See [backend/.env.example](../backend/.env.example).
+
+Optional PDF/OMR: **`PDFALTO_BIN`**, **`POPPLER_PDFTOPPM`**, **`OEMER_BIN`** — see [plan.md](plan.md) section **1.9m**. Reference container for Python + oemer: [backend/docker/oemer-omr.Dockerfile](../backend/docker/oemer-omr.Dockerfile).
+
+**PDF / MXL / MIDI preview failures on Upload:** the Playground calls the engine’s **`POST /api/to-preview-musicxml`**. If the response is an error, check engine logs and host tooling; contributors should read **[progress.md — Multi-format intake & PDF](progress.md#multi-format-pdf-intake)** (oemer checkpoints, Python 3.10–12, Poppler, pdfalto).
 
 ---
 
@@ -51,6 +56,7 @@ Optional PDF/OMR: **`PDFALTO_BIN`**, **`POPPLER_PDFTOPPM`**, **`OEMER_BIN`** —
 | Variable | Where it runs | Notes |
 |----------|----------------|--------|
 | **`NEXT_PUBLIC_API_URL`** | Browser bundle | **Public.** Base URL of the engine, e.g. `https://your-api.example.com`. Changing it requires a **new deployment** (build-time inlining). |
+| **`NEXT_PUBLIC_GENERATE_TIMEOUT_MS`** | Browser | Optional. Abort **`generate-from-file`** after this many ms (default **180000**). Set below your engine/proxy max duration so users see a clear timeout instead of a generic network failure. |
 | **`OPENAI_API_KEY`** | Server (API routes) | **Secret.** Theory Inspector; omit for offline fallbacks where supported. |
 | **`OPENAI_BASE_URL`** / **`OPENAI_URL`** | Server | Optional compatible API base. |
 | **`OPENAI_MODEL`** | Server | Optional. |

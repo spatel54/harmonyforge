@@ -27,6 +27,14 @@ function esc(s) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 }
+/** Indent measure/part inner XML without concatenating blocks before splitting (fewer large temporaries). */
+function indentInnerMusicXml(attributes, noteXml, indent = "  ") {
+    const lines = [];
+    if (attributes)
+        lines.push(...attributes.split("\n"));
+    lines.push(...noteXml.split("\n"));
+    return lines.map((line) => indent + line).join("\n");
+}
 function tonicToFifths(tonic, mode) {
     const major = {
         C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, "F#": 6, "C#": 7, F: -1, "A#": -2, "D#": -3, "G#": -4,
@@ -349,7 +357,7 @@ export function satbToMusicXML(result, instruments, source, options) {
                 const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
                 const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
                 return `  <measure number="${mIdx + 1}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </measure>`;
             });
             return `  <part id="${id}">
@@ -374,7 +382,7 @@ ${parts.join("\n")}
             const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
             const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
             return `  <part id="${id}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </part>`;
         });
         return `  <measure number="${mIdx + 1}">
@@ -424,7 +432,7 @@ export function parsedScoreToPartwiseMelodyMusicXML(source) {
             : "";
         const note = measureContentXML(measureSegs[mIdx] ?? [], beatsPerMeasure);
         return `  <measure number="${mIdx + 1}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </measure>`;
     });
     return `<?xml version="1.0" encoding="UTF-8"?>

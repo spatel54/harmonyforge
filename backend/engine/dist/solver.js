@@ -127,29 +127,119 @@ function getCandidatesSimple(parsed, fixedSoprano) {
     }
     return [...new Map(candidates.map((v) => [JSON.stringify(v), v])).values()];
 }
-/** Backtracking solver with configurable voice-leading check */
-function solve(parsedChords, melodyPitches, check = checkVoiceLeading) {
-    const result = [];
-    /**
-     * Candidate ordering heuristic (not a species-counterpoint cost function).
-     * Pedagogical lineage: Fux, *Gradus ad Parnassum* (Mann ed.) and Open Music Theory stress conjunct motion
-     * and linear independence; contrary motion toward perfect consonances avoids concealed parallels in strict
-     * counterpoint. This engine does **not** encode Fux interval arithmetic or species rules—it only ranks
-     * voicings by **sum of absolute MIDI semitone motion** across S/A/T/B vs the previous chord (parsimony proxy).
-     * Lower score = tried first during backtracking.
-     */
-    function candidateMotionScore(prev, curr) {
-        if (!prev)
-            return 0;
-        const keys = ["soprano", "alto", "tenor", "bass"];
-        let total = 0;
-        for (const k of keys) {
-            const d = Math.abs(pitchToMidi(curr[k]) - pitchToMidi(prev[k]));
-            total += d;
+function createCandidateCache() {
+    const cache = new Map();
+    return (slotIndex, pc, fixedSoprano) => {
+        const key = `${slotIndex}\0${fixedSoprano ?? ""}`;
+        let list = cache.get(key);
+        if (!list) {
+            list = getCandidatesSimple(pc, fixedSoprano);
+            cache.set(key, list);
         }
-        return total;
+        return list;
+    };
+}
+function candidateMotionScore(prev, curr) {
+    if (!prev)
+        return 0;
+    const keys = ["soprano", "alto", "tenor", "bass"];
+    let total = 0;
+    for (const k of keys) {
+        const d = Math.abs(pitchToMidi(curr[k]) - pitchToMidi(prev[k]));
+        total += d;
+    }
+    return total;
+}
+export class SolverBudgetExceededError extends Error {
+    code = "SOLVER_BUDGET_EXCEEDED";
+    constructor(message = "SATB search exceeded the configured time or node budget") {
+        super(message);
+        this.name = "SolverBudgetExceededError";
+    }
+}
+const DEFAULT_SOLVER_MAX_NODES = 3_000_000;
+export function resolveSolverMaxNodes() {
+    const raw = process.env.HF_SOLVER_MAX_NODES;
+    if (raw == null || raw === "")
+        return DEFAULT_SOLVER_MAX_NODES;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 10_000)
+        return DEFAULT_SOLVER_MAX_NODES;
+    return Math.min(n, 50_000_000);
+}
+/** 0 = no wall-clock limit. */
+export function resolveSolverMaxMs() {
+    const raw = process.env.HF_SOLVER_MAX_MS;
+    if (raw == null || raw === "")
+        return 0;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0)
+        return 0;
+    return Math.min(n, 600_000);
+}
+/**
+ * Reserved for future tuning (e.g. auto-only-above-N). Does not gate greedy in `auto` mode:
+ * greedy is always attempted first when mode is `auto` or `greedy`.
+ */
+const DEFAULT_GREEDY_THRESHOLD = 56;
+export function resolveGreedyThreshold() {
+    const raw = process.env.HF_GREEDY_THRESHOLD;
+    if (raw == null || raw === "")
+        return DEFAULT_GREEDY_THRESHOLD;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 4)
+        return DEFAULT_GREEDY_THRESHOLD;
+    return Math.min(n, 512);
+}
+/** auto: always try greedy first, then backtrack; greedy: same; backtrack|exact: skip greedy. */
+export function resolveSolverMode() {
+    const m = process.env.HF_SOLVER_MODE?.trim().toLowerCase();
+    if (m === "backtrack" || m === "exact")
+        return "backtrack_only";
+    if (m === "greedy")
+        return "greedy_first";
+    return "auto";
+}
+/**
+ * Linear-time voicing: first valid candidate per slot (same ordering as backtrack).
+ * May return null where backtracking would find a solution.
+ */
+function solveGreedy(parsedChords, melodyPitches, check, getCand) {
+    const result = [];
+    let prev = null;
+    for (let i = 0; i < parsedChords.length; i++) {
+        let fixedSoprano = melodyPitches?.[i];
+        const chordTones = new Set(parsedChords[i].chordTones.map((pc) => ((pc % 12) + 12) % 12));
+        if (fixedSoprano) {
+            const melodyPc = mod12(pitchToMidi(fixedSoprano));
+            if (!chordTones.has(melodyPc)) {
+                fixedSoprano = undefined;
+            }
+        }
+        const candidates = getCand(i, parsedChords[i], fixedSoprano).slice().sort((a, b) => candidateMotionScore(prev, a) - candidateMotionScore(prev, b));
+        const found = candidates.find((v) => check(prev, v));
+        if (!found)
+            return null;
+        result.push(found);
+        prev = found;
+    }
+    return result;
+}
+/** Backtracking solver with configurable voice-leading check and safety budget. */
+function solve(parsedChords, melodyPitches, check, maxNodes, deadlineMs, getCand) {
+    const result = [];
+    let nodes = 0;
+    function overBudget() {
+        if (nodes >= maxNodes)
+            return true;
+        if (deadlineMs > 0 && Date.now() >= deadlineMs)
+            return true;
+        return false;
     }
     function backtrack(i) {
+        nodes += 1;
+        if (overBudget())
+            return false;
         if (i >= parsedChords.length)
             return true;
         let fixedSoprano = melodyPitches?.[i];
@@ -161,7 +251,8 @@ function solve(parsedChords, melodyPitches, check = checkVoiceLeading) {
             }
         }
         const prev = i > 0 ? result[i - 1] : null;
-        const candidates = getCandidatesSimple(parsedChords[i], fixedSoprano)
+        const candidates = getCand(i, parsedChords[i], fixedSoprano)
+            .slice()
             .sort((a, b) => candidateMotionScore(prev, a) - candidateMotionScore(prev, b));
         for (const v of candidates) {
             if (!check(prev, v))
@@ -173,9 +264,12 @@ function solve(parsedChords, melodyPitches, check = checkVoiceLeading) {
         }
         return false;
     }
-    if (backtrack(0))
-        return result;
-    return null;
+    const ok = backtrack(0);
+    if (ok)
+        return { ok: true, voices: result };
+    if (overBudget() || nodes >= maxNodes)
+        return { ok: false, budgetExceeded: true };
+    return { ok: false, budgetExceeded: false };
 }
 /** Main entry: generate SATB from lead sheet */
 export function generateSATB(leadSheet, options) {
@@ -199,12 +293,37 @@ export function generateSATB(leadSheet, options) {
     const useRelaxedFirst = options?.genre === "jazz" || options?.genre === "pop";
     const strictCheck = useRelaxedFirst ? checkVoiceLeadingRelaxed : checkVoiceLeading;
     const fallbackCheck = useRelaxedFirst ? checkVoiceLeading : checkVoiceLeadingRelaxed;
-    let solution = solve(parsedChords, melodyPitches, strictCheck);
-    if (!solution) {
-        solution = solve(parsedChords, melodyPitches, fallbackCheck);
+    const maxNodes = options?.maxNodes ?? resolveSolverMaxNodes();
+    const maxMs = options?.maxMs ?? resolveSolverMaxMs();
+    const deadlineMs = maxMs > 0 ? Date.now() + maxMs : 0;
+    const getCand = createCandidateCache();
+    const mode = resolveSolverMode();
+    const useGreedyFirst = !options?.skipGreedy && (mode === "greedy_first" || mode === "auto");
+    const tryGreedy = (check) => solveGreedy(parsedChords, melodyPitches, check, getCand);
+    let solution = null;
+    if (useGreedyFirst) {
+        solution = tryGreedy(strictCheck) ?? tryGreedy(fallbackCheck);
     }
-    if (!solution)
+    const run = (check) => solve(parsedChords, melodyPitches, check, maxNodes, deadlineMs, getCand);
+    let outcome;
+    if (solution) {
+        outcome = { ok: true, voices: solution };
+    }
+    else {
+        outcome = run(strictCheck);
+    }
+    if (!outcome.ok && outcome.budgetExceeded) {
+        throw new SolverBudgetExceededError();
+    }
+    if (!outcome.ok) {
+        outcome = run(fallbackCheck);
+    }
+    if (!outcome.ok) {
+        if (outcome.budgetExceeded)
+            throw new SolverBudgetExceededError();
         return null;
+    }
+    const voices = outcome.voices;
     return {
         slots: chords.map((chord, i) => ({
             chord: {
@@ -212,7 +331,7 @@ export function generateSATB(leadSheet, options) {
                 duration: chord.duration,
                 beat: chord.beat,
             },
-            voices: solution[i],
+            voices: voices[i],
         })),
     };
 }

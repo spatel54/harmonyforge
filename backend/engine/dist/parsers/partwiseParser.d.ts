@@ -6,7 +6,7 @@
 import type { ParsedScore } from "../types.js";
 /**
  * Parse score-partwise MusicXML into ParsedScore.
- * Extracts melody from the first part.
+ * When multiple parts exist, picks the part with the highest mean pitch (tie: more notes)—better for melody vs bass on P1.
  * Handles namespaced XML, grace notes (skipped), chords (first pitch).
  */
 export declare function parsePartwiseMusicXML(xml: string): ParsedScore | null;

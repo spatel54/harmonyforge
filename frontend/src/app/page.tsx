@@ -15,6 +15,8 @@ import { useUploadStore } from "@/store/useUploadStore";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
+import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
+import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
@@ -42,7 +44,7 @@ export default function Home() {
     setIsTransitioning(true);
     const t0 = Date.now();
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-    const needsServerPreview = ["pdf", "mxl", "mid", "midi"].includes(ext);
+    const needsServerPreview = needsEnginePreviewForExtension(ext);
     try {
       if (needsServerPreview) {
         const formData = new FormData();
@@ -65,7 +67,10 @@ export default function Home() {
     } catch (e) {
       setFile(null);
       setPreviewMusicXML(null);
-      setUploadError(e instanceof Error ? e.message : "Could not prepare preview");
+      const raw = e instanceof Error ? e.message : "Could not prepare preview";
+      setUploadError(
+        needsServerPreview ? enrichIntakePreviewError(raw, ext) : raw,
+      );
     } finally {
       setIsTransitioning(false);
     }

@@ -20,8 +20,16 @@ import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
+import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+const GENERATE_TIMEOUT_MS = (() => {
+  const raw = process.env.NEXT_PUBLIC_GENERATE_TIMEOUT_MS;
+  if (raw == null || raw === "") return 180_000;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 15_000 ? Math.min(n, 600_000) : 180_000;
+})();
 
 /**
  * Document Page — /document
@@ -40,6 +48,7 @@ export default function DocumentPage() {
   const storePreviewXml = useUploadStore((s) => s.previewMusicXML);
   const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
   const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
+  const setPreviewMusicXML = useUploadStore((s) => s.setPreviewMusicXML);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
 
   React.useEffect(() => {
@@ -68,19 +77,20 @@ export default function DocumentPage() {
       setPreviewMeta(null);
       return;
     }
-    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-    if (["xml", "musicxml"].includes(ext)) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const xml = String(reader.result);
-        const meta = extractMusicXMLMetadata(xml);
-        setPreviewMeta(meta);
-        setPreviewScore(parseMusicXML(xml));
-      };
-      reader.readAsText(file, "utf-8");
+
+    const applyXml = (xml: string) => {
+      const meta = extractMusicXMLMetadata(xml);
+      setPreviewMeta(meta);
+      setPreviewScore(parseMusicXML(xml));
+    };
+
+    if (storePreviewXml && storePreviewXml.trim().length > 0) {
+      applyXml(storePreviewXml);
       return;
     }
-    if (!storePreviewXml) {
+
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    if (!["xml", "musicxml"].includes(ext)) {
       setPreviewScore(null);
       setPreviewMeta({
         title: file.name.replace(/\.[^/.]+$/, ""),
@@ -88,10 +98,66 @@ export default function DocumentPage() {
       });
       return;
     }
-    const meta = extractMusicXMLMetadata(storePreviewXml);
-    setPreviewMeta(meta);
-    setPreviewScore(parseMusicXML(storePreviewXml));
-  }, [file, storePreviewXml]);
+
+    setPreviewScore(null);
+    setPreviewMeta(null);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        if (cancelled) return;
+        if (isProbablyZipBytes(head)) {
+          const formData = new FormData();
+          formData.append("file", file);
+          const res = await fetch(`${API_BASE}/api/to-preview-musicxml`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(
+              typeof err.error === "string" ? err.error : `Preview failed: ${res.status}`,
+            );
+          }
+          const xml = await res.text();
+          if (cancelled) return;
+          setPreviewMusicXML(xml);
+          return;
+        }
+      } catch {
+        if (!cancelled) {
+          setPreviewScore(null);
+          setPreviewMeta({
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            meta: "Could not load preview (MXL/ZIP mislabeled as .xml, or engine unreachable)",
+          });
+        }
+        return;
+      }
+
+      if (cancelled) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (cancelled) return;
+        applyXml(String(reader.result));
+      };
+      reader.onerror = () => {
+        if (!cancelled) {
+          setPreviewScore(null);
+          setPreviewMeta({
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            meta: "Could not read score file",
+          });
+        }
+      };
+      reader.readAsText(file, "utf-8");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file, storePreviewXml, setPreviewMusicXML]);
 
   // Don't render document UI while redirecting (no file), unless product tour is active
   if (!file && !coachmarkTourActive) {
@@ -139,10 +205,25 @@ export default function DocumentPage() {
           instruments: config.instruments,
         })
       );
-      const res = await fetch(`${API_BASE}/api/generate-from-file`, {
-        method: "POST",
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/api/generate-from-file`, {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          throw new Error(
+            `Generation timed out after ${GENERATE_TIMEOUT_MS / 1000}s. PDF uploads can spend most of that in OMR; MusicXML/MXL/MIDI is usually faster. Try a shorter score, export MXL from your notation app, or raise NEXT_PUBLIC_GENERATE_TIMEOUT_MS. On the engine, set HF_SOLVER_MAX_MS=0 for no solver wall clock on file routes (default is ~108s when unset).`,
+          );
+        }
+        throw e;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Request failed: ${res.status}`);

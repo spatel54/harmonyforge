@@ -79,7 +79,7 @@ export function timewiseToPartwise(xml: string): string {
 
   for (const measureEl of measures) {
     for (const partId of partIds) {
-      let partEl =
+      const partEl =
         measureEl.querySelector(`part[id="${partId}"]`) ??
         findAllByLocalName(measureEl, "part").find((p) => p.getAttribute("id") === partId);
       if (partEl) {

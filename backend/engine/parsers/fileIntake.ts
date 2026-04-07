@@ -19,9 +19,12 @@ import type { ParsedScore } from "../types.js";
 import { parseMIDI } from "./midiParser.js";
 import { parseMusicXML } from "./musicxmlParser.js";
 import { parseMXL } from "./mxlParser.js";
+import { looksLikeMusicXml } from "./musicXmlMarkers.js";
+
+export { looksLikeMusicXml };
 
 export const ACCEPTED_EXTENSIONS_MESSAGE =
-  ".xml, .musicxml, .mxl, .mid, .midi, or .pdf (PDF needs pdfalto, Poppler pdftoppm, and oemer on the server; see docs)";
+  ".xml, .musicxml, .mxml, .mxl, .mid, .midi, or .pdf (PDF needs pdfalto, Poppler pdftoppm, and oemer on the server; see docs)";
 
 const LOG_PREVIEW = 800;
 /** Include this much of subprocess stderr/stdout in API error details (oemer failures). */
@@ -58,6 +61,55 @@ export function isProbablyZip(buffer: Buffer): boolean {
 export function isProbablyPdf(buffer: Buffer): boolean {
   if (buffer.length < 4) return false;
   return buffer.subarray(0, 4).toString("latin1") === "%PDF";
+}
+
+/** Standard MIDI file (SMF) header */
+export function isProbablyMidi(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  return buffer.subarray(0, 4).toString("latin1") === "MThd";
+}
+
+/** Decode buffer as UTF-8 for MusicXML sniffing / parsing; strip BOM if present. */
+export function bufferToUtf8ScoreText(buffer: Buffer): string {
+  let b = buffer;
+  if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) {
+    b = b.subarray(3);
+  }
+  return b.toString("utf-8");
+}
+
+/** Decode only the start of the buffer for `looksLikeMusicXml` (avoid huge UTF-8 strings on random binaries). */
+const MUSICXML_SNIFF_UTF8_MAX = 262_144;
+
+function peekUtf8ForMusicXmlSniff(buffer: Buffer): string {
+  let i = 0;
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    i = 3;
+  }
+  const end = Math.min(buffer.length, i + MUSICXML_SNIFF_UTF8_MAX);
+  return buffer.subarray(i, end).toString("utf-8");
+}
+
+function tryIntakeMidi(buffer: Buffer): ParsedScore | null {
+  const parsed = parseMIDI(buffer);
+  return parsed && parsed.melody.length > 0 ? parsed : null;
+}
+
+function tryIntakeMusicXmlString(xml: string): ParsedScore | null {
+  if (!xml || !xml.trim()) return null;
+  let parsed = parseMusicXML(xml);
+  if (parsed && parsed.melody.length > 0) return parsed;
+  const embedded = extractEmbeddedMusicXml(xml);
+  if (embedded) {
+    parsed = parseMusicXML(embedded);
+    if (parsed && parsed.melody.length > 0) return parsed;
+  }
+  return null;
+}
+
+function tryIntakeMusicXmlBuffer(buffer: Buffer): ParsedScore | null {
+  const xml = bufferToUtf8ScoreText(buffer);
+  return tryIntakeMusicXmlString(xml);
 }
 
 export function getExtension(originalname: string): string {
@@ -157,22 +209,32 @@ function resolveOemer(): string {
   return "oemer";
 }
 
-/** Extract first score-partwise or score-timewise document from concatenated text (e.g. ALTO CONTENT). */
+/**
+ * Extract first score-partwise or score-timewise document from concatenated text (e.g. ALTO CONTENT).
+ * Supports optional namespace prefixes on open/close tags (see harmonize-core / real-world exports).
+ */
 export function extractEmbeddedMusicXml(fullText: string): string | null {
-  const pwOpen = "<score-partwise";
-  const pwClose = "</score-partwise>";
-  const twOpen = "<score-timewise";
-  const twClose = "</score-timewise>";
-  let start = fullText.indexOf(pwOpen);
-  let closeTag = pwClose;
-  if (start < 0) {
-    start = fullText.indexOf(twOpen);
-    closeTag = twClose;
+  if (!fullText || typeof fullText !== "string") return null;
+  const pwRe = /<(?:[\w.-]+:)?score-partwise\b/i;
+  const twRe = /<(?:[\w.-]+:)?score-timewise\b/i;
+  const mPw = pwRe.exec(fullText);
+  const mTw = twRe.exec(fullText);
+  let start: number;
+  let local: "score-partwise" | "score-timewise";
+  if (mPw && (!mTw || mPw.index <= mTw.index)) {
+    start = mPw.index;
+    local = "score-partwise";
+  } else if (mTw) {
+    start = mTw.index;
+    local = "score-timewise";
+  } else {
+    return null;
   }
-  if (start < 0) return null;
-  const end = fullText.indexOf(closeTag, start);
-  if (end < 0) return null;
-  return fullText.slice(start, end + closeTag.length);
+  const closeRe = new RegExp(`</(?:[\\w.-]+:)?${local}>`, "i");
+  closeRe.lastIndex = start + 1;
+  const mClose = closeRe.exec(fullText);
+  if (!mClose) return null;
+  return fullText.slice(start, mClose.index + mClose[0].length);
 }
 
 /** Collect text from ALTO String @CONTENT (handles default namespace). */
@@ -500,11 +562,33 @@ export function intakeFileToParsedScore(
     };
   }
 
-  if (["xml", "musicxml"].includes(ext)) {
-    const xml = buffer.toString("utf-8");
-    const parsed = parseMusicXML(xml);
-    if (parsed && parsed.melody.length > 0) {
-      return { ok: true, parsed };
+  if (isProbablyMidi(buffer) || ["mid", "midi"].includes(ext)) {
+    const parsed = tryIntakeMidi(buffer);
+    if (parsed) return { ok: true, parsed };
+    return {
+      ok: false,
+      failure: {
+        status: 422,
+        error: "Could not parse file or no melody found",
+      },
+    };
+  }
+
+  const musicXmlExts = ["xml", "musicxml", "mxml"];
+  const utf8ForSniff = peekUtf8ForMusicXmlSniff(buffer);
+  const shouldTryMusicXml =
+    musicXmlExts.includes(ext) ||
+    (ext === "mxl" && !isProbablyZip(buffer)) ||
+    looksLikeMusicXml(utf8ForSniff);
+
+  if (shouldTryMusicXml) {
+    const parsed = tryIntakeMusicXmlBuffer(buffer);
+    if (parsed) return { ok: true, parsed };
+    if (ext === "mxl") {
+      const fromZip = parseMXL(buffer);
+      if (fromZip && fromZip.melody.length > 0) {
+        return { ok: true, parsed: fromZip };
+      }
     }
     return {
       ok: false,
@@ -515,39 +599,17 @@ export function intakeFileToParsedScore(
     };
   }
 
-  if (ext === "mxl") {
-    const parsed = parseMXL(buffer);
-    if (parsed && parsed.melody.length > 0) {
-      return { ok: true, parsed };
-    }
-    return {
-      ok: false,
-      failure: {
-        status: 422,
-        error: "Could not parse file or no melody found",
-      },
-    };
-  }
+  const fallbackMidi = tryIntakeMidi(buffer);
+  if (fallbackMidi) return { ok: true, parsed: fallbackMidi };
 
-  if (["mid", "midi"].includes(ext)) {
-    const parsed = parseMIDI(buffer);
-    if (parsed && parsed.melody.length > 0) {
-      return { ok: true, parsed };
-    }
-    return {
-      ok: false,
-      failure: {
-        status: 422,
-        error: "Could not parse file or no melody found",
-      },
-    };
-  }
+  const fallbackXml = tryIntakeMusicXmlBuffer(buffer);
+  if (fallbackXml) return { ok: true, parsed: fallbackXml };
 
   return {
     ok: false,
     failure: {
       status: 400,
-      error: `Unsupported format: .${ext}. Use ${ACCEPTED_EXTENSIONS_MESSAGE}.`,
+      error: `Unsupported format: .${ext || "(no extension)"}. Use ${ACCEPTED_EXTENSIONS_MESSAGE}.`,
     },
   };
 }

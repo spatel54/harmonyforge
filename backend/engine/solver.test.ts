@@ -1,4 +1,4 @@
-import { generateSATB } from "./solver.js";
+import { generateSATB, SolverBudgetExceededError } from "./solver.js";
 
 describe("solver", () => {
   it("generates SATB for I-IV-V-I in C major", () => {
@@ -145,5 +145,64 @@ describe("solver", () => {
     );
     expect(result).not.toBeNull();
     expect(result!.slots).toHaveLength(3);
+  });
+
+  it("throws SolverBudgetExceededError when node budget is exhausted", () => {
+    expect(() =>
+      generateSATB(
+        {
+          key: { tonic: "C", mode: "major" },
+          chords: [
+            { roman: "I" },
+            { roman: "IV" },
+            { roman: "V7" },
+            { roman: "I" },
+          ],
+        },
+        { maxNodes: 5, skipGreedy: true },
+      ),
+    ).toThrow(SolverBudgetExceededError);
+  });
+
+  it("completes for many chord slots within default budget (regression)", () => {
+    const n = 64;
+    const chords = Array.from({ length: n }, (_, i) => ({ roman: "I" as const, beat: i * 2 }));
+    const result = generateSATB({
+      key: { tonic: "C", mode: "major" },
+      chords,
+      melody: [{ pitch: "C4", beat: 0, duration: n * 2 }],
+    });
+    expect(result).not.toBeNull();
+    expect(result!.slots).toHaveLength(n);
+  });
+
+  it("greedy-first completes mid-length varied progression (I–IV–V7–I)×8 under former N≥56 threshold", () => {
+    const pattern = ["I", "IV", "V7", "I"] as const;
+    const n = 32;
+    const chords = Array.from({ length: n }, (_, i) => ({
+      roman: pattern[i % 4]!,
+      beat: i,
+    }));
+    const result = generateSATB({
+      key: { tonic: "C", mode: "major" },
+      chords,
+      melody: [{ pitch: "C4", beat: 0, duration: n * 2 }],
+    });
+    expect(result).not.toBeNull();
+    expect(result!.slots).toHaveLength(n);
+  });
+
+  it("greedy path completes a long all-I chain with fixed melody (latency regression)", () => {
+    const n = 100;
+    const chords = Array.from({ length: n }, (_, i) => ({ roman: "I" as const, beat: i }));
+    const t0 = performance.now();
+    const result = generateSATB({
+      key: { tonic: "C", mode: "major" },
+      chords,
+      melody: [{ pitch: "G4", beat: 0, duration: n * 2 }],
+    });
+    expect(result).not.toBeNull();
+    expect(result!.slots).toHaveLength(n);
+    expect(performance.now() - t0).toBeLessThan(5000);
   });
 });

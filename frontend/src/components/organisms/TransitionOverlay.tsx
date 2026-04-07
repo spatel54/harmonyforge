@@ -246,8 +246,11 @@ export function TransitionOverlay({
 }: TransitionOverlayProps) {
   const { headline, sub } = LABELS[variant];
   const duration = TRANSITION_MIN_VISIBLE_MS[variant];
-  const pct = usePercentageCounter(visible, duration);
+  const rawPct = usePercentageCounter(visible, duration);
   const showBook = variant === "parsing";
+  /** Avoid implying “done” while network / engine still runs (bar caps at 90% for note variants). */
+  const displayPct = showBook ? rawPct : Math.min(rawPct, 90);
+  const showLongWaitHint = !showBook && rawPct >= 90 && visible;
 
   return (
     <div
@@ -274,9 +277,9 @@ export function TransitionOverlay({
           color: "var(--hf-accent)",
         }}
         aria-live="polite"
-        aria-label={`${pct} percent complete`}
+        aria-label={`${displayPct} percent complete`}
       >
-        {pct}%
+        {displayPct}%
       </p>
 
       {/* Deterministic bar — same signal as the percentage counter */}
@@ -288,7 +291,7 @@ export function TransitionOverlay({
         <div
           className="h-full rounded-full transition-[width] duration-75 ease-linear"
           style={{
-            width: `${pct}%`,
+            width: `${displayPct}%`,
             backgroundColor: "var(--hf-accent)",
           }}
         />
@@ -307,6 +310,14 @@ export function TransitionOverlay({
         >
           {sub}
         </p>
+        {showLongWaitHint ? (
+          <p
+            className="font-mono text-[11px] opacity-50 max-w-[min(320px,90vw)] text-center mt-1"
+            style={{ color: "var(--hf-text-primary)" }}
+          >
+            Still working—large scores can take a while.
+          </p>
+        ) : null}
       </div>
     </div>
   );

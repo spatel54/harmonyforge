@@ -4,23 +4,24 @@
  */
 import express from "express";
 import multer from "multer";
-import { generateSATB } from "./solver.js";
+import { generateSATB, SolverBudgetExceededError } from "./solver.js";
 import { parseMusicXML } from "./parsers/musicxmlParser.js";
 import { intakeFileToParsedScore } from "./parsers/fileIntake.js";
 import { ensureChords } from "./chordInference.js";
 import { satbToMusicXML, parsedScoreToPartwiseMelodyMusicXML } from "./satbToMusicXML.js";
 import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB.js";
 const app = express();
-const PORT = 8000;
+const PORT = parseInt(process.env.PORT ?? "8000", 10);
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 25 * 1024 * 1024 },
+    limits: { fileSize: MAX_UPLOAD_BYTES },
 });
 const VALID_TONICS = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 const VALID_MODES = ["major", "minor"];
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:3000";
 app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
@@ -90,12 +91,39 @@ function parseConfig(body) {
     }
     return Object.keys(config).length > 0 ? config : null;
 }
+const SOLVER_BUDGET_ERROR = "Generation exceeded solver limits; try a shorter score or reduce harmonic density (HF_MAX_CHORD_SLOTS / HF_SOLVER_MAX_NODES).";
+/**
+ * Multipart file routes use a default wall-clock cap when HF_SOLVER_MAX_MS is unset so the engine
+ * can return 422 before typical browser abort (~120–180s). Set HF_SOLVER_MAX_MS=0 for no limit.
+ */
+const DEFAULT_FILE_GENERATION_SOLVER_MS = 108_000;
+function effectiveSolverMaxMsForFileGeneration() {
+    const raw = process.env.HF_SOLVER_MAX_MS;
+    if (raw === undefined || raw === "" || raw.trim() === "")
+        return DEFAULT_FILE_GENERATION_SOLVER_MS;
+    const n = parseInt(raw.trim(), 10);
+    if (!Number.isFinite(n) || n < 0)
+        return DEFAULT_FILE_GENERATION_SOLVER_MS;
+    if (n === 0)
+        return 0;
+    return Math.min(n, 600_000);
+}
 app.post("/api/generate-satb", (req, res) => {
     if (!validateLeadSheet(req.body)) {
         res.status(400).json({ error: "Invalid lead sheet" });
         return;
     }
-    const result = generateSATB(req.body);
+    let result;
+    try {
+        result = generateSATB(req.body);
+    }
+    catch (e) {
+        if (e instanceof SolverBudgetExceededError) {
+            res.status(422).json({ error: SOLVER_BUDGET_ERROR, code: e.code });
+            return;
+        }
+        throw e;
+    }
     if (!result) {
         res.status(422).json({ error: "Could not find valid SATB arrangement" });
         return;
@@ -136,7 +164,20 @@ app.post("/api/generate-from-file", upload.fields([
         chords: withChords.chords,
         melody: withChords.melody,
     };
-    const result = generateSATB(leadSheet, { genre: config?.genre });
+    let result;
+    try {
+        result = generateSATB(leadSheet, {
+            genre: config?.genre,
+            maxMs: effectiveSolverMaxMsForFileGeneration(),
+        });
+    }
+    catch (e) {
+        if (e instanceof SolverBudgetExceededError) {
+            res.status(422).json({ error: SOLVER_BUDGET_ERROR, code: e.code });
+            return;
+        }
+        throw e;
+    }
     if (!result) {
         res.status(422).json({ error: "Could not find valid SATB arrangement" });
         return;
@@ -186,7 +227,19 @@ app.post("/api/validate-from-file", upload.single("file"), (req, res) => {
         chords: withChords.chords,
         melody: withChords.melody,
     };
-    const result = generateSATB(leadSheet);
+    let result;
+    try {
+        result = generateSATB(leadSheet, {
+            maxMs: effectiveSolverMaxMsForFileGeneration(),
+        });
+    }
+    catch (e) {
+        if (e instanceof SolverBudgetExceededError) {
+            res.status(422).json({ error: SOLVER_BUDGET_ERROR, code: e.code });
+            return;
+        }
+        throw e;
+    }
     if (!result) {
         res.status(422).json({ error: "Could not generate SATB from file" });
         return;
@@ -235,12 +288,22 @@ app.post("/api/validate-satb", (req, res) => {
     const body = req.body;
     let slots;
     if (body.leadSheet && validateLeadSheet(body.leadSheet)) {
-        const result = generateSATB(body.leadSheet);
-        if (!result) {
+        let gen;
+        try {
+            gen = generateSATB(body.leadSheet);
+        }
+        catch (e) {
+            if (e instanceof SolverBudgetExceededError) {
+                res.status(422).json({ error: SOLVER_BUDGET_ERROR, code: e.code });
+                return;
+            }
+            throw e;
+        }
+        if (!gen) {
             res.status(422).json({ error: "Could not generate SATB from lead sheet" });
             return;
         }
-        slots = result.slots.map((s) => s.voices);
+        slots = gen.slots.map((s) => s.voices);
     }
     else if (body.slots && Array.isArray(body.slots)) {
         const valid = body.slots.every((s) => s &&
@@ -270,12 +333,22 @@ app.post("/api/validate-satb-trace", (req, res) => {
     const body = req.body;
     let slots;
     if (body.leadSheet && validateLeadSheet(body.leadSheet)) {
-        const result = generateSATB(body.leadSheet);
-        if (!result) {
+        let gen;
+        try {
+            gen = generateSATB(body.leadSheet);
+        }
+        catch (e) {
+            if (e instanceof SolverBudgetExceededError) {
+                res.status(422).json({ error: SOLVER_BUDGET_ERROR, code: e.code });
+                return;
+            }
+            throw e;
+        }
+        if (!gen) {
             res.status(422).json({ error: "Could not generate SATB from lead sheet" });
             return;
         }
-        slots = result.slots.map((s) => s.voices);
+        slots = gen.slots.map((s) => s.voices);
     }
     else if (body.slots && Array.isArray(body.slots)) {
         const valid = body.slots.every((s) => s &&
@@ -312,6 +385,16 @@ app.post("/api/debug-parse", express.raw({ type: "*/*", limit: "5mb" }), (req, r
         hasPartwise: xml.includes("score-partwise"),
         parsed: parsed ? { melodyCount: parsed.melody.length, key: parsed.key } : null,
     });
+});
+app.use((err, _req, res, next) => {
+    const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+    if (code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+            error: `File too large. Maximum upload size is ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.`,
+        });
+        return;
+    }
+    next(err);
 });
 app.listen(PORT, () => {
     console.log(`HarmonyForge backend listening on http://localhost:${PORT}`);

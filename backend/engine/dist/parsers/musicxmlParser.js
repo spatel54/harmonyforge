@@ -6,6 +6,7 @@
 import { parseScore } from "musicxml-interfaces";
 import { parsePartwiseMusicXML } from "./partwiseParser.js";
 import { parseTimewiseMusicXML } from "./timewiseParser.js";
+import { hasScorePartwiseMarker, hasScoreTimewiseMarker } from "./musicXmlMarkers.js";
 const PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 function pitchToStr(pitch) {
     if (!pitch.step)
@@ -45,8 +46,10 @@ function harmonyToRoman(harmony) {
 export function parseMusicXML(xml) {
     if (!xml || typeof xml !== "string")
         return null;
-    const hasPartwise = xml.includes("score-partwise");
-    const hasTimewise = xml.includes("score-timewise");
+    if (!xml.trim())
+        return null;
+    const hasPartwise = hasScorePartwiseMarker(xml);
+    const hasTimewise = hasScoreTimewiseMarker(xml);
     if (hasPartwise) {
         const partwise = parsePartwiseMusicXML(xml);
         if (partwise && partwise.melody.length > 0)

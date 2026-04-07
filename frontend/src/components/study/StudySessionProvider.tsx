@@ -1,20 +1,18 @@
 "use client";
 
-import React, { useRef } from "react";
+import React from "react";
 import { syncStudySessionFromUrl } from "@/lib/study/studyConfig";
 
 /**
- * Syncs `?study=` and `?hfExplain=` into sessionStorage on first client render.
+ * Syncs `?study=` and `?hfExplain=` into sessionStorage on first client mount.
  */
 export function StudySessionProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const didSync = useRef(false);
-  if (typeof window !== "undefined" && !didSync.current) {
+  React.useEffect(() => {
     syncStudySessionFromUrl(window.location.search);
-    didSync.current = true;
-  }
+  }, []);
   return <>{children}</>;
 }

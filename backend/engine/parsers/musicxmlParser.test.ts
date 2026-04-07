@@ -2,9 +2,19 @@
  * Tests for MusicXML parser
  */
 
-import { readFileSync } from "fs";
-import { join } from "path";
 import { parseMusicXML } from "./musicxmlParser.js";
+
+const PARTWISE_C_MAJOR = `<?xml version="1.0"?>
+<score-partwise version="2.0">
+  <part-list><score-part id="P1"><part-name>Melody</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
 
 describe("parseMusicXML", () => {
   it("returns null for invalid XML", () => {
@@ -16,18 +26,12 @@ describe("parseMusicXML", () => {
     expect(parseMusicXML("<root/>")).toBeNull();
   });
 
-  it("parses score-partwise (e.g. 月亮代表我的心)", () => {
-    const xmlPath = join(process.cwd(), "月亮代表我的心.xml");
-    try {
-      const xml = readFileSync(xmlPath, "utf-8");
-      const parsed = parseMusicXML(xml);
-      expect(parsed).not.toBeNull();
-      expect(parsed!.melody.length).toBeGreaterThan(0);
-      expect(parsed!.key.tonic).toBe("C");
-      expect(parsed!.key.mode).toBe("major");
-    } catch {
-      // File may not exist in CI; skip
-    }
+  it("parses score-partwise with melody and C major key", () => {
+    const parsed = parseMusicXML(PARTWISE_C_MAJOR);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.melody.length).toBeGreaterThan(0);
+    expect(parsed!.key.tonic).toBe("C");
+    expect(parsed!.key.mode).toBe("major");
   });
 
   it("parses score-timewise", () => {

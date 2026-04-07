@@ -42,9 +42,19 @@ function saveToStorage(xml: string | null, sourceFileName: string | null): void 
     } else {
       sessionStorage.removeItem(STORAGE_KEY);
     }
-  } catch {
-    // ignore quota / privacy errors
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      console.warn("[harmonyforge] sessionStorage quota exceeded; generated score not persisted for refresh");
+    }
+    // ignore other privacy errors
   }
+}
+
+function schedulePersist(xml: string | null, sourceFileName: string | null): void {
+  if (typeof window === "undefined") return;
+  queueMicrotask(() => {
+    saveToStorage(xml, sourceFileName);
+  });
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
@@ -58,8 +68,8 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   generatedMusicXML: null,
   setGeneratedMusicXML: (xml) => {
     const sourceFileName = get().sourceFileName;
-    saveToStorage(xml, sourceFileName);
     set({ generatedMusicXML: xml });
+    schedulePersist(xml, sourceFileName);
   },
   previewMusicXML: null,
   setPreviewMusicXML: (previewMusicXML) => set({ previewMusicXML }),
@@ -67,7 +77,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   setSourceFileName: (name) => {
     set({ sourceFileName: name });
     const xml = get().generatedMusicXML;
-    if (xml) saveToStorage(xml, name);
+    if (xml) schedulePersist(xml, name);
   },
   restoreFromStorage: () => {
     const { xml, sourceFileName } = loadFromStorage();

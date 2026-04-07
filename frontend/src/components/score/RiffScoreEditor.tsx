@@ -184,6 +184,8 @@ export function RiffScoreEditor({
     applyScore(next);
   };
 
+  /* RiffScore toolbar: onClick handlers read apiRef only when the user clicks, not during render. */
+  /* eslint-disable react-hooks/refs */
   const toolbarPlugins = useMemo(
     () => {
       const plugins: Array<{
@@ -362,6 +364,7 @@ export function RiffScoreEditor({
     },
     [visiblePalettes, showPaletteMenu, hasSelection, score, selectedNoteIds],
   );
+  /* eslint-enable react-hooks/refs */
 
   // Build config from score, passing current theme
   const config = useMemo(

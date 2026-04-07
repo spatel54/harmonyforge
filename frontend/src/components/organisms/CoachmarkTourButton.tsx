@@ -10,12 +10,11 @@ import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore
  * Always navigates to `/` so step 1 targets the Playground dropzone.
  */
 export function CoachmarkTourButton() {
-  if (!COACHMARKS_ENABLED) return null;
   const router = useRouter();
   const startTour = useCoachmarkStore((s) => s.startTour);
   const isActive = useCoachmarkStore((s) => s.isActive);
 
-  if (isActive) return null;
+  if (!COACHMARKS_ENABLED || isActive) return null;
 
   return (
     <button

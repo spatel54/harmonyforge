@@ -92,6 +92,35 @@ function getChordStepSize(parsed: ParsedScore): number {
   return Math.max(1, beatsPerMeasure);
 }
 
+/** Default cap on inferred chord slots (long scores widen the grid). Override with HF_MAX_CHORD_SLOTS. */
+export const DEFAULT_MAX_CHORD_SLOTS = 128;
+
+/** Minimum beats per chord when widening the grid (floor at one beat). */
+const MIN_BEATS_PER_CHORD_WHEN_ADAPTIVE = 1;
+
+export function resolveMaxChordSlots(): number {
+  const raw = process.env.HF_MAX_CHORD_SLOTS;
+  if (raw == null || raw === "") return DEFAULT_MAX_CHORD_SLOTS;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 8) return DEFAULT_MAX_CHORD_SLOTS;
+  return Math.min(n, 512);
+}
+
+/**
+ * Base grid step from meter, then widen if the score would exceed max chord slots (keeps SATB solver tractable).
+ */
+export function resolveAdaptiveBeatsPerChord(
+  parsed: ParsedScore,
+  lastBeat: number,
+  maxSlots = resolveMaxChordSlots(),
+): number {
+  let beatsPerChord = getChordStepSize(parsed);
+  if (lastBeat <= 0) return beatsPerChord;
+  const estimatedSlots = Math.ceil(lastBeat / beatsPerChord);
+  if (estimatedSlots <= maxSlots) return beatsPerChord;
+  return Math.max(lastBeat / maxSlots, MIN_BEATS_PER_CHORD_WHEN_ADAPTIVE);
+}
+
 /** Infer chords from melody with melody-compatible diatonic selection. Genre affects candidates and transitions. */
 export function inferChords(
   parsed: ParsedScore,
@@ -113,7 +142,7 @@ export function inferChords(
   })();
   const transitionBonus = genre === "jazz" ? JAZZ_TRANSITION_BONUS : genre === "pop" ? POP_TRANSITION_BONUS : TRANSITION_BONUS;
   const chords: ChordSlot[] = [];
-  const beatsPerChord = getChordStepSize(parsed);
+  const beatsPerChord = resolveAdaptiveBeatsPerChord(parsed, lastBeat);
   let beat = 0;
   let previousRoman: string | undefined;
 
@@ -159,6 +188,31 @@ export function inferChords(
   return chords;
 }
 
+/**
+ * When MusicXML embeds more harmony symbols than the solver cap, keep an evenly spaced subset
+ * in beat order (always includes first and last slots) so SATB search stays tractable.
+ */
+export function downsampleChordSlotsToMax(chords: ChordSlot[], maxSlots: number): ChordSlot[] {
+  if (chords.length <= maxSlots) return chords;
+  const indexed = chords.map((c, i) => ({ c, i }));
+  indexed.sort((a, b) => {
+    const ba = a.c.beat ?? a.i;
+    const bb = b.c.beat ?? b.i;
+    if (ba !== bb) return ba - bb;
+    return a.i - b.i;
+  });
+  const sorted = indexed.map((x) => x.c);
+  const idxSet = new Set<number>();
+  const denom = Math.max(1, maxSlots - 1);
+  for (let j = 0; j < maxSlots; j++) {
+    const idx = Math.round((j / denom) * (sorted.length - 1));
+    idxSet.add(idx);
+  }
+  return Array.from(idxSet)
+    .sort((a, b) => a - b)
+    .map((i) => sorted[i]!);
+}
+
 /** Ensure ParsedScore has chords (use inferred if missing). Mood and genre affect inference. */
 export function ensureChords(
   parsed: ParsedScore,
@@ -166,7 +220,12 @@ export function ensureChords(
   genre?: Genre
 ): ParsedScore & { chords: ChordSlot[] } {
   if (parsed.chords && parsed.chords.length > 0) {
-    return parsed as ParsedScore & { chords: ChordSlot[] };
+    const maxSlots = resolveMaxChordSlots();
+    const chords =
+      parsed.chords.length > maxSlots
+        ? downsampleChordSlotsToMax(parsed.chords, maxSlots)
+        : parsed.chords;
+    return { ...parsed, chords } as ParsedScore & { chords: ChordSlot[] };
   }
   const chords = inferChords(parsed, mood, genre);
   const key = mood !== undefined

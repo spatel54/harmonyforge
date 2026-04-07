@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export interface MusicStandProps extends React.HTMLAttributes<HTMLDivElement> {}
+export type MusicStandProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * MusicStand Molecule

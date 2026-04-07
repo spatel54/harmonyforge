@@ -46,9 +46,18 @@ index 1ca537c..ee2d0eb 100644
      scale?: number;
      label?: string;
 diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
-index ef82e00..d38ac51 100644
+index ef82e00..e18330d 100644
 --- a/node_modules/riffscore/dist/index.js
 +++ b/node_modules/riffscore/dist/index.js
+@@ -3426,7 +3426,7 @@ var initTone = async (onState) => {
+ var loadPianoSampler = (Tone) => {
+   if (sampler) return;
+   updateState({ instrumentState: "loading-samples" });
+-  const baseUrl = "/audio/piano/";
++  const baseUrl = "https://tonejs.github.io/audio/salamander/";
+   sampler = new Tone.Sampler({
+     urls: {
+       A0: "A0.mp3",
 @@ -3692,6 +3692,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;

@@ -81,7 +81,7 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
         <input
           ref={inputRef}
           type="file"
-          accept=".xml,.musicxml,.mxl,.mid,.midi,.pdf"
+          accept=".xml,.musicxml,.mxml,.mxl,.mid,.midi,.pdf,.txt"
           className="sr-only"
           aria-hidden="true"
           tabIndex={-1}

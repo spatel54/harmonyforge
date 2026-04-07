@@ -35,7 +35,7 @@ flowchart LR
 | File | Plain-English purpose |
 |------|------------------------|
 | [plan.md](plan.md) | Goals, research notes, and the numbered checklist (backend, frontend, inspector, verification). |
-| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. **Theory Inspector (2026-04-06):** [split panel, IDEA_ACTIONS, ghost labels, apply fix](progress.md#wl-inspector-split-ideas-2026-04-06). |
+| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. **Holistic refinement (2026-04):** [end goal, approach, completed steps, current failure](progress.md#holistic-refinement-2026-04). **Symbolic intake (2026-04-07):** [MusicXML/MIDI markers, preview parity, ZIP-as-`.xml`, `tsx` MIDI fix](progress.md#wl-intake-symbolic-2026-04-07). **Theory Inspector (2026-04-06):** [split panel, IDEA_ACTIONS, ghost labels, apply fix](progress.md#wl-inspector-split-ideas-2026-04-06). **Generation timeout mitigation (2026-04-07):** [greedy-first + file-route solver cap + UX/docs sync](progress.md#wl-generate-timeout-2026-04-07). |
 | [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) | Tight list + prompting questions for the last MVP feature bundle. |
 
 ### Architecture
@@ -76,6 +76,7 @@ flowchart LR
 |------|------------------------|
 | [adr/001-sandbox-display-mode.md](adr/001-sandbox-display-mode.md) | Why we switch between “view” (OSMD) and “edit” (VexFlow) modes in older paths. |
 | [adr/002-m4-mvp-onboarding-inspector-playback.md](adr/002-m4-mvp-onboarding-inspector-playback.md) | How we shipped onboarding, inspector wiring, and playback for the MVP milestone. |
+| [adr/003-multi-clef-transposition-scope.md](adr/003-multi-clef-transposition-scope.md) | Backlog scope: one transposing-instrument vertical slice first; tab + JSON score deltas deferred until ADR/design. |
 
 ---
 

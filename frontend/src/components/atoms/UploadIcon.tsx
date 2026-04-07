@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export interface UploadIconProps extends React.SVGProps<SVGSVGElement> {}
+export type UploadIconProps = React.SVGProps<SVGSVGElement>;
 
 /**
  * UploadIcon Atom

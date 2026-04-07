@@ -24,16 +24,28 @@ export function resolveIdeaActionNoteId(
   const beat = startBeatOfNoteIndex(clicked.measure, clicked.noteIdx);
   const mIdx = clicked.measureIdx;
   const summaryLower = action.summary.toLowerCase();
-  const candidates: string[] = [];
-  for (const part of score.parts) {
-    const name = part.name?.trim();
-    if (!name) continue;
-    if (!summaryLower.includes(name.toLowerCase())) continue;
-    const meas = part.measures[mIdx];
-    if (!meas) continue;
-    const sn = soundingNoteAtBeatStart(meas, beat);
-    if (sn.kind === "hit" && !sn.note.isRest) candidates.push(sn.note.id);
-  }
-  if (candidates.length === 1) return candidates[0]!;
+
+  /** Part names mentioned in summary; if several match as substrings, prefer the longest name (e.g. Violin II over Violin). */
+  const nameMatches = score.parts
+    .map((part) => {
+      const name = part.name?.trim();
+      if (!name) return null;
+      const nl = name.toLowerCase();
+      if (!summaryLower.includes(nl)) return null;
+      return { part, name, nl };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  if (nameMatches.length === 0) return null;
+  nameMatches.sort((a, b) => b.name.length - a.name.length);
+  const topLen = nameMatches[0]!.name.length;
+  const longestOnly = nameMatches.filter((m) => m.name.length === topLen);
+  if (longestOnly.length !== 1) return null;
+
+  const { part: targetPart } = longestOnly[0]!;
+  const meas = targetPart.measures[mIdx];
+  if (!meas) return null;
+  const sn = soundingNoteAtBeatStart(meas, beat);
+  if (sn.kind === "hit" && !sn.note.isRest) return sn.note.id;
   return null;
 }

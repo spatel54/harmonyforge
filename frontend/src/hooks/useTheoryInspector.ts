@@ -36,7 +36,10 @@ import {
   formatAuthoritativeDurationFact,
   formatScoreDigestForFoundHit,
 } from "@/lib/music/noteExplainContext";
-import { buildMeasureFocusFacts } from "@/lib/music/regionExplainContext";
+import {
+  buildMeasureFocusFacts,
+  buildPartFocusFacts,
+} from "@/lib/music/regionExplainContext";
 import type { TraceFinding, SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import { voicesAtGenerationForSlot } from "@/lib/music/theoryInspectorBaseline";
 import {
@@ -417,6 +420,272 @@ function buildFallbackNoteInsight(
   };
 }
 
+/**
+ * Recompute note-level Theory Inspector evidence from the live score (same FACT lines as explain).
+ * Used when sending chat so context matches edits since the last click.
+ */
+function buildLiveNoteExplainInsight(
+  live: EditableScore,
+  noteId: string,
+  partId: string,
+  baselinePitches: Record<string, string>,
+  baselineTrace: SlotTraceEntry[] | null,
+  baselineAuditedSlots: AuditedSlot[] | null,
+): NoteInsight | null {
+  const found = getNoteById(live, noteId);
+  if (!found || found.note.isRest) return null;
+
+  const partIndex = live.parts.findIndex((p) => p.id === partId);
+  if (partIndex < 0) return null;
+
+  const isMelodyPart = live.parts.length > 1 && partIndex === 0;
+
+  if (isMelodyPart) {
+    const partName = live.parts[partIndex]?.name ?? partId;
+    const currentPitch = found.note.pitch;
+    const scoreFacts = buildAdditiveNoteContextLines(
+      live,
+      found.measureIdx,
+      found.noteIdx,
+      partId,
+    );
+    const mbMelody = parseMeasureBeats(found.measure.timeSignature);
+    const melodyRhythm = describeNotationForTutor(found.note, mbMelody);
+    const currentPitchGuideExplanation =
+      `You clicked your **tune** (“${partName}”) in measure ${found.measureIdx + 1}. ` +
+      `This written pitch is **${currentPitch}**. ${melodyRhythm.charAt(0).toUpperCase() + melodyRhythm.slice(1)} ` +
+      `**Verifiable score export** lists every staff at this beat and the full bar.`;
+
+    return {
+      noteId,
+      noteLabel: currentPitch,
+      voice: `melody — ${partName}`,
+      slotIndex: found.measureIdx + 1,
+      inspectorMode: "melody-context",
+      source: "local-fallback",
+      deterministicExplanation: currentPitchGuideExplanation,
+      evidenceLines: [
+        "=== CURRENT SCORE FACTS (melody + harmony at this beat; full notation snapshot) ===",
+        ...scoreFacts,
+        `Measure ${found.measureIdx + 1} · ${currentPitch}`,
+      ],
+      insightKind: "melody-guide",
+      currentPitch,
+      originalEnginePitch: null,
+      userModifiedPitch: false,
+      currentPitchGuideExplanation,
+    };
+  }
+
+  if (!isHarmonyPart(live, partId)) {
+    return null;
+  }
+
+  const slotData = scoreToAuditedSlots(live, {
+    requireExactlyFourParts: true,
+  });
+  if (!slotData) {
+    return buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
+  }
+
+  const slotIndex = slotData.auditedSlots.findIndex((sl) =>
+    VOICE_KEYS.some((voice) => sl.noteIds[voice] === noteId),
+  );
+  if (slotIndex < 0) {
+    const fallback = buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
+    if (!fallback) return null;
+    return {
+      ...fallback,
+      evidenceLines: [
+        ...fallback.evidenceLines,
+        "(Internal: note id not in four-voice grid; treating as single harmony line.)",
+      ],
+    };
+  }
+
+  const slot = slotData.auditedSlots[slotIndex];
+  const voice = VOICE_KEYS.find((v) => slot.noteIds[v] === noteId);
+  if (!voice) return null;
+
+  const satbResolved = resolveSatbPartIndices(live);
+  const satbOpts: SatbNoteContextOptions | undefined = satbResolved
+    ? { voiceStaffNames: satbResolved.names }
+    : undefined;
+  const rosterLines = buildScorePartRosterLines(live);
+
+  const currentPitch = slot.voices[voice];
+  const originalEnginePitch = resolveOriginalEnginePitch(
+    found.note,
+    baselinePitches,
+    noteId,
+  );
+  const userModifiedPitch = computeUserModifiedPitch(
+    originalEnginePitch,
+    currentPitch,
+  );
+  const inspectorMode = computeTheoryInspectorMode({
+    isMelodyPart: false,
+    originalEnginePitch,
+    currentPitch,
+  });
+  const pitchEditDeltaLine =
+    originalEnginePitch !== null
+      ? buildPitchEditDeltaFact(originalEnginePitch, currentPitch)
+      : null;
+
+  const originFacts = originSatbContextLines(
+    slotData.auditedSlots,
+    baselineAuditedSlots,
+    slotIndex,
+    voice,
+    baselinePitches,
+    satbOpts,
+  );
+  const rhythmFacts = buildSatbRhythmContextLines(
+    live,
+    slotData.auditedSlots,
+    slotIndex,
+    satbOpts,
+  );
+
+  const clickedAuthoritative = formatAuthoritativeDurationFact(
+    found.note,
+    parseMeasureBeats(found.measure.timeSignature),
+    found.measure.timeSignature,
+  );
+
+  const currentFacts = buildSatbNoteContextLines(
+    slotData.auditedSlots,
+    slotIndex,
+    voice,
+    satbOpts,
+  );
+
+  let originFindings: TraceFinding[] = [];
+  const bt = baselineTrace?.find((t) => t.slotIndex === slotIndex);
+  if (bt) {
+    originFindings = bt.findings.filter((f) => f.voices.includes(voice));
+  } else if (originalEnginePitch !== null) {
+    const ov = voicesAtGenerationForSlot(slot, baselinePitches);
+    const om: Record<VoiceKey, number> = {
+      soprano: pitchToMidi(ov.soprano),
+      alto: pitchToMidi(ov.alto),
+      tenor: pitchToMidi(ov.tenor),
+      bass: pitchToMidi(ov.bass),
+    };
+    if (!isVoiceInRange(voice, om[voice])) {
+      originFindings.push({
+        rule: "range",
+        severity: "error",
+        voices: [voice],
+        message: `${voice} out of SATB range at generation`,
+      });
+    }
+  }
+
+  const engineOriginExplanation =
+    originalEnginePitch !== null
+      ? `${buildLaymanChordExplanation(originalEnginePitch, voice, originFindings)}${originFacts.length > 0 ? `\n\n${originFacts.join("\n")}` : ""}`
+      : undefined;
+
+  const mbSatb = parseMeasureBeats(found.measure.timeSignature);
+  const satbRhythmPhrase = describeNotationForTutor(found.note, mbSatb);
+  const fullSatbCurrentGuide =
+    `Chord moment **${slotIndex + 1}** — your **${voice}** line (${voiceLayman(voice)}) sounds **${currentPitch}**. ` +
+    `${satbRhythmPhrase.charAt(0).toUpperCase() + satbRhythmPhrase.slice(1)}` +
+    (userModifiedPitch
+      ? ` You edited this line since the first generation; **What the tool first wrote** stays frozen to that pass.`
+      : "") +
+    ` **Verifiable score export** has all four parts, intervals, and bar-wide rhythm.`;
+
+  const satbWhy =
+    originalEnginePitch !== null
+      ? buildAxiomaticEngineWhyParagraph(
+          originalEnginePitch,
+          voice,
+          originFindings,
+          userModifiedPitch,
+        )
+      : "";
+
+  const currentPitchGuideExplanation =
+    inspectorMode === "origin-justifier"
+      ? originalEnginePitch !== null
+        ? `**This note still matches the first HarmonyForge output.**\n\n${satbWhy}`
+        : SLIM_HARMONIC_GUIDE_ORIGIN
+      : `${fullSatbCurrentGuide}${satbWhy ? `\n\n${satbWhy}` : ""}`;
+
+  const sourceTag = bt && originFindings.length > 0 ? "engine-trace" : "local-fallback";
+
+  const { lines: satbMeasureLines } = buildMeasureFocusFacts(
+    live,
+    found.measureIdx,
+  );
+
+  const evidenceLines = [
+    ...(originalEnginePitch !== null
+      ? [
+          "=== ORIGIN JUSTIFIER (pitches + checker at generation; not your live edit) ===",
+          `FACT: Original generated pitch on this note: ${originalEnginePitch}`,
+          ...originFacts,
+          ...(originFindings.length > 0
+            ? originFindings.map(
+                (f) =>
+                  `• ${f.severity === "error" ? "Issue" : "Heads-up"} (at generation): ${laymanFromFinding(f)}`,
+              )
+            : ["• No stored trace findings for this line at generation."]),
+        ]
+      : ["=== ORIGIN JUSTIFIER ===", "No baseline pitch stored for this note id (guide-only mode)."]),
+    ...(pitchEditDeltaLine ? ["", pitchEditDeltaLine] : []),
+    "",
+    "=== HARMONIC GUIDE — CURRENT SCORE FACTS (live notation) ===",
+    "=== NOTATION PROVIDED TO YOU (deterministic export from the editor) ===",
+    formatScoreDigestForFoundHit(found),
+    ...rosterLines,
+    clickedAuthoritative,
+    ...rhythmFacts,
+    ...currentFacts,
+    "---",
+    "FULL BAR (all staves, this measure):",
+    ...satbMeasureLines,
+    "",
+    `Chord moment ${slotIndex + 1} · current four lines (high → low): ${slot.voices.soprano} · ${slot.voices.alto} · ${slot.voices.tenor} · ${slot.voices.bass}`,
+    "",
+    "=== NOTE_IDS_FOR_IDEA_ACTIONS (copy a noteId below **exactly** into <<<IDEA_ACTIONS>>> JSON; never invent ids) ===",
+    ...(satbResolved
+      ? (["soprano", "alto", "tenor", "bass"] as const).map((vk) => {
+          const nid = slot.noteIds[vk];
+          const label = satbResolved.names[vk];
+          return `FACT: NOTE_ID ${vk} ("${label}") pitch=${slot.voices[vk]} noteId=${nid ?? "null"}`;
+        })
+      : []),
+  ];
+
+  const insightKind: NoteInsightKind =
+    originalEnginePitch !== null ? "harmony-with-provenance" : "harmony-no-provenance";
+
+  return {
+    noteId,
+    noteLabel: currentPitch,
+    voice,
+    slotIndex: slotIndex + 1,
+    inspectorMode,
+    source: sourceTag === "engine-trace" ? "engine-trace" : "local-fallback",
+    deterministicExplanation: mergeDeterministicBlocks(
+      engineOriginExplanation,
+      currentPitchGuideExplanation,
+    ),
+    evidenceLines,
+    insightKind,
+    currentPitch,
+    originalEnginePitch,
+    userModifiedPitch,
+    engineOriginExplanation,
+    currentPitchGuideExplanation,
+    pitchEditDeltaLine: pitchEditDeltaLine ?? undefined,
+  };
+}
+
 function detectIssueHighlights(auditedSlots: AuditedSlot[]): ScoreIssueHighlight[] {
   const highlights: ScoreIssueHighlight[] = [];
   const pairs: Array<[VoiceKey, VoiceKey]> = [
@@ -599,13 +868,71 @@ export function useTheoryInspector() {
         snap.lastValidation,
       );
 
+      const liveScore = useScoreStore.getState().score;
       const scoreFocus = snap.inspectorScoreFocus;
       let scoreSelectionContext: string | undefined;
       let theoryInspectorNoteMode: TheoryInspectorMode | undefined;
+
       if (scoreFocus?.kind === "note") {
-        const ev = scoreFocus.insight.evidenceLines;
-        scoreSelectionContext = ev?.length ? ev.join("\n") : undefined;
-        theoryInspectorNoteMode = scoreFocus.insight.inspectorMode;
+        const insight = scoreFocus.insight;
+        let refreshed = false;
+        if (liveScore) {
+          const found = getNoteById(liveScore, insight.noteId);
+          if (found && !found.note.isRest) {
+            const rebuilt = buildLiveNoteExplainInsight(
+              liveScore,
+              insight.noteId,
+              found.part.id,
+              snap.generationBaselineHarmonyPitches,
+              snap.generationBaselineSatbTrace,
+              snap.generationBaselineAuditedSlots,
+            );
+            if (rebuilt) {
+              scoreSelectionContext = rebuilt.evidenceLines.join("\n");
+              theoryInspectorNoteMode = rebuilt.inspectorMode;
+              store.patchSelectedNoteInsight({
+                ...rebuilt,
+                aiExplanation: insight.aiExplanation,
+                aiSuggestions: insight.aiSuggestions,
+                ideaActions: insight.ideaActions,
+                ideaActionStatuses: insight.ideaActionStatuses,
+              });
+              refreshed = true;
+            }
+          }
+        }
+        if (!refreshed) {
+          const ev = insight.evidenceLines;
+          scoreSelectionContext = ev?.length ? ev.join("\n") : undefined;
+          theoryInspectorNoteMode = insight.inspectorMode;
+        }
+      } else if (scoreFocus?.kind === "measure" && liveScore) {
+        const { lines, noteIds } = buildMeasureFocusFacts(
+          liveScore,
+          scoreFocus.measureIndex,
+        );
+        scoreSelectionContext = lines.join("\n");
+        theoryInspectorNoteMode = undefined;
+        store.setInspectorScoreFocus({
+          kind: "measure",
+          measureIndex: scoreFocus.measureIndex,
+          evidenceLines: lines,
+          noteIds,
+        });
+      } else if (scoreFocus?.kind === "part" && liveScore) {
+        const { lines, noteIds } = buildPartFocusFacts(
+          liveScore,
+          scoreFocus.partId,
+        );
+        scoreSelectionContext = lines.join("\n");
+        theoryInspectorNoteMode = undefined;
+        store.setInspectorScoreFocus({
+          kind: "part",
+          partId: scoreFocus.partId,
+          partName: scoreFocus.partName,
+          evidenceLines: lines,
+          noteIds,
+        });
       } else if (scoreFocus?.kind === "measure" || scoreFocus?.kind === "part") {
         scoreSelectionContext = scoreFocus.evidenceLines.join("\n");
         theoryInspectorNoteMode = undefined;
@@ -711,7 +1038,8 @@ export function useTheoryInspector() {
    * violation messages for each detected issue.
    */
   const runAudit = useCallback(
-    async (_score?: EditableScore | null) => {
+    async (_unusedScore?: EditableScore | null) => {
+      void _unusedScore;
       flushEditorToZustand();
       const score = useScoreStore.getState().score;
       if (!score) return;
@@ -789,7 +1117,8 @@ export function useTheoryInspector() {
    * and stores the result as a SuggestionBatch.
    */
   const requestSuggestion = useCallback(
-    async (_score?: EditableScore | null) => {
+    async (_unusedScore?: EditableScore | null) => {
+      void _unusedScore;
       if (suggestionStore.isLoading) return;
 
       flushEditorToZustand();
@@ -1076,266 +1405,18 @@ export function useTheoryInspector() {
         generationBaselineAuditedSlots: baselineAuditedSlots,
       } = useTheoryInspectorStore.getState();
 
-      const isMelodyPart = live.parts.length > 1 && partIndex === 0;
-
-      if (isMelodyPart) {
-        const partName = live.parts[partIndex]?.name ?? partId;
-        const currentPitch = found.note.pitch;
-        const scoreFacts = buildAdditiveNoteContextLines(
-          live,
-          found.measureIdx,
-          found.noteIdx,
-          partId,
-        );
-        const mbMelody = parseMeasureBeats(found.measure.timeSignature);
-        const melodyRhythm = describeNotationForTutor(found.note, mbMelody);
-        const currentPitchGuideExplanation =
-          `You clicked your **tune** (“${partName}”) in measure ${found.measureIdx + 1}. ` +
-          `This written pitch is **${currentPitch}**. ${melodyRhythm.charAt(0).toUpperCase() + melodyRhythm.slice(1)} ` +
-          `**Verifiable score export** lists every staff at this beat and the full bar.`;
-
-        const melodyInsight: NoteInsight = {
-          noteId,
-          noteLabel: currentPitch,
-          voice: `melody — ${partName}`,
-          slotIndex: found.measureIdx + 1,
-          inspectorMode: "melody-context",
-          source: "local-fallback",
-          deterministicExplanation: currentPitchGuideExplanation,
-          evidenceLines: [
-            "=== CURRENT SCORE FACTS (melody + harmony at this beat; full notation snapshot) ===",
-            ...scoreFacts,
-            `Measure ${found.measureIdx + 1} · ${currentPitch}`,
-          ],
-          insightKind: "melody-guide",
-          currentPitch,
-          originalEnginePitch: null,
-          userModifiedPitch: false,
-          currentPitchGuideExplanation,
-        };
-        store.setSelectedNoteInsight(melodyInsight);
-        await streamTutorNoteInsight(
-          melodyInsight,
-          melodyInsight.evidenceLines.join("\n"),
-        );
-        return;
-      }
-
-      if (!isHarmonyPart(live, partId)) {
-        return;
-      }
-
-      const slotData = scoreToAuditedSlots(live, {
-        requireExactlyFourParts: true,
-      });
-      if (!slotData) {
-        const fallback = buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
-        if (fallback) {
-          store.setSelectedNoteInsight(fallback);
-          await streamTutorNoteInsight(fallback, fallback.evidenceLines.join("\n"));
-        }
-        return;
-      }
-
-      const slotIndex = slotData.auditedSlots.findIndex((sl) =>
-        VOICE_KEYS.some((voice) => sl.noteIds[voice] === noteId),
-      );
-      if (slotIndex < 0) {
-        const fallback = buildFallbackNoteInsight(live, noteId, partId, baselinePitches);
-        if (fallback) {
-          const evidenceLines = [
-            ...fallback.evidenceLines,
-            "(Internal: note id not in four-voice grid; treating as single harmony line.)",
-          ];
-          store.setSelectedNoteInsight({ ...fallback, evidenceLines });
-          await streamTutorNoteInsight({ ...fallback, evidenceLines }, evidenceLines.join("\n"));
-        }
-        return;
-      }
-
-      const slot = slotData.auditedSlots[slotIndex];
-      const voice = VOICE_KEYS.find((v) => slot.noteIds[v] === noteId);
-      if (!voice) return;
-
-      const satbResolved = resolveSatbPartIndices(live);
-      const satbOpts: SatbNoteContextOptions | undefined = satbResolved
-        ? { voiceStaffNames: satbResolved.names }
-        : undefined;
-      const rosterLines = buildScorePartRosterLines(live);
-
-      const currentPitch = slot.voices[voice];
-      const originalEnginePitch = resolveOriginalEnginePitch(
-        found.note,
-        baselinePitches,
+      const insight = buildLiveNoteExplainInsight(
+        live,
         noteId,
-      );
-      const userModifiedPitch = computeUserModifiedPitch(
-        originalEnginePitch,
-        currentPitch,
-      );
-      const inspectorMode = computeTheoryInspectorMode({
-        isMelodyPart: false,
-        originalEnginePitch,
-        currentPitch,
-      });
-      const pitchEditDeltaLine =
-        originalEnginePitch !== null
-          ? buildPitchEditDeltaFact(originalEnginePitch, currentPitch)
-          : null;
-
-      const originFacts = originSatbContextLines(
-        slotData.auditedSlots,
+        partId,
+        baselinePitches,
+        baselineTrace,
         baselineAuditedSlots,
-        slotIndex,
-        voice,
-        baselinePitches,
-        satbOpts,
       );
-      const rhythmFacts = buildSatbRhythmContextLines(
-        live,
-        slotData.auditedSlots,
-        slotIndex,
-        satbOpts,
-      );
+      if (!insight) return;
 
-      const clickedAuthoritative = formatAuthoritativeDurationFact(
-        found.note,
-        parseMeasureBeats(found.measure.timeSignature),
-        found.measure.timeSignature,
-      );
-
-      const currentFacts = buildSatbNoteContextLines(
-        slotData.auditedSlots,
-        slotIndex,
-        voice,
-        satbOpts,
-      );
-
-      let originFindings: TraceFinding[] = [];
-      const bt = baselineTrace?.find((t) => t.slotIndex === slotIndex);
-      if (bt) {
-        originFindings = bt.findings.filter((f) => f.voices.includes(voice));
-      } else if (originalEnginePitch !== null) {
-        const ov = voicesAtGenerationForSlot(slot, baselinePitches);
-        const om: Record<VoiceKey, number> = {
-          soprano: pitchToMidi(ov.soprano),
-          alto: pitchToMidi(ov.alto),
-          tenor: pitchToMidi(ov.tenor),
-          bass: pitchToMidi(ov.bass),
-        };
-        if (!isVoiceInRange(voice, om[voice])) {
-          originFindings.push({
-            rule: "range",
-            severity: "error",
-            voices: [voice],
-            message: `${voice} out of SATB range at generation`,
-          });
-        }
-      }
-
-      const engineOriginExplanation =
-        originalEnginePitch !== null
-          ? `${buildLaymanChordExplanation(originalEnginePitch, voice, originFindings)}${originFacts.length > 0 ? `\n\n${originFacts.join("\n")}` : ""}`
-          : undefined;
-
-      const mbSatb = parseMeasureBeats(found.measure.timeSignature);
-      const satbRhythmPhrase = describeNotationForTutor(found.note, mbSatb);
-      const fullSatbCurrentGuide =
-        `Chord moment **${slotIndex + 1}** — your **${voice}** line (${voiceLayman(voice)}) sounds **${currentPitch}**. ` +
-        `${satbRhythmPhrase.charAt(0).toUpperCase() + satbRhythmPhrase.slice(1)}` +
-        (userModifiedPitch
-          ? ` You edited this line since the first generation; **What the tool first wrote** stays frozen to that pass.`
-          : "") +
-        ` **Verifiable score export** has all four parts, intervals, and bar-wide rhythm.`;
-
-      const satbWhy =
-        originalEnginePitch !== null
-          ? buildAxiomaticEngineWhyParagraph(
-              originalEnginePitch,
-              voice,
-              originFindings,
-              userModifiedPitch,
-            )
-          : "";
-
-      const currentPitchGuideExplanation =
-        inspectorMode === "origin-justifier"
-          ? originalEnginePitch !== null
-            ? `**This note still matches the first HarmonyForge output.**\n\n${satbWhy}`
-            : SLIM_HARMONIC_GUIDE_ORIGIN
-          : `${fullSatbCurrentGuide}${satbWhy ? `\n\n${satbWhy}` : ""}`;
-
-      const sourceTag = bt && originFindings.length > 0 ? "engine-trace" : "local-fallback";
-
-      const { lines: satbMeasureLines } = buildMeasureFocusFacts(
-        live,
-        found.measureIdx,
-      );
-
-      const evidenceLines = [
-        ...(originalEnginePitch !== null
-          ? [
-              "=== ORIGIN JUSTIFIER (pitches + checker at generation; not your live edit) ===",
-              `FACT: Original generated pitch on this note: ${originalEnginePitch}`,
-              ...originFacts,
-              ...(originFindings.length > 0
-                ? originFindings.map(
-                    (f) =>
-                      `• ${f.severity === "error" ? "Issue" : "Heads-up"} (at generation): ${laymanFromFinding(f)}`,
-                  )
-                : ["• No stored trace findings for this line at generation."]),
-            ]
-          : ["=== ORIGIN JUSTIFIER ===", "No baseline pitch stored for this note id (guide-only mode)."]),
-        ...(pitchEditDeltaLine ? ["", pitchEditDeltaLine] : []),
-        "",
-        "=== HARMONIC GUIDE — CURRENT SCORE FACTS (live notation) ===",
-        "=== NOTATION PROVIDED TO YOU (deterministic export from the editor) ===",
-        formatScoreDigestForFoundHit(found),
-        ...rosterLines,
-        clickedAuthoritative,
-        ...rhythmFacts,
-        ...currentFacts,
-        "---",
-        "FULL BAR (all staves, this measure):",
-        ...satbMeasureLines,
-        "",
-        `Chord moment ${slotIndex + 1} · current four lines (high → low): ${slot.voices.soprano} · ${slot.voices.alto} · ${slot.voices.tenor} · ${slot.voices.bass}`,
-        "",
-        "=== NOTE_IDS_FOR_IDEA_ACTIONS (copy a noteId below **exactly** into <<<IDEA_ACTIONS>>> JSON; never invent ids) ===",
-        ...(satbResolved
-          ? (["soprano", "alto", "tenor", "bass"] as const).map((vk) => {
-              const nid = slot.noteIds[vk];
-              const label = satbResolved.names[vk];
-              return `FACT: NOTE_ID ${vk} ("${label}") pitch=${slot.voices[vk]} noteId=${nid ?? "null"}`;
-            })
-          : []),
-      ];
-
-      const insightKind: NoteInsightKind =
-        originalEnginePitch !== null ? "harmony-with-provenance" : "harmony-no-provenance";
-
-      const nextInsight: NoteInsight = {
-        noteId,
-        noteLabel: currentPitch,
-        voice,
-        slotIndex: slotIndex + 1,
-        inspectorMode,
-        source: sourceTag === "engine-trace" ? "engine-trace" : "local-fallback",
-        deterministicExplanation: mergeDeterministicBlocks(
-          engineOriginExplanation,
-          currentPitchGuideExplanation,
-        ),
-        evidenceLines,
-        insightKind,
-        currentPitch,
-        originalEnginePitch,
-        userModifiedPitch,
-        engineOriginExplanation,
-        currentPitchGuideExplanation,
-        pitchEditDeltaLine: pitchEditDeltaLine ?? undefined,
-      };
-      store.setSelectedNoteInsight(nextInsight);
-      await streamTutorNoteInsight(nextInsight, evidenceLines.join("\n"));
+      store.setSelectedNoteInsight(insight);
+      await streamTutorNoteInsight(insight, insight.evidenceLines.join("\n"));
     },
     [store, streamTutorNoteInsight, flushEditorToZustand],
   );

@@ -2,7 +2,7 @@ import React from "react";
 import { Music } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export interface LogoLockupProps extends React.HTMLAttributes<HTMLDivElement> {}
+export type LogoLockupProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * LogoLockup Atom

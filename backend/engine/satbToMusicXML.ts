@@ -34,6 +34,14 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Indent measure/part inner XML without concatenating blocks before splitting (fewer large temporaries). */
+function indentInnerMusicXml(attributes: string, noteXml: string, indent = "  "): string {
+  const lines: string[] = [];
+  if (attributes) lines.push(...attributes.split("\n"));
+  lines.push(...noteXml.split("\n"));
+  return lines.map((line) => indent + line).join("\n");
+}
+
 interface TimedEvent {
   pitch?: string;
   startBeat: number;
@@ -440,7 +448,7 @@ export function satbToMusicXML(
         const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
         const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
         return `  <measure number="${mIdx + 1}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </measure>`;
       });
       return `  <part id="${id}">
@@ -466,7 +474,7 @@ ${parts.join("\n")}
       const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
       const note = measureContentXML(partEvents[i][mIdx] ?? [], beatsPerMeasure);
       return `  <part id="${id}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </part>`;
     });
     return `  <measure number="${mIdx + 1}">
@@ -526,7 +534,7 @@ export function parsedScoreToPartwiseMelodyMusicXML(source: ParsedScore): string
         : "";
     const note = measureContentXML(measureSegs[mIdx] ?? [], beatsPerMeasure);
     return `  <measure number="${mIdx + 1}">
-${`${attributes}${note}`.split("\n").map((l) => "  " + l).join("\n")}
+${indentInnerMusicXml(attributes, note)}
   </measure>`;
   });
 

@@ -86,4 +86,104 @@ describe("resolveIdeaActionNoteId", () => {
     );
     expect(r).toBe("c1");
   });
+
+  it("prefers longest matching part name when several names are substrings of the summary", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p0",
+          name: "Violin",
+          clef: "treble",
+          measures: [
+            m("4/4", [
+              { id: "v0", pitch: "C4", duration: "q" },
+              { id: "v1", pitch: "D4", duration: "q" },
+            ]),
+          ],
+        },
+        {
+          id: "p1",
+          name: "Violin II",
+          clef: "treble",
+          measures: [
+            m("4/4", [
+              { id: "w0", pitch: "E4", duration: "q" },
+              { id: "w1", pitch: "F4", duration: "q" },
+            ]),
+          ],
+        },
+      ],
+    };
+    const insight: NoteInsight = {
+      noteId: "v1",
+      noteLabel: "D4",
+      voice: "melody",
+      slotIndex: 1,
+      inspectorMode: "melody-context",
+      source: "local-fallback",
+      deterministicExplanation: "",
+      evidenceLines: [],
+      insightKind: "melody-guide",
+      currentPitch: "D4",
+      originalEnginePitch: null,
+      userModifiedPitch: false,
+      currentPitchGuideExplanation: "",
+    };
+    const r = resolveIdeaActionNoteId(
+      score,
+      {
+        id: "ia1",
+        noteId: "wrong",
+        suggestedPitch: "G4",
+        summary: "Raise second violin (Violin II) to G4",
+      },
+      insight,
+    );
+    expect(r).toBe("w1");
+  });
+
+  it("returns null when two parts tie for longest name match", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p0",
+          name: "Alto",
+          clef: "treble",
+          measures: [m("4/4", [{ id: "a0", pitch: "C4", duration: "q" }])],
+        },
+        {
+          id: "p1",
+          name: "Alto",
+          clef: "treble",
+          measures: [m("4/4", [{ id: "a1", pitch: "D4", duration: "q" }])],
+        },
+      ],
+    };
+    const insight: NoteInsight = {
+      noteId: "a0",
+      noteLabel: "C4",
+      voice: "x",
+      slotIndex: 1,
+      inspectorMode: "melody-context",
+      source: "local-fallback",
+      deterministicExplanation: "",
+      evidenceLines: [],
+      insightKind: "melody-guide",
+      currentPitch: "C4",
+      originalEnginePitch: null,
+      userModifiedPitch: false,
+      currentPitchGuideExplanation: "",
+    };
+    const r = resolveIdeaActionNoteId(
+      score,
+      {
+        id: "ia1",
+        noteId: "wrong",
+        suggestedPitch: "E4",
+        summary: "Fix Alto line",
+      },
+      insight,
+    );
+    expect(r).toBeNull();
+  });
 });

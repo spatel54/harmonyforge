@@ -3,9 +3,15 @@
  * Uses @tonejs/midi for parsing.
  * Format 1: track 0 may be meta-only; uses first track with notes.
  * Extracts key and time signature from header when available.
+ *
+ * @tonejs/midi is CommonJS (`exports.Midi`). Node ESM `import { Midi }` fails under `tsx`.
+ * Resolve via `createRequire` anchored at `backend/package.json` (cwd is `backend/` for dev, Jest, CLI).
  */
-import MidiModule from "@tonejs/midi";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { midiToPitch } from "../types.js";
+const nodeRequire = createRequire(join(process.cwd(), "package.json"));
+const { Midi } = nodeRequire("@tonejs/midi");
 const PITCH_CLASSES = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
@@ -18,15 +24,29 @@ function keyToTonic(key) {
         return k;
     return FLAT_TO_SHARP[k] ?? "C";
 }
-/** Extract melody from first track with notes; key/time from header */
+/** Prefer the track whose notes sit highest on average (typical melody); tie-break by note count. */
+function pickMelodyTrack(tracks) {
+    const withNotes = tracks.filter((t) => (t.notes ?? []).length > 0);
+    if (withNotes.length === 0)
+        return null;
+    if (withNotes.length === 1)
+        return withNotes[0] ?? null;
+    const scored = withNotes.map((t) => {
+        const notes = t.notes ?? [];
+        const sum = notes.reduce((s, n) => s + n.midi, 0);
+        return { t, mean: sum / notes.length, n: notes.length };
+    });
+    scored.sort((a, b) => b.mean - a.mean || b.n - a.n);
+    return scored[0].t;
+}
+/** Extract melody from the best candidate track; key/time from header */
 export function parseMIDI(buffer) {
     try {
-        const MidiCtor = MidiModule;
-        const midi = new MidiCtor(buffer);
+        const midi = new Midi(buffer);
         const tracks = midi.tracks;
         if (tracks.length === 0)
             return null;
-        const track = tracks.find((t) => (t.notes ?? []).length > 0);
+        const track = pickMelodyTrack(tracks);
         if (!track)
             return null;
         const notes = track.notes ?? [];
