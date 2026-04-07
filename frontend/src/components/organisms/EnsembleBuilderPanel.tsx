@@ -87,7 +87,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
   return (
     <div
       ref={ref}
-      data-coachmark="3"
+      data-coachmark="step-2"
       className={cn(
         "flex flex-col gap-[24px] flex-1 h-full overflow-y-auto",
         "px-[48px] pt-[32px] pb-[32px]",
@@ -210,7 +210,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
       />
 
       {/* Generate CTA row — Node nrVwz / rJKG6 */}
-      <div className="flex justify-end w-full" data-coachmark="4">
+      <div className="flex justify-end w-full">
         <button
           type="button"
           disabled={isGenerating}

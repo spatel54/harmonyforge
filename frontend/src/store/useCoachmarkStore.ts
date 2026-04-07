@@ -1,25 +1,18 @@
-// FEATURE: COACHMARKS — Delete this file + CoachmarkOverlay.tsx + data-coachmark attributes to remove the tour.
+// FEATURE: COACHMARKS — Delete this file + CoachmarkOverlay.tsx + data-coachmark="step-*" to remove the tour.
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export const COACHMARKS_ENABLED = true;
-export const TOTAL_STEPS = 13;
+export const TOTAL_STEPS = 6;
 
 /** Maps step number → app route. */
 export const STEP_ROUTES: Record<number, string> = {
   1: "/",
   2: "/document",
-  3: "/document",
-  4: "/document",
+  3: "/sandbox",
+  4: "/sandbox",
   5: "/sandbox",
   6: "/sandbox",
-  7: "/sandbox",
-  8: "/sandbox",
-  9: "/sandbox",
-  10: "/sandbox",
-  11: "/sandbox",
-  12: "/sandbox",
-  13: "/sandbox",
 };
 
 interface CoachmarkState {
@@ -56,10 +49,11 @@ export const useCoachmarkStore = create<CoachmarkState>()(
       completeTour: () => set({ isActive: false, hasDismissed: true }),
     }),
     {
-      name: "hf-coachmarks",
+      name: "hf-coachmarks-v2",
       partialize: (state) => ({
         isActive: state.isActive,
         currentStep: state.currentStep,
+        hasDismissed: state.hasDismissed,
       }),
     },
   ),

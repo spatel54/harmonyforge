@@ -45,6 +45,8 @@ import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore";
+import { useSandboxTourBridge } from "@/store/useSandboxTourBridge";
 import { StudyLogExportBar } from "@/components/study/StudyLogExportBar";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
@@ -90,7 +92,9 @@ function TactileSandboxPageInner({
 
   const router = useRouter();
   const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
+  const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
+  const coachmarkTourActive = useCoachmarkStore((s) => s.isActive);
   const { score, setScore, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
   const {
@@ -204,8 +208,8 @@ function TactileSandboxPageInner({
         id: action.id,
         noteId: resolvedNoteId,
         partId: found.part.id,
-        measureIndex: found.measureIndex,
-        noteIndex: found.noteIndex,
+        measureIndex: found.measureIdx,
+        noteIndex: found.noteIdx,
         originalPitch: found.note.pitch,
         suggestedPitch: action.suggestedPitch,
         ruleLabel: action.summary.slice(0, 120),
@@ -242,12 +246,14 @@ function TactileSandboxPageInner({
 
   const { cursor, setCursor, clearCursor } = useEditCursorStore();
 
-  // Restore from sessionStorage on mount, then redirect if still no music
   React.useEffect(() => {
     restoreFromStorage();
-    const xml = useUploadStore.getState().generatedMusicXML;
-    if (!xml) router.replace("/document");
-  }, [restoreFromStorage, router]);
+  }, [restoreFromStorage]);
+
+  React.useEffect(() => {
+    if (generatedMusicXML || coachmarkTourActive) return;
+    router.replace("/document");
+  }, [generatedMusicXML, coachmarkTourActive, router]);
 
   // State for modals/panels — must be declared before handleToolSelect
   const [isExportModalOpen, setIsExportModalOpen] = React.useState(false);
@@ -259,6 +265,28 @@ function TactileSandboxPageInner({
   const lastExplainedRef = React.useRef<{ noteId: string; at: number } | null>(null);
   /** Prevents runAudit on every score object identity change (RiffScore sync); audit once per inspector open. */
   const auditRunWhileInspectorOpenRef = React.useRef(false);
+
+  React.useEffect(() => {
+    useSandboxTourBridge.getState().register({
+      setInspectorOpen: setIsInspectorOpen,
+      setExportModalOpen: setIsExportModalOpen,
+    });
+    return () => useSandboxTourBridge.getState().unregister();
+  }, []);
+
+  React.useEffect(() => {
+    if (!coachmarkTourActive || generatedMusicXML) return;
+    let cancelled = false;
+    void fetch("/samples/tour_demo.xml")
+      .then((r) => r.text())
+      .then((text) => {
+        if (!cancelled && text.trim()) setGeneratedMusicXML(text);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [coachmarkTourActive, generatedMusicXML, setGeneratedMusicXML]);
 
   const durationToBeats = React.useCallback((dur: "w" | "h" | "q" | "8" | "16" | "32") => {
     const map: Record<"w" | "h" | "q" | "8" | "16" | "32", number> = {
@@ -1153,8 +1181,8 @@ function TactileSandboxPageInner({
     setIsExportModalOpen(false);
   };
 
-  // Don't render sandbox UI while redirecting (no generated music)
-  if (!generatedMusicXML) {
+  // Don't render sandbox UI while redirecting (no generated music), unless coachmark tour is active (sample loads async)
+  if (!generatedMusicXML && !coachmarkTourActive) {
     return null;
   }
 
@@ -1178,7 +1206,7 @@ function TactileSandboxPageInner({
         {/* Left column */}
         <div
           className="flex flex-col flex-1 min-w-0 overflow-hidden"
-          data-coachmark="5"
+          data-coachmark="step-3"
         >
           {/* RiffScore editor — includes its own toolbar, score canvas, and playback */}
           <div className="relative flex-1 min-h-[320px] overflow-hidden">
@@ -1254,7 +1282,7 @@ function TactileSandboxPageInner({
         {/* Right column: Theory Inspector — resizable */}
         {isInspectorOpen && (
           <div
-            data-coachmark="7"
+            data-coachmark="step-4"
             className="relative shrink-0 h-full overflow-hidden flex"
             style={{ width: inspectorWidth }}
           >
@@ -1307,7 +1335,7 @@ function TactileSandboxPageInner({
 
       <StudyLogExportBar />
 
-      {showOnboarding && (
+      {showOnboarding && !COACHMARKS_ENABLED && (
         <OnboardingCoachmark
           stepLabel="Step 3 of 3"
           title="Edit, listen, and inspect theory"

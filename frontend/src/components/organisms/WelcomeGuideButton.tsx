@@ -2,12 +2,15 @@
 
 import React from "react";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
+import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 
 /**
- * Re-opens the 4-slide welcome modal from the header (any step of the app).
+ * Re-opens the 4-slide welcome modal. Hidden when the coachmark tour is enabled (tour replaces this entry point).
  */
 export function WelcomeGuideButton() {
   const [open, setOpen] = React.useState(false);
+
+  if (COACHMARKS_ENABLED) return null;
 
   return (
     <>

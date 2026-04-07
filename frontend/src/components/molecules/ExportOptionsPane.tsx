@@ -91,6 +91,7 @@ export function ExportOptionsPane({
 
   return (
     <div
+      data-coachmark="step-6"
       className={cn(
         "flex flex-col flex-1 h-[700px] min-w-[500px]",
         "bg-[var(--hf-panel-bg)] rounded-r-[8px]",

@@ -8,7 +8,7 @@ Skim **Status at a glance** below, then use the numbered **Plan** checklist for 
 
 - **Logic Core (backend):** Items **1.1–1.9** shipped; **1.9m** (production-grade PDF→MusicXML / oemer) remains the main pipeline risk.
 - **Tactile Sandbox (frontend):** **RiffScore-first** editing — `EditableScore` in Zustand is the canonical score model; **`patch-package`** extends RiffScore (toolbar plugins, playback scrub via `__HF_RIFFSCORE_PLAY_FROM`). VexFlow/OSMD remain in the tree for legacy paths and fallbacks where noted in [progress.md](progress.md).
-- **Flow:** Upload → Document → Generate → Sandbox; optional **`/onboarding`** and product **tour** (`CoachmarkOverlay`, persisted steps).
+- **Flow:** Upload → Document → Generate → Sandbox; optional **`/onboarding`** and **6-step** product **tour** (`CoachmarkOverlay`, `data-coachmark="step-1"`…`step-6`, persist **`hf-coachmarks-v2`** + **`hasDismissed`**). See [progress.md — 6-step tour](progress.md#wl-coachmarks-6step-2026-04-07).
 - **Theory Inspector:** `/api/theory-inspector` and `/suggest`; dual mode; fixed tutor depth (**intermediate**); notation-first FACT blocks + follow-up chat ordering; SATB audit surfaces as a **compact system line** plus **score highlights** (not a tall stack of violation cards). **2026-04-06:** split **note vs chat** panes; **`<<<IDEA_ACTIONS>>>`** one-click applies + **`NOTE_IDS_FOR_IDEA_ACTIONS`** in evidence + **`ideaActionResolve`** fallback; ghost/input pitch labels. See [progress.md](progress.md) → [Work log — Theory Inspector…](progress.md#wl-inspector-split-ideas-2026-04-06).
 - **M5 (user study):** RQ1 (`reviewer_primary` / melody-only) and RQ2 (`minimal` stylist prose) plus opt-in logging — see **M5 — User study** below.
 - **Active gaps (short):** PDF/OMR reliability; RiffScore asset 404s for some piano samples; **`make lint-frontend`** not green; residual LLM/focus edge cases after heavy edits.
@@ -16,7 +16,7 @@ Skim **Status at a glance** below, then use the numbered **Plan** checklist for 
 
 ### Current snapshot (detail)
 
-- **First-run UX:** Playground shows **`OnboardingModal`** until dismissed; **`llmClient`** resolves **`OPENAI_BASE_URL` ?? `OPENAI_URL`** (see `frontend/.env.example`).
+- **First-run UX:** With **`COACHMARKS_ENABLED`**, the **coachmark tour** auto-starts on **`/`** (modal/coachmark cards disabled); otherwise **`OnboardingModal`** until dismissed. **`llmClient`** resolves **`OPENAI_BASE_URL` ?? `OPENAI_URL`** (see `frontend/.env.example`).
 - **Preview:** Raw `.xml`/`.musicxml` in-browser; **PDF / MXL / MIDI** via **`POST /api/to-preview-musicxml`** and Zustand **`previewMusicXML`** when intake succeeds.
 - **Inspector UX:** Deterministic panels (**What this click means**, **Verifiable score export**); **`react-markdown`** on bubbles; **InspectorScoreFocus** + **`regionExplainContext`** for measure/part; dark-theme tokens on chat and playback bar; **split column** (note details + ideas vs chat); **IDEA_ACTIONS** rows with Accept/Reject; optional **inspector debug strip** when apply fails.
 - **Tests (frontend):** Vitest covers `noteExplainContext`, `noteInsightAiSplit`, **`ideaActionResolve`**, **`staffPreviewPitch`**, `regionExplainContext`, `playbackScrub`, `studyConfig`, etc.

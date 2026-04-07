@@ -44,7 +44,7 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
         <div className="flex items-center gap-[12px]">
           <WelcomeGuideButton />
           <CoachmarkTourButton />
-          <div data-coachmark="10">
+          <div data-coachmark="step-5">
             <button
               type="button"
               onClick={onExportClick}

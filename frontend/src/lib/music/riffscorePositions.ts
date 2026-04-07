@@ -373,7 +373,7 @@ export function findNoteInputPreviewLayout(
     }
     if (lineYsFive.length < 5) continue;
 
-    const rect = previewEl.getBoundingClientRect();
+    const rect = (previewEl as SVGGraphicsElement).getBoundingClientRect();
     const centerY = rect.top + rect.height / 2 - containerRect.top + scrollTop;
     const pitch = pitchFromStaffGeometry(
       part.clef,

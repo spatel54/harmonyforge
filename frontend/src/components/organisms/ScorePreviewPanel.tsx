@@ -36,7 +36,6 @@ export const ScorePreviewPanel = React.forwardRef<
     return (
       <div
         ref={ref}
-        data-coachmark="2"
         className={cn(
           "flex flex-col gap-[20px] w-[897px] shrink-0 h-full",
           "px-[24px] pt-[24px] pb-[20px]",

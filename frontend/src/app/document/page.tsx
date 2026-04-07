@@ -16,6 +16,7 @@ import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlPars
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
@@ -29,6 +30,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
  */
 export default function DocumentPage() {
   const router = useRouter();
+  const coachmarkTourActive = useCoachmarkStore((s) => s.isActive);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [previewScore, setPreviewScore] = React.useState<EditableScore | null>(null);
@@ -44,8 +46,9 @@ export default function DocumentPage() {
     restoreFromStorage();
   }, [restoreFromStorage]);
 
-  // Redirect to upload if no file (e.g. direct nav or refresh)
+  // Redirect to upload if no file (e.g. direct nav or refresh) — coachmark tour may visit without a file
   React.useEffect(() => {
+    if (coachmarkTourActive) return;
     if (!file) {
       if (generatedMusicXML) {
         router.replace("/sandbox");
@@ -53,7 +56,7 @@ export default function DocumentPage() {
         router.replace("/");
       }
     }
-  }, [file, generatedMusicXML, router]);
+  }, [file, generatedMusicXML, router, coachmarkTourActive]);
 
   React.useEffect(() => {
     setShowOnboarding(!isOnboardingComplete());
@@ -90,8 +93,8 @@ export default function DocumentPage() {
     setPreviewScore(parseMusicXML(storePreviewXml));
   }, [file, storePreviewXml]);
 
-  // Don't render document UI while redirecting (no file)
-  if (!file) {
+  // Don't render document UI while redirecting (no file), unless product tour is active
+  if (!file && !coachmarkTourActive) {
     return null;
   }
 
@@ -165,8 +168,20 @@ export default function DocumentPage() {
         <div className="flex flex-row flex-1 min-h-0">
           <ScorePreviewPanel
             score={previewScore}
-            scoreTitle={previewMeta?.title ?? (file ? file.name.replace(/\.[^/.]+$/, "") : "The First Noel")}
-            scoreMeta={previewMeta?.meta ?? "Traditional • 4 voices • Page 1 of 4"}
+            scoreTitle={
+              previewMeta?.title ??
+              (file
+                ? file.name.replace(/\.[^/.]+$/, "")
+                : coachmarkTourActive
+                  ? "Preview"
+                  : "The First Noel")
+            }
+            scoreMeta={
+              previewMeta?.meta ??
+              (coachmarkTourActive && !file
+                ? "Upload a file in a real session to see your score here."
+                : "Traditional • 4 voices • Page 1 of 4")
+            }
             onReupload={() => router.push("/")}
           />
           <EnsembleBuilderPanel
@@ -190,7 +205,7 @@ export default function DocumentPage() {
             {error}
           </div>
         )}
-        {showOnboarding && (
+        {showOnboarding && !COACHMARKS_ENABLED && (
           <OnboardingCoachmark
             stepLabel="Step 2 of 3"
             title="Set mood and instrumentation"

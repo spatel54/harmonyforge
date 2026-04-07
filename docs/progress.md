@@ -11,6 +11,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)
 - [Work log — Repository layout (2026-04-06)](#wl-repo-layout)
 - [Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)](#wl-onboarding-coachmarks)
+- [Work log — 6-step Pencil coachmark tour (2026-04-07)](#wl-coachmarks-6step-2026-04-07)
 - [Approach](#approach)
 - [Research protocol (M5)](#research-protocol-m5--in-app-conditions-reference)
 - [Consolidated status (2026-04)](#consolidated-status-2026-04)
@@ -23,6 +24,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Last updated (2026-04-07)
 
+- **6-step product tour (Pencil / `newfiles`):** Replaced the 13-step minimal overlay with **portal spotlight** (`data-coachmark="step-1"`…`step-6`), **`useSandboxTourBridge`** (sandbox registers inspector/export setters), **tour bypass** on `/document` and `/sandbox` when `isActive`, **`/samples/tour_demo.xml`** seed for sandbox without prior generation, **`hf-coachmarks-v2`** persist including **`hasDismissed`**, **`completeOnboarding`** on skip/done, **`WelcomeGuideButton`** hidden when coachmarks enabled. See **[Work log — 6-step Pencil coachmark tour (2026-04-07)](#wl-coachmarks-6step-2026-04-07)**.
 - **Theory Inspector — full session write-up:** See **[Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)** for end goal, approach, file-level steps, and **what was broken vs fixed** (IDEA_ACTIONS `noteId` / silent apply failure). **Residual risks** are listed there and in **[Current Focus](#current-focus)**.
 - **Theory Inspector UX (shipped 2026-04-06):** Panel split (**note/recommendations** top, **chat** bottom); **`<<<IDEA_ACTIONS>>>`** JSON + Accept/Reject; **`NOTE_IDS_FOR_IDEA_ACTIONS`** in tutor evidence + **`resolveIdeaActionNoteId`** fallback + inspector debug line on failure; stylist ghost **always-visible pitch**; note-input **preview pitch** label; study log **`idea_action_accepted` / `idea_action_rejected`**.
 - **Documentation overhaul (completed):** Root [README.md](../README.md) reworked (RiffScore-first, journey diagrams, Makefile, folder map). Per-folder guides: [frontend/README.md](../frontend/README.md), [backend/README.md](../backend/README.md), [miscellaneous/README.md](../miscellaneous/README.md), [.cursor/README.md](../.cursor/README.md), [backend/engine/README.md](../backend/engine/README.md). [docs/README.md](README.md) expanded into a full index; [plan.md](plan.md) gained reader-facing **Status at a glance** + **Current snapshot** (replacing the wall-of-text blockquote); this file gained **How to read**, **Quick links** (with stable anchors), and **Last updated** stubs.
@@ -59,6 +61,28 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 ## Work log — Onboarding, transitions, coachmarks, AI env (2026-04-06)
 
 **Learnings:** Ported **`newfiles/`** patterns into **`frontend/`** without dropping M5: root layout keeps **`StudySessionProvider`** + **`StudyConsentGate`** and adds **`CoachmarkOverlay`** under **`ThemeProvider`**. **`TransitionOverlay`** uses merged book/notes + percent for **`parsing`/`generating`** and retains **`melody_only`**. Playground **`/`** uses **`OnboardingModal`** + **`completeOnboarding`** on dismiss; **`/onboarding`** uses **`HomeViewOnboarding`** (same upload/`to-preview-musicxml` path as home). **`useCoachmarkStore`** + **`STEP_ROUTES`** drive navigation; **`data-coachmark="1"`–`"10"`** on stable regions (document preview/ensemble/CTA, sandbox editor/inspector/export); steps without a dedicated node fall back in **`CoachmarkOverlay`**. **`llmClient`** resolves base URL from **`OPENAI_BASE_URL ?? OPENAI_URL`**; **`frontend/.env.example`** and theory-inspector offline copy mention these vars.
+
+---
+
+<a id="wl-coachmarks-6step-2026-04-07"></a>
+
+## Work log — 6-step Pencil coachmark tour (2026-04-07)
+
+**Supersedes:** the earlier **13-step** numeric **`data-coachmark`** tour described in the log above.
+
+### Shipped
+
+| Area | Detail |
+|------|--------|
+| **Store** | [`useCoachmarkStore.ts`](../frontend/src/store/useCoachmarkStore.ts) — `TOTAL_STEPS = 6`, `STEP_ROUTES`, persist key **`hf-coachmarks-v2`**, **`hasDismissed`** persisted |
+| **Bridge** | [`useSandboxTourBridge.ts`](../frontend/src/store/useSandboxTourBridge.ts) — sandbox registers `setInspectorOpen` / `setExportModalOpen` |
+| **Overlay** | [`CoachmarkOverlay.tsx`](../frontend/src/components/organisms/CoachmarkOverlay.tsx) — cutout dimming, carets, dots, celebration, auto-start on **`/`** when not dismissed |
+| **Anchors** | `step-1` … `step-6` on Playground, Ensemble panel, sandbox column, inspector, Export header, [`ExportOptionsPane`](../frontend/src/components/molecules/ExportOptionsPane.tsx) |
+| **Guards** | [`document/page.tsx`](../frontend/src/app/document/page.tsx) / [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) — skip strict redirects when tour **`isActive`**; sandbox fetches **`/samples/tour_demo.xml`** when needed |
+| **Legacy** | **`OnboardingModal`** / **`OnboardingCoachmark`** gated off when **`COACHMARKS_ENABLED`**; tour skip/done calls **`completeOnboarding()`** |
+| **Chrome** | [`CoachmarkTourButton`](../frontend/src/components/organisms/CoachmarkTourButton.tsx) — Help icon, **`router.push("/")`** on replay; [`WelcomeGuideButton`](../frontend/src/components/organisms/WelcomeGuideButton.tsx) hidden when coachmarks on |
+
+**Verification:** `cd frontend && npm run test`; `npm run build`.
 
 ---
 

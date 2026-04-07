@@ -14,6 +14,7 @@ import { BrandTitle } from "@/components/atoms/BrandTitle";
 import { useUploadStore } from "@/store/useUploadStore";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
+import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
@@ -86,7 +87,7 @@ export default function Home() {
           {/* Scaled down music stand (max 1000px) flush with the bottom */}
           <div
             className="w-full max-w-[1000px] shrink-0 mt-8 flex flex-col gap-3"
-            data-coachmark="1"
+            data-coachmark="step-1"
           >
             {uploadError && (
               <div
@@ -114,7 +115,7 @@ export default function Home() {
             />
           </div>
         </main>
-        {showOnboarding && (
+        {showOnboarding && !COACHMARKS_ENABLED && (
           <OnboardingModal
             onDismiss={() => {
               completeOnboarding();

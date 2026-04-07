@@ -85,7 +85,7 @@ export function HomeViewOnboarding() {
 
           <div
             className="w-full max-w-[1000px] shrink-0 mt-8 flex flex-col gap-3"
-            data-coachmark="1"
+            data-coachmark="step-1"
           >
             {uploadError && (
               <div
