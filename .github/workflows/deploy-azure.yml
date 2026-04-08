@@ -257,17 +257,29 @@ jobs:
             sleep 15
           done
 
-      - name: Deploy backend Container App
+      - name: Enable ACR admin & get credentials
+        id: acr-creds
+        run: |
+          az acr update --name "${{ secrets.AZURE_ACR_NAME }}" --admin-enabled true --output none
+          ACR_USER=$(az acr credential show --name "${{ secrets.AZURE_ACR_NAME }}" --query username --output tsv)
+          ACR_PASS=$(az acr credential show --name "${{ secrets.AZURE_ACR_NAME }}" --query 'passwords[0].value' --output tsv)
+          echo "acr_user=$ACR_USER" >> "$GITHUB_OUTPUT"
+          echo "acr_pass=$ACR_PASS" >> "$GITHUB_OUTPUT"
 
+      - name: Deploy backend Container App
         id: deploy
         run: |
+          ACR_USER="${{ steps.acr-creds.outputs.acr_user }}"
+          ACR_PASS="${{ steps.acr-creds.outputs.acr_pass }}"
+
           az containerapp create \
             --name harmonyforge-backend \
             --resource-group "$RESOURCE_GROUP" \
             --environment harmonyforge-env \
             --image "$BACKEND_IMAGE:${{ github.sha }}" \
             --registry-server "$ACR_REGISTRY" \
-            --registry-identity system \
+            --registry-username "$ACR_USER" \
+            --registry-password "$ACR_PASS" \
             --target-port 8000 \
             --ingress internal \
             --min-replicas 1 \
@@ -292,6 +304,7 @@ jobs:
           echo "backend_fqdn=$fqdn" >> "$GITHUB_OUTPUT"
           echo "✅ Backend deployed at: https://$fqdn"
 
+
   # ── Deploy: Frontend ──────────────────────────────────────────────────────────
   deploy-frontend:
     name: Deploy Frontend to Azure Container Apps
@@ -309,9 +322,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Get ACR credentials
+        id: acr-creds-fe
+        run: |
+          ACR_USER=$(az acr credential show --name "${{ secrets.AZURE_ACR_NAME }}" --query username --output tsv)
+          ACR_PASS=$(az acr credential show --name "${{ secrets.AZURE_ACR_NAME }}" --query 'passwords[0].value' --output tsv)
+          echo "acr_user=$ACR_USER" >> "$GITHUB_OUTPUT"
+          echo "acr_pass=$ACR_PASS" >> "$GITHUB_OUTPUT"
+
       - name: Deploy frontend Container App
         run: |
           BACKEND_FQDN="${{ needs.deploy-backend.outputs.backend_fqdn }}"
+          ACR_USER="${{ steps.acr-creds-fe.outputs.acr_user }}"
+          ACR_PASS="${{ steps.acr-creds-fe.outputs.acr_pass }}"
 
           az containerapp create \
             --name harmonyforge-frontend \
@@ -319,7 +342,8 @@ jobs:
             --environment harmonyforge-env \
             --image "$FRONTEND_IMAGE:${{ github.sha }}" \
             --registry-server "$ACR_REGISTRY" \
-            --registry-identity system \
+            --registry-username "$ACR_USER" \
+            --registry-password "$ACR_PASS" \
             --target-port 3000 \
             --ingress external \
             --min-replicas 1 \
@@ -328,7 +352,6 @@ jobs:
             --memory 1.0Gi \
             --env-vars \
               "NODE_ENV=production" \
-              "OPENAI_API_KEY=secretref:openai-api-key" \
               "OPENAI_MODEL=gpt-4o-mini" \
             --secrets "openai-api-key=${{ secrets.OPENAI_API_KEY }}" \
             --output none \
@@ -346,6 +369,7 @@ jobs:
             --output tsv)
 
           echo "✅ Frontend deployed at: https://$fqdn"
+
 
   # ── Smoke Test ────────────────────────────────────────────────────────────────
   smoke-test:
