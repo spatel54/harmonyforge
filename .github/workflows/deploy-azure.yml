@@ -281,7 +281,7 @@ jobs:
             --registry-username "$ACR_USER" \
             --registry-password "$ACR_PASS" \
             --target-port 8000 \
-            --ingress internal \
+            --ingress external \
             --min-replicas 1 \
             --max-replicas 3 \
             --cpu 0.5 \

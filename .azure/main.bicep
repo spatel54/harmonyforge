@@ -98,9 +98,16 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: containerAppsEnv.id
     configuration: {
       ingress: {
-        external: false           // Internal only — only frontend can reach backend
+        external: true            // Public HTTPS endpoint, accessed by frontend
         targetPort: 8000
         transport: 'http'
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+          allowedHeaders: ['*']
+          exposeHeaders: ['*']
+          maxAge: 3600
+        }
       }
       registries: [
         {
@@ -234,5 +241,5 @@ output acrLoginServer string = acr.properties.loginServer
 @description('Public HTTPS URL for the HarmonyForge frontend')
 output frontendUrl string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
 
-@description('Internal FQDN for the backend (used as NEXT_PUBLIC_API_URL)')
-output backendInternalFqdn string = 'https://${backendApp.properties.configuration.ingress.fqdn}'
+@description('Public FQDN for the backend (used as NEXT_PUBLIC_API_URL)')
+output backendExternalFqdn string = 'https://${backendApp.properties.configuration.ingress.fqdn}'
