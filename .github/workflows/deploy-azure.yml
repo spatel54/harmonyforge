@@ -173,10 +173,10 @@ jobs:
       - name: Build & push backend image
         run: |
           docker build \
-            -f harmonyforge/backend/Dockerfile \
+            -f backend/Dockerfile \
             -t "$BACKEND_IMAGE:${{ github.sha }}" \
             -t "$BACKEND_IMAGE:latest" \
-            harmonyforge/backend/
+            backend/
           docker push "$BACKEND_IMAGE:${{ github.sha }}"
           docker push "$BACKEND_IMAGE:latest"
 
@@ -211,6 +211,7 @@ jobs:
             -f frontend/Dockerfile \
             --build-arg NEXT_PUBLIC_API_URL="$BACKEND_URL" \
             --build-arg OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+            --build-arg OPENAI_BASE_URL="${{ secrets.OPENAI_BASE_URL }}" \
             --build-arg OPENAI_MODEL="gpt-4o-mini" \
             -t "$FRONTEND_IMAGE:${{ github.sha }}" \
             -t "$FRONTEND_IMAGE:latest" \
