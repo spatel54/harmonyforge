@@ -6,7 +6,7 @@ spec:
   services:
     - name: backend
       github:
-        repo: salt-family/harmonyforge
+        repo: spatel54/harmonyforge
         branch: main
         deploy_on_push: true
       dockerfile_path: backend/Dockerfile
@@ -36,7 +36,7 @@ spec:
     # ── Frontend: Next.js (port 3000) ──────────────────────────────────────────
     - name: frontend
       github:
-        repo: salt-family/harmonyforge
+        repo: spatel54/harmonyforge
         branch: main
         deploy_on_push: true
       dockerfile_path: frontend/Dockerfile
