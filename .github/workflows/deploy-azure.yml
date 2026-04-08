@@ -240,7 +240,25 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Wait for Container Apps Environment to be ready
+        run: |
+          echo "→ Waiting for harmonyforge-env to reach Succeeded state..."
+          for i in $(seq 1 20); do
+            STATE=$(az containerapp env show \
+              --name harmonyforge-env \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.provisioningState" \
+              --output tsv 2>/dev/null || echo "Unknown")
+            echo "  Attempt $i/20: state=$STATE"
+            if [ "$STATE" = "Succeeded" ]; then
+              echo "✅ Environment ready."
+              break
+            fi
+            sleep 15
+          done
+
       - name: Deploy backend Container App
+
         id: deploy
         run: |
           az containerapp create \
