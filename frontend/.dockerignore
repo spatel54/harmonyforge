@@ -1,0 +1,9 @@
+node_modules
+.next
+.env*
+!.env.example
+*.log
+.DS_Store
+design-system
+dev.log
+docs
