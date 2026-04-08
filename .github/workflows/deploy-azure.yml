@@ -266,6 +266,23 @@ jobs:
           echo "acr_user=$ACR_USER" >> "$GITHUB_OUTPUT"
           echo "acr_pass=$ACR_PASS" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for backend app to be ready (if exists)
+        run: |
+          echo "→ Checking harmonyforge-backend state..."
+          for i in $(seq 1 10); do
+            STATE=$(az containerapp show \
+              --name harmonyforge-backend \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.provisioningState" \
+              --output tsv 2>/dev/null || echo "NotFound")
+            echo "  Attempt $i/10: state=$STATE"
+            if [ "$STATE" != "InProgress" ]; then
+              echo "✅ App ready for update (or doesn't exist yet)."
+              break
+            fi
+            sleep 15
+          done
+
       - name: Deploy backend Container App
         id: deploy
         run: |
@@ -329,6 +346,23 @@ jobs:
           ACR_PASS=$(az acr credential show --name "${{ secrets.AZURE_ACR_NAME }}" --query 'passwords[0].value' --output tsv)
           echo "acr_user=$ACR_USER" >> "$GITHUB_OUTPUT"
           echo "acr_pass=$ACR_PASS" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for frontend app to be ready (if exists)
+        run: |
+          echo "→ Checking harmonyforge-frontend state..."
+          for i in $(seq 1 10); do
+            STATE=$(az containerapp show \
+              --name harmonyforge-frontend \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.provisioningState" \
+              --output tsv 2>/dev/null || echo "NotFound")
+            echo "  Attempt $i/10: state=$STATE"
+            if [ "$STATE" != "InProgress" ]; then
+              echo "✅ App ready for update (or doesn't exist yet)."
+              break
+            fi
+            sleep 15
+          done
 
       - name: Deploy frontend Container App
         run: |
