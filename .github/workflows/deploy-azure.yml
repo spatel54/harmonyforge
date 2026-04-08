@@ -173,12 +173,13 @@ jobs:
       - name: Build & push backend image
         run: |
           docker build \
-            -f backend/Dockerfile \
+            -f harmonyforge/backend/Dockerfile \
             -t "$BACKEND_IMAGE:${{ github.sha }}" \
             -t "$BACKEND_IMAGE:latest" \
-            .
+            harmonyforge/backend/
           docker push "$BACKEND_IMAGE:${{ github.sha }}"
           docker push "$BACKEND_IMAGE:latest"
+
 
   # ── Build & Push: Frontend ────────────────────────────────────────────────────
   build-frontend:
