@@ -385,15 +385,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Verify backend /health
-        run: |
-          BACKEND_FQDN="${{ needs.deploy-backend.outputs.backend_fqdn }}"
-          echo "Testing https://$BACKEND_FQDN/health ..."
-          curl --fail --retry 5 --retry-delay 5 --retry-connrefused \
-            "https://$BACKEND_FQDN/health"
-          echo "✅ Backend health check passed."
-
-      - name: Verify frontend root
+      - name: Verify frontend root (public HTTPS)
         run: |
           FRONTEND_FQDN=$(az containerapp show \
             --name harmonyforge-frontend \
@@ -408,4 +400,5 @@ jobs:
             echo "❌ Frontend returned HTTP $status"
             exit 1
           fi
-          echo "✅ Frontend smoke test passed (HTTP $status)."
+          echo "✅ HarmonyForge live at https://$FRONTEND_FQDN (HTTP $status)"
+          echo "ℹ️  Backend is internal-only (harmonyforge-backend.internal.*) — reachable only within the Container Apps environment."
