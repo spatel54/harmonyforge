@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       content:
         fallbackContent +
-        "\n\n_[Offline mode — set OPENAI_API_KEY in frontend/.env.local (optional OPENAI_BASE_URL or OPENAI_URL) for full AI explanations]_",
+        "\n\n_[Offline mode — configure OPENAI_API_KEY in your environment for full AI explanations]_",
       source: "fallback" as const,
       chips: getChipsForPersona(persona, violationType),
     });

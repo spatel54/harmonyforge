@@ -540,7 +540,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        Add OPENAI_API_KEY to .env.local for an AI summary. The sections above still
+                        Enable the AI tutor (OPENAI_API_KEY) for an AI summary. The sections above still
                         explain the score without the tutor.
                       </span>
                     )}

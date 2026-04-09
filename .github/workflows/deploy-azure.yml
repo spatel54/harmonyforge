@@ -390,6 +390,7 @@ jobs:
             --env-vars \
               "NODE_ENV=production" \
               "OPENAI_MODEL=gpt-4o-mini" \
+              "OPENAI_API_KEY=secretref:openai-api-key" \
             --secrets "openai-api-key=${{ secrets.OPENAI_API_KEY }}" \
             --output none \
             2>/dev/null || \
@@ -397,6 +398,8 @@ jobs:
             --name harmonyforge-frontend \
             --resource-group "$RESOURCE_GROUP" \
             --image "$FRONTEND_IMAGE:${{ github.sha }}" \
+            --set-env-vars "NODE_ENV=production" "OPENAI_MODEL=gpt-4o-mini" "OPENAI_API_KEY=secretref:openai-api-key" \
+            --set-secrets "openai-api-key=${{ secrets.OPENAI_API_KEY }}" \
             --output none
 
           fqdn=$(az containerapp show \
