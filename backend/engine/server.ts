@@ -30,8 +30,9 @@ app.use(express.json({ limit: "1mb" }));
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:3000";
 
-app.use((_req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
+app.use((req, res, next) => {
+  const allowedOrigin = process.env.CORS_ORIGIN ?? req.headers.origin ?? "http://localhost:3000";
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   next();
