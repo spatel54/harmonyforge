@@ -54,10 +54,7 @@ import { splitNoteInsightAiContent } from "@/lib/ai/noteInsightAiSplit";
 import { getSuggestionExplanationMode } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 
-const ENGINE_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_ENGINE_URL ?? "http://localhost:8000")
-    : "http://localhost:8000";
+const ENGINE_URL = "";
 
 /** Stable order for picking a primary ViolationKey for LLM taxonomy context. */
 const VIOLATION_KEY_ORDER: ViolationKey[] = [

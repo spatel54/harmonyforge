@@ -15,8 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 import { ExportFormatCard } from "../atoms/ExportFormatCard";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 export interface ValidationResult {
   violations: {
     parallelFifths: number;
@@ -61,7 +59,7 @@ export function ExportOptionsPane({
     try {
       const formData = new FormData();
       formData.append("file", new Blob([musicXML], { type: "application/xml" }), "score.xml");
-      const res = await fetch(`${API_BASE}/api/validate-from-file`, {
+      const res = await fetch(`/api/validate-from-file`, {
         method: "POST",
         body: formData,
       });

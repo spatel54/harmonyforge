@@ -17,7 +17,6 @@ import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
  * Playground Screen (Step 1: Upload)
@@ -49,7 +48,7 @@ export default function Home() {
       if (needsServerPreview) {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch(`${API_BASE}/api/to-preview-musicxml`, {
+        const res = await fetch(`/api/to-preview-musicxml`, {
           method: "POST",
           body: formData,
         });

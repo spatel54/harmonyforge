@@ -9,7 +9,7 @@ const PDF_HINT =
   "Try MusicXML or MXL if setup is incomplete.";
 
 const GENERIC_NON_XML_HINT =
-  "Non-XML previews are built by the engine at POST /api/to-preview-musicxml — ensure the backend is running and NEXT_PUBLIC_API_URL points to it.";
+  "Non-XML previews are built by the app at POST /api/to-preview-musicxml — ensure the app server is running.";
 
 /** Stable anchor in-repo (for contributors); shown in Playground error panel. */
 export const INTAKE_TROUBLESHOOTING_PATH = "docs/progress.md#multi-format-pdf-intake";

@@ -22,14 +22,52 @@ import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 const GENERATE_TIMEOUT_MS = (() => {
   const raw = process.env.NEXT_PUBLIC_GENERATE_TIMEOUT_MS;
   if (raw == null || raw === "") return 180_000;
   const n = parseInt(raw, 10);
   return Number.isFinite(n) && n >= 15_000 ? Math.min(n, 600_000) : 180_000;
 })();
+
+function uploadedFileStem(file: File | null): string | null {
+  if (!file) return null;
+  const stem = file.name.replace(/\.[^/.]+$/, "").trim();
+  return stem.length > 0 ? stem : null;
+}
+
+function deriveDisplayScoreTitle(
+  file: File | null,
+  previewMeta: { title: string; meta: string } | null,
+  previewScore: EditableScore | null,
+): string | null {
+  const fileTitle = uploadedFileStem(file);
+  const rawMetaTitle = previewMeta?.title?.trim() ?? "";
+
+  if (!rawMetaTitle || rawMetaTitle.toLowerCase() === "score") {
+    return fileTitle;
+  }
+
+  const normalizedMetaTitle = rawMetaTitle.toLowerCase();
+  const partNames = (previewScore?.parts ?? [])
+    .map((p) => p.name.trim().toLowerCase())
+    .filter((name) => name.length > 0);
+
+  // Some sources place the instrument/part name in movement-title.
+  // If that happens, prefer the uploaded filename as the score title.
+  if (partNames.includes(normalizedMetaTitle)) {
+    return fileTitle ?? rawMetaTitle;
+  }
+
+  const normalizedMetaLine = (previewMeta?.meta ?? "").trim().toLowerCase();
+  if (
+    normalizedMetaLine.startsWith(`${normalizedMetaTitle} •`) ||
+    normalizedMetaLine.startsWith(`${normalizedMetaTitle}·`)
+  ) {
+    return fileTitle ?? rawMetaTitle;
+  }
+
+  return rawMetaTitle;
+}
 
 /**
  * Document Page — /document
@@ -110,7 +148,7 @@ export default function DocumentPage() {
         if (isProbablyZipBytes(head)) {
           const formData = new FormData();
           formData.append("file", file);
-          const res = await fetch(`${API_BASE}/api/to-preview-musicxml`, {
+          const res = await fetch(`/api/to-preview-musicxml`, {
             method: "POST",
             body: formData,
           });
@@ -196,7 +234,15 @@ export default function DocumentPage() {
         genre: config.genre,
       });
       const formData = new FormData();
-      formData.append("file", file);
+      const normalizedSource =
+        storePreviewXml && storePreviewXml.trim().length > 0
+          ? new File(
+              [storePreviewXml],
+              `${file.name.replace(/\.[^/.]+$/, "") || "score"}.musicxml`,
+              { type: "application/xml" },
+            )
+          : file;
+      formData.append("file", normalizedSource);
       formData.append(
         "config",
         JSON.stringify({
@@ -209,7 +255,7 @@ export default function DocumentPage() {
       const timeoutId = window.setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
       let res: Response;
       try {
-        res = await fetch(`${API_BASE}/api/generate-from-file`, {
+        res = await fetch(`/api/generate-from-file`, {
           method: "POST",
           body: formData,
           signal: controller.signal,
@@ -250,12 +296,8 @@ export default function DocumentPage() {
           <ScorePreviewPanel
             score={previewScore}
             scoreTitle={
-              previewMeta?.title ??
-              (file
-                ? file.name.replace(/\.[^/.]+$/, "")
-                : coachmarkTourActive
-                  ? "Preview"
-                  : "The First Noel")
+              deriveDisplayScoreTitle(file, previewMeta, previewScore) ??
+              (coachmarkTourActive ? "Preview" : "The First Noel")
             }
             scoreMeta={
               previewMeta?.meta ??

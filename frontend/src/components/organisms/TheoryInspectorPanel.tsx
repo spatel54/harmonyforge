@@ -540,8 +540,9 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        Add OPENAI_API_KEY to .env.local for an AI summary. The sections above still
-                        explain the score without the tutor.
+                        Add OPENAI_API_KEY to your environment (.env.local locally or Vercel Project
+                        Settings in production) for an AI summary. The sections above still explain
+                        the score without the tutor.
                       </span>
                     )}
                   </div>
@@ -567,7 +568,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        Enable the AI tutor (OPENAI_API_KEY) to get suggestions here.
+                        Enable the AI tutor by setting OPENAI_API_KEY in your environment to get
+                        suggestions here.
                       </span>
                     ) : isStreaming ? (
                       <span

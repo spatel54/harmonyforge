@@ -58,9 +58,7 @@ import {
   type RiffScoreSessionHandles,
 } from "@/context/RiffScoreSessionContext";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const ENGINE_URL =
-  process.env.NEXT_PUBLIC_ENGINE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const ENGINE_URL = "";
 const DURATION_TOOL_ORDER = [
   "duration-32nd",
   "duration-16th",
@@ -1161,7 +1159,7 @@ function TactileSandboxPageInner({
           new Blob([scoreToMusicXML(live)], { type: "application/xml" }),
           "score.xml",
         );
-        const res = await fetch(`${API_BASE}/api/export-chord-chart`, {
+        const res = await fetch(`/api/export-chord-chart`, {
           method: "POST",
           body: formData,
         });
