@@ -10,6 +10,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Work log — Documentation, deployment, repo hygiene (2026-04-07)](#wl-docs-deploy-2026-04-07)
 - [Work log — Generate timeout mitigation (2026-04-07)](#wl-generate-timeout-2026-04-07)
 - [Work log — Symbolic intake & MusicXML markers (2026-04-07)](#wl-intake-symbolic-2026-04-07)
+- [Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)
 - [Holistic refinement program (2026-04)](#holistic-refinement-2026-04) — end goal, approach, completed steps, **current failure**
 - [Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)
 - [Work log — Repository layout (2026-04-06)](#wl-repo-layout)
@@ -25,8 +26,10 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
-### Last updated (2026-04-07; intake + markers + dev fix)
+### Last updated (2026-04-13; sandbox exports + doc sync)
 
+- **Tactile Sandbox exports (2026-04-13):** All export formats in the modal now derive from the **live** score: **`getLiveScoreAfterFlush`** before reading Zustand; **`openExportModal`** snapshots **`scoreToMusicXML`** for preview + Score Review; toolbar copy/save/print/export use the same flush contract; coachmark **`setExportModalOpen(true)`** goes through the bridge so the tour sees fresh XML. **Formats shipped:** MusicXML, JSON, MIDI (**`scoreToMidi.ts`**, SMF type 1), PNG (**`html-to-image`** on export preview viewport), WAV (**`Tone.Offline`** + PCM16 in **`scoreToWav.ts`**), ZIP (**`fflate`**: XML + MID + JSON + server chord-chart), chord-chart (**`POST /api/export-chord-chart`**), PDF via **`window.print()`** + **`.hf-sandbox-print-target`** / **`.hf-print-hide`** in **`globals.css`**. **Deps:** `html-to-image`, `fflate`. **Tests:** `scoreToMidi.test.ts`. Full narrative: **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**.
+- **Current failure (unchanged primary):** **[plan §1.9m](plan.md)** — production-reliable **PDF → MusicXML / OMR**. **New build gate (2026-04-13):** `npm run build` / `tsc` can fail on **`riffscoreAdapter.ts`** — **`toolbarPlugins`** is patched into RiffScore at runtime but **not** declared on upstream **`RiffScoreConfig`** types; align types (module augmentation or narrow cast) so **`make build`** is green.
 - **Symbolic intake (engine + frontend):** Broadened acceptance of **MusicXML / MIDI / MXL** when filenames lie (`.txt`, `.mxml`, extensionless, **MIDI without `.mid`**), aligned **Playground → Document** preview with **`POST /api/to-preview-musicxml`** for every extension except `.xml`/`.musicxml`, added **ZIP-as-`.xml`** handling on Document, shared **`musicXmlMarkers.ts`** (namespace-prefixed roots, inspired by **`newfiles/harmonize-core.ts`** validation), bounded UTF-8 sniff for binaries, **`extractEmbeddedMusicXml`** for prefixed close tags, **`readMelodyXml`** prefers server preview when present (reviewer arm + mislabeled ZIP). See **[Work log — Symbolic intake & MusicXML markers (2026-04-07)](#wl-intake-symbolic-2026-04-07)**.
 - **`@tonejs/midi` under `tsx`:** Named ESM `import { Midi }` crashed **`make dev`** on Node 24; **`midiParser.ts`** now loads the package via **`createRequire(join(process.cwd(), "package.json"))`** (expects **`cwd` = `backend/`** — normal for **`make dev`** / Jest). Re-run **`npm run build:engine`** after changes.
 - **Generate timeout / greedy SATB:** Document’s **120s** `AbortController` often fired while the engine had **no wall-clock cap** (`HF_SOLVER_MAX_MS` unset) and, worse, **greedy SATB only ran when N ≥ 56**, so many real scores (fewer chord slots) went **straight to backtracking** and could burn minutes. **Fix:** `auto` mode **always tries greedy first**; **generate-from-file** and **validate-from-file** default **~108s** solver `maxMs` when env is unset (set **`HF_SOLVER_MAX_MS=0`** to disable); frontend default generate timeout raised to **180s** with clearer copy (**PDF/OMR** vs symbolic file).
@@ -40,7 +43,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - **Root `node_modules` hygiene:** [node_modules/README.md](../node_modules/README.md) explains non-canonical root installs; root [`.gitignore`](../.gitignore) ignores `/node_modules/*` but **keeps** `!/node_modules/README.md` so the explainer can be committed without tracking dependencies.
 - **Git workflow:** `origin/main` diverged from local once (remote “AI engine” description commit vs local README commit); reconciled with **`git pull --rebase origin main`** then **`git push`** — recommend `git config pull.rebase true` (or pass **`--rebase`** per pull) to avoid the “Need to specify how to reconcile” prompt.
 
-**Holistic refinement (2026-04):** see **[Holistic refinement program](#holistic-refinement-2026-04)** for the full narrative (playback + intake UX + verify-strict + inspector refresh + ADR 003 + engine tests). **Symbolic MusicXML/MIDI intake** tightened (2026-04-07) — see **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Sharpest remaining engineering risk:** PDF/OMR (**[plan §1.9m](plan.md)**). **Secondary:** frontend hook **warnings** (lint still exits 0), idea-action edge cases, deployment execution; **edge:** run **`node engine/dist/server.js`** only with **`cwd` = `backend/`** so MIDI `createRequire` resolves **`@tonejs/midi`**.
+**Holistic refinement (2026-04):** see **[Holistic refinement program](#holistic-refinement-2026-04)** for the full narrative (playback + intake UX + verify-strict + inspector refresh + ADR 003 + engine tests). **Symbolic MusicXML/MIDI intake** tightened (2026-04-07) — see **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Tactile Sandbox exports** shipped (2026-04-13) — see **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**. **Sharpest remaining engineering risk:** PDF/OMR (**[plan §1.9m](plan.md)**). **Build / types:** Next **`npm run build`** may fail until **`riffscoreAdapter.ts`** **`toolbarPlugins`** is reconciled with upstream RiffScore **`RiffScoreConfig`** (runtime patch vs declared types). **Secondary:** frontend hook **warnings** (lint still exits 0), idea-action edge cases, deployment execution; **edge:** run **`node engine/dist/server.js`** only with **`cwd` = `backend/`** so MIDI `createRequire` resolves **`@tonejs/midi`**.
 
 For checklist and verification steps, pair this file with **[plan.md](plan.md)** and **[README.md](../README.md)**.
 
@@ -90,6 +93,50 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 | **Chrome** | [`CoachmarkTourButton`](../frontend/src/components/organisms/CoachmarkTourButton.tsx) — Help icon, **`router.push("/")`** on replay; [`WelcomeGuideButton`](../frontend/src/components/organisms/WelcomeGuideButton.tsx) hidden when coachmarks on |
 
 **Verification:** `cd frontend && npm run test`; `npm run build`.
+
+---
+
+<a id="wl-sandbox-exports-2026-04-13"></a>
+
+## Work log — Tactile Sandbox exports (2026-04-13)
+
+### End goal (this slice)
+
+Users edit in the **Tactile Sandbox** (RiffScore + Zustand **`EditableScore`**) and export **exactly what is on the canvas** — not a stale pre-edit snapshot. The export modal should offer **real** downloads for every advertised format (MusicXML, MIDI, PNG, JSON, WAV, ZIP, chord chart, print/PDF), without requiring new engine endpoints for binary/image/audio.
+
+### Approach
+
+1. **Single source of truth:** Treat **`flushToZustand`** as mandatory before any read of **`useScoreStore.getState().score`** for export, copy, save, print, or modal preview XML.
+2. **Small shared helper:** **`getLiveScoreAfterFlush(session, getScore)`** in **`frontend/src/lib/music/liveScoreExport.ts`** so toolbar + modal + **`handleExport`** stay consistent.
+3. **Modal snapshot:** **`openExportModal`** flushes, then sets **`exportModalMusicXML`** from **`scoreToMusicXML(live)`** (fallback **`generatedMusicXML`** when needed). **`useSandboxTourBridge`** registers **`setExportModalOpenForTour`** so coachmark step 6 uses the same path as the header.
+4. **Client-side binaries:** MIDI from **`EditableScore`** walk (reuse **`noteDurationInBeats`** / **`parseBeatsPerMeasure`** from **`playbackUtils.ts`**); WAV from **`scoreToScheduledNotes`** + **`scheduledNotesToSeconds`** + **`Tone.Offline`**; PNG from **`html-to-image`** on the export preview scroll root (**`exportPreviewRef`**); ZIP via **`fflate`** plus existing chord-chart API.
+5. **Print:** Keep **`window.print()`** for “PDF”; scope **`@media print`** so chrome (header, inspector, modals, study bar, chat FAB) hides and the score region (**`.hf-sandbox-print-target`**) expands.
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| Flush helper + toolbar | **`score-copy`**, **`score-save`**, **`score-print`**, **`score-export`** call **`getLiveScoreAfterFlush`**; export opens via **`openExportModal`**. |
+| Header + tour | **`SandboxHeader`** **`onExportClick={openExportModal}`**; bridge **`setExportModalOpenForTour`**. |
+| **`handleExport`** | Branches for **`xml`**, **`json`**, **`pdf`**, **`chord-chart`**, **`midi`**, **`png`**, **`wav`**, **`zip`**; live score after flush; **`Blob`**/`Uint8Array` copy for **`fflate`** zip to satisfy **`BlobPart`** typing. |
+| MIDI | **`pitchMidi.ts`**, **`scoreToMidi.ts`**, **`scoreToMidi.test.ts`**. |
+| WAV | **`scoreToWav.ts`** (`ToneAudioBuffer.get()` → PCM16 WAV). |
+| UI | **`ExportOptionsPane`**: Audio row → **WAV**; **`ExportModal`** + **`ScorePreviewPane`**: **`previewContainerRef`**. |
+| Print CSS | **`globals.css`**: **`hf-print-hide`**, **`hf-sandbox-print-target`**, **`hf-sandbox-root`** on sandbox layout. |
+| Docs | **`Learnings`** subsection under **## Learnings**; this work log. |
+
+### Verification (run)
+
+- **`cd frontend && npm run test`** — includes **`scoreToMidi.test.ts`**.
+- **`make lint-frontend`** — exit 0 (existing hook warnings may remain).
+- **Manual:** Edit a note → Export → XML/MIDI/JSON/WAV/ZIP reflect edit; print preview shows score-first layout; **Validate harmony** uses modal XML (still **re-solves SATB** on the engine — semantic limitation unchanged).
+
+### Residual / not fixed here
+
+- **PNG:** Captures the **export preview viewport** only, not full vertical stitch for very tall scores.
+- **MP3:** Not implemented (WAV only).
+- **`POST /api/validate-from-file`:** Still validates engine-reconstructed SATB from uploaded XML, not “user-edited score as authoritative.”
+- **Production build:** **`toolbarPlugins`** type error in **`riffscoreAdapter.ts`** — fix separately (see **Current failure** above).
 
 ---
 
@@ -352,6 +399,7 @@ Underlying product end goal (unchanged): **Upload → Document → Generate → 
 | **Ops** | Documented `make dev`; **`make dev-clean`** clears ports **8000 / 3000 / 3001** and Next **`.next/dev/lock`** when restarting (see **Work log — 2026-04-03**). |
 | **Playback scrub** | `PlaybackScrubOverlay` + `playbackScrub.ts` + `riffscorePlaybackBridge.ts`; **`patch-package`** aligns RiffScore **toolbar Play**, **Space**, **P** with scrub via **`__HF_RIFFSCORE_PLAY_FROM`**; **manual QA** for regressions still advised — see **Playback scrub** subsection below. |
 | **Docs & deploy (2026-04-07)** | Root + folder READMEs (two passes: accuracy then visual/onboarding); **docs/README.md** index; **plan.md** reader header; **progress.md** navigation; **[deployment.md](deployment.md)** (Vercel `frontend/` root, engine host, env/CORS); **[node_modules/README.md](../node_modules/README.md)** + root **`.gitignore`** negation; GitHub **rebase** workflow note. |
+| **Sandbox exports (2026-04-13)** | Live-score flush (**`liveScoreExport.ts`**); modal XML snapshot + **`openExportModal`**; MIDI/PNG/WAV/ZIP + print CSS; **`html-to-image`**, **`fflate`**; Vitest **`scoreToMidi`**. See **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. |
 
 ### Playback scrub — draggable playhead & “Play starts where I dropped” (2026-04)
 
@@ -818,12 +866,15 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 | **Engine** | `fileIntake.test.ts`: namespaced MusicXML `.musicxml` + ZIP sniff; **2026-04-07:** MIDI/`.txt`/`.mxml`/extensionless + `musicXmlMarkers.ts` + `midiParser` `createRequire`. |
 | **Ops / OMR** | `backend/docker/oemer-omr.Dockerfile`; README + deployment cross-links. |
 | **Symbolic intake (frontend)** | `needsEnginePreviewForExtension`, `isProbablyZipBytes`, `musicXmlMarkers`, `intakeErrorHints`; Document preview API for mislabeled ZIP; **`readMelodyXml`** prefers **`storePreviewXml`**. |
+| **Sandbox exports (2026-04-13)** | **`liveScoreExport.ts`**, **`scoreToMidi.ts`**, **`pitchMidi.ts`**, **`scoreToWav.ts`**, **`html-to-image`**, **`fflate`**; sandbox **`openExportModal`** + print CSS; Vitest **`scoreToMidi.test.ts`**. |
 
 **Optional plan item not implemented:** dev-only / feature-flag demo path that skips OMR and loads **`tour_demo.xml`** — deferred unless product asks for it.
 
 ### Current failure / what we are working on now
 
 **Primary engineering risk (unchanged):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
+
+**Build / TypeScript (2026-04-13):** **`npm run build`** (Next typecheck) may fail on **`frontend/src/lib/music/riffscoreAdapter.ts`** — **`toolbarPlugins`** is supplied via **`patch-package`** but is **not** in the published **`RiffScoreConfig`** type. Fix with **module augmentation**, a **local extended interface**, or a **narrow assertion** so production build passes without weakening runtime behavior.
 
 **Secondary (non-blocking but real):**
 
@@ -853,7 +904,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 5. **Tutor follow-up quality** — **Live-score evidence refresh on chat send** implemented (2026-04-06): `sendMessage` rebuilds measure/part FACT lines and note-level blocks from the flushed Zustand score before `POST /api/theory-inspector`. **`make lint-frontend`** exits 0 with a few `react-hooks/exhaustive-deps` warnings; use **`make verify-strict`** for verify + lint.
 6. **Idea actions (`<<<IDEA_ACTIONS>>>`)** — **Longest matching part name** in `summary` disambiguates substring collisions (e.g. Violin vs Violin II); duplicate identical names still return null. Still watch: **off-beat suggestions** and **model omitting** `NOTE_IDS`.
 
-**Recently cleared (not a blocker):** **Symbolic MusicXML/MIDI intake (2026-04-07)** — mislabeled extensions, `.mxml`, ZIP-as-`.xml` on Document, Playground preview parity via engine API, reviewer **`readMelodyXml`** uses server preview when set; **`make dev`** no longer crashes on MIDI import (`tsx` + **`@tonejs/midi`**). Details: **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Theory Inspector explanation-level toggle** removed (2026-04-03); tutor depth is fixed to **`intermediate`** by default—no UI step before chat or suggest. **Inspector split layout + IDEA_ACTIONS + ghost pitch labels + note-input preview label** shipped 2026-04-06; **silent Accept** fixed same pass via **NOTE_IDS** + **`resolveIdeaActionNoteId`**.
+**Recently cleared (not a blocker):** **Tactile Sandbox exports (2026-04-13)** — live-score flush, full export modal formats (XML, JSON, MIDI, PNG viewport, WAV, ZIP, chord-chart, print), coachmark parity; see **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**. **Symbolic MusicXML/MIDI intake (2026-04-07)** — mislabeled extensions, `.mxml`, ZIP-as-`.xml` on Document, Playground preview parity via engine API, reviewer **`readMelodyXml`** uses server preview when set; **`make dev`** no longer crashes on MIDI import (`tsx` + **`@tonejs/midi`**). Details: **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Theory Inspector explanation-level toggle** removed (2026-04-03); tutor depth is fixed to **`intermediate`** by default—no UI step before chat or suggest. **Inspector split layout + IDEA_ACTIONS + ghost pitch labels + note-input preview label** shipped 2026-04-06; **silent Accept** fixed same pass via **NOTE_IDS** + **`resolveIdeaActionNoteId`**.
 
 **Still valuable from earlier milestones:** Onboarding, session persistence, engine on `:8000`, chord-chart export path, `usePlayback`-based app audio (where still used) — coexist with RiffScore’s internal playback.
 
@@ -872,6 +923,7 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 - **Idea actions:** `resolveIdeaActionNoteId` prefers **longest** staff name match; new Vitest cases.
 - **Engine tests:** `fileIntake` covers **namespaced MusicXML** (plain + MXL sniff).
 - **Symbolic intake (2026-04-07):** Markers, sniff routing, frontend preview gate, Document ZIP-as-`.xml`, `readMelodyXml` store-first, `midiParser` `createRequire` — see **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**.
+- **Sandbox exports (2026-04-13):** Live flush, MIDI/PNG/WAV/ZIP, print CSS, modal snapshot — see **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**.
 - **Ops:** `backend/docker/oemer-omr.Dockerfile` + README pointer for reproducible oemer.
 
 ---
@@ -1237,6 +1289,11 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 
 ## Learnings
 
+### Tactile Sandbox exports (2026-04-13)
+- **Live score contract:** RiffScore edits are lazy-synced; always **`flushToZustand`** (via **`getLiveScoreAfterFlush`**) before reading **`useScoreStore`** for toolbar copy/save/print, export modal snapshot, and **`handleExport`**.
+- **Formats:** Client-side **`scoreToMidiBuffer`** (SMF type 1, meta tempo + one track per part), **`html-to-image`** PNG of export preview pane, **`fflate`** ZIP (MusicXML + MIDI + JSON + server chord-chart text), **`scoreToWavBuffer`** (**`Tone.Offline`** + PCM16 WAV). PDF remains **`window.print()`** with **`.hf-sandbox-print-target`** / **`.hf-print-hide`** print CSS.
+- **Coachmark bridge:** **`setExportModalOpen(true)`** must refresh XML like the header — use **`openExportModal`** so preview/validation match flushed state.
+
 ### Theory Inspector layout & ghost labels (2026-04-06)
 - **Split scroll:** Keep `useLayoutEffect` auto-scroll on the **chat** pane only so long note-insight content does not reset chat scroll position.
 - **IDEA_ACTIONS:** Prose bullets stay human-readable; machine apply requires a **second delimiter** and strict JSON so partial tutor output does not break the Ideas markdown block.
@@ -1398,8 +1455,8 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 **When context is noisy:** Paste summary here before starting fresh chat.
 
 **Handover template (2026-04):**
-- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, export, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
-- **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`patch-package`** on `riffscore` for `ui.toolbarPlugins`. Theory Inspector: deterministic engine + taxonomy context; **harmony-only** in-score UX; optional OpenAI via `.env.local`. **Intake:** `engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity.
-- **Current status / failures:** (1) **PDF→MusicXML / oemer unresolved** — OMR env fragile (Python version, checkpoint download, PATH); wiring done, reliability not. (2) RiffScore `/audio/piano/*.mp3` **404** in dev. (3) LLM off until `OPENAI_API_KEY` + restart. (4) Turbopack multi-lockfile warning. (5) **Tutor text grounding** — mitigated by **follow-up chat history fix** + text export (**Work log — Tutor follow-up + panels + markdown (2026-04-04)**); residual model/stale-focus risk in **current failures #12**. (6) **`make lint-frontend`** not green (pre-existing debt). (7) older doc bullets may still describe OSMD/VexFlow-first sandbox — use **Consolidated status (2026-04)** + **Multi-format intake & PDF → Document preview** as source of truth.
-- **Key files:** `engine/parsers/fileIntake.ts`, `engine/satbToMusicXML.ts` (`parsedScoreToPartwiseMelodyMusicXML`), `engine/server.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `requirements.txt`, `package.json` (`dev:backend` PATH).
+- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, **multi-format export from the live canvas**, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
+- **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`flushToZustand`** before any export/copy/save/read of store score (**`getLiveScoreAfterFlush`**). **`patch-package`** on `riffscore` for `ui.toolbarPlugins` + playback scrub. **Exports:** client MIDI/PNG/WAV/ZIP + server chord-chart + print CSS — see **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. Theory Inspector: deterministic engine + taxonomy context; **harmony-only** in-score UX; optional OpenAI via `.env.local`. **Intake:** `engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity.
+- **Current status / failures:** (1) **PDF→MusicXML / oemer unresolved** — OMR env fragile (Python version, checkpoint download, PATH); wiring done, reliability not. (2) **`npm run build`** may fail on **`riffscoreAdapter.ts`** until **`toolbarPlugins`** is reconciled with RiffScore’s published **`RiffScoreConfig`** types. (3) RiffScore piano **404** — **mitigated** via Salamander CDN in **`patch-package`** (watch regressions). (4) LLM off until `OPENAI_API_KEY` + restart. (5) Turbopack multi-lockfile warning. (6) **Tutor text grounding** — mitigated by follow-up chat + text export; residual model/stale-focus risk. (7) **`make lint-frontend`** exits 0 with hook **warnings**. (8) Older bullets may still describe OSMD/VexFlow-first sandbox — use **Consolidated status (2026-04)** + **Multi-format intake & PDF → Document preview** + **Tactile Sandbox exports** work log as source of truth.
+- **Key files:** `engine/parsers/fileIntake.ts`, `engine/satbToMusicXML.ts` (`parsedScoreToPartwiseMelodyMusicXML`), `engine/server.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `sandbox/page.tsx`, `liveScoreExport.ts`, `scoreToMidi.ts`, `scoreToWav.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `requirements.txt`, `package.json` (`dev:backend` PATH).
 - **Run:** `make dev-clean && make dev` → http://localhost:3000 (Next) + engine on :8000. `make test-engine` for CLI. **`make pdfalto`** + **`make install`** (Python) for PDF path.

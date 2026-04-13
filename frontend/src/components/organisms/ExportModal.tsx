@@ -9,6 +9,8 @@ export interface ExportModalProps {
   onExport: (format: string) => void;
   /** Raw MusicXML for Score Preview — when provided, renders actual score */
   musicXML?: string | null;
+  /** Scrollable preview root — used for PNG capture */
+  previewContainerRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
 }
 
@@ -17,13 +19,14 @@ export function ExportModal({
   onClose,
   onExport,
   musicXML = null,
+  previewContainerRef,
   className,
 }: ExportModalProps) {
   if (!isOpen) return null;
 
   return (
     /* Outer scroll container */
-    <div className="fixed inset-0 z-[10130] overflow-y-auto">
+    <div className="fixed inset-0 z-[10130] overflow-y-auto hf-print-hide hf-export-modal">
       {/* Fixed dim backdrop */}
       <div
         className="fixed inset-0 bg-[#2D1817] opacity-15 dark:opacity-30 transition-opacity"
@@ -45,7 +48,7 @@ export function ExportModal({
             className,
           )}
         >
-          <ScorePreviewPane musicXML={musicXML} />
+          <ScorePreviewPane musicXML={musicXML} previewRootRef={previewContainerRef} />
           <ExportOptionsPane
           onClose={onClose}
           onExport={onExport}

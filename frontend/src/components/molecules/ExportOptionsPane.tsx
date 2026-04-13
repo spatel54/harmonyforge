@@ -85,7 +85,7 @@ export function ExportOptionsPane({
     { id: "chord-chart", icon: Music2, label: "Chord Chart", desc: "Lead-sheet text" },
     { id: "png", icon: ImageIcon, label: "PNG", desc: "High-res image" },
     { id: "json", icon: Braces, label: "JSON", desc: "Symbolic data" },
-    { id: "mp3", icon: Headphones, label: "Audio", desc: "WAV / MP3" },
+    { id: "wav", icon: Headphones, label: "WAV", desc: "Offline audio render" },
     { id: "zip", icon: FolderArchive, label: "ZIP", desc: "All files" },
   ];
 

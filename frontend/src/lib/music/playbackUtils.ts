@@ -23,7 +23,7 @@ export interface ScheduledNote {
 
 const PITCH_RE = /^[A-G](?:#{1,2}|b{1,2})?\d+$/;
 
-function parseBeatsPerMeasure(timeSignature?: string, fallback = 4): number {
+export function parseBeatsPerMeasure(timeSignature?: string, fallback = 4): number {
   if (!timeSignature) return fallback;
   const match = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
   if (!match) return fallback;
@@ -36,7 +36,7 @@ function parseBeatsPerMeasure(timeSignature?: string, fallback = 4): number {
   return numerator * (4 / denominator);
 }
 
-function noteDurationInBeats(note: Note): number {
+export function noteDurationInBeats(note: Note): number {
   let durationBeats = DURATION_BEATS[note.duration] ?? 1;
   if (note.dots) {
     durationBeats *= 1.5;

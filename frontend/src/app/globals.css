@@ -385,3 +385,36 @@ body {
     margin-left: 100%;
   }
 }
+
+/* Tactile Sandbox — print / Save as PDF: hide chrome, show score region */
+@media print {
+  @page {
+    margin: 0.4in;
+    size: auto;
+  }
+
+  html,
+  body {
+    background: white !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .hf-sandbox-root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .hf-print-hide {
+    display: none !important;
+  }
+
+  .hf-sandbox-print-target {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    page-break-inside: avoid;
+  }
+}
