@@ -1221,7 +1221,7 @@ function TactileSandboxPageInner({
         const json = JSON.stringify(live, null, 2);
         const fd = new FormData();
         fd.append("file", new Blob([xml], { type: "application/xml" }), "score.xml");
-        const chartRes = await fetch(`${API_BASE}/api/export-chord-chart`, { method: "POST", body: fd });
+        const chartRes = await fetch(`/api/export-chord-chart`, { method: "POST", body: fd });
         const chart = chartRes.ok ? await chartRes.text() : "Chord chart unavailable.";
         const zipped = zipSync({
           "score.musicxml": strToU8(xml),
