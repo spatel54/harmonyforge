@@ -25,7 +25,7 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
         ref={ref}
         className={cn(
           "flex items-center justify-between w-full h-[64px] px-[40px]",
-          "shrink-0",
+          "shrink-0 hf-print-hide",
           className,
         )}
         style={{

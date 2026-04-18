@@ -131,6 +131,8 @@ function getChipsForPersona(
   return ["Explain this chord", "Check voice leading", "Suggest correction"];
 }
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/theory-inspector
  * Health check — also tells the client whether an API key is configured.

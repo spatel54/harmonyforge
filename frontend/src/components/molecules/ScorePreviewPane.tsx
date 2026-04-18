@@ -7,10 +7,12 @@ import { extractMusicXMLMetadata, parseMusicXML } from "@/lib/music/musicxmlPars
 export interface ScorePreviewPaneProps {
   /** Raw MusicXML — when provided, renders actual score via OSMD */
   musicXML?: string | null;
+  /** Ref to the scrollable preview region (PNG export) */
+  previewRootRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
 }
 
-export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps) {
+export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScorePreviewPaneProps) {
   const meta = React.useMemo(() => {
     if (!musicXML) return null;
     return extractMusicXMLMetadata(musicXML);
@@ -39,7 +41,7 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
       {/* Preview Area — OSMD when musicXML provided, else placeholder */}
       <div className="flex-1 relative overflow-hidden bg-[#F8F3EA] dark:bg-[#1A1110] min-h-0">
         {score ? (
-          <div className="absolute inset-0 overflow-auto">
+          <div ref={previewRootRef} className="absolute inset-0 overflow-auto">
             <RiffScoreEditor
               score={score}
               className="w-full min-h-full"

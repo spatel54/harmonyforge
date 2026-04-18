@@ -54,4 +54,4 @@ Verify the HarmonyForge end-to-end flow is ready for testing:
 5. Upload 月亮代表我的心.xml (or any .xml/.mid)
 6. On Document: see preview, set mood (Major/Minor), pick instruments, click Generate Harmonies
 7. Wait for overlay, then Sandbox loads with SATB score
-8. Edit notes (select, duration, pitch, etc.), export
+8. Edit notes (select, duration, pitch, etc.), open **Export** — confirm **MusicXML / JSON / MIDI / WAV / ZIP / chord chart** reflect edits (live score after RiffScore **flush**); **PNG** captures export preview viewport; **PDF** uses browser print (chrome hidden via print CSS). See **[progress.md — Tactile Sandbox exports](progress.md#wl-sandbox-exports-2026-04-13)**.
