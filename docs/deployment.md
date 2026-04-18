@@ -1,7 +1,7 @@
 # Deployment guide
 
-> **HarmonyForge is two services:** a **Next.js** app (`frontend/`) and a **Node/Express** engine (`backend/`).  
-> **Vercel** hosts the frontend well; the engine must run on a **separate** host that keeps a long-lived Node process (Railway, Render, Fly.io, Cloud Run, etc.).
+> **HarmonyForge is one fullstack app:** a **Next.js** app (`frontend/`) with the SATB engine running **server-side** via **Next Route Handlers** (`/api/*`).  
+> **Vercel** can host the UI and engine together (no separate backend host, no CORS routing).
 
 Pair this with **[progress.md](progress.md)** (current blockers) and **[plan.md](plan.md)** (checklist).
 
@@ -10,42 +10,15 @@ Pair this with **[progress.md](progress.md)** (current blockers) and **[plan.md]
 ## Order of operations
 
 ```text
-1. Deploy backend  →  get https://your-api.example.com
-2. Create Vercel project (root directory = frontend)
-3. Set Vercel env   →  NEXT_PUBLIC_API_URL = that API URL
-4. Deploy Vercel    →  get https://your-app.vercel.app
-5. Set backend env  →  CORS_ORIGIN = exact Vercel origin (https://…)
-6. Restart backend  →  browser smoke test (upload → generate → sandbox)
+1. Create a new Vercel project (root directory = frontend)
+2. Set Vercel env (OPENAI_* optional; HF_* solver limits optional)
+3. Deploy Vercel → get https://your-app.vercel.app
+4. Browser smoke test (upload → generate → sandbox)
 ```
 
 ---
 
-## 1. Backend (engine)
-
-| Setting | Typical value |
-|---------|----------------|
-| **Project root** | `backend` (on hosts that support monorepo subfolders) |
-| **Install** | `npm ci` or `npm install` |
-| **Build** | `npm run build:engine` (outputs `engine/dist/`) |
-| **Start** | `node engine/dist/server.js` (use a **production** start, not `tsx watch`) |
-| **Port** | Engine defaults to **8000**; many platforms set **`PORT`** — map the platform port to the process or extend the server to read `process.env.PORT` if needed. |
-
-**Environment**
-
-| Variable | Purpose |
-|----------|---------|
-| **`CORS_ORIGIN`** | Must match your **frontend origin** exactly (scheme + host, no path), e.g. `https://my-app.vercel.app`. Default in code is `http://localhost:3000`. |
-| **`PORT`** | Listen port (many hosts inject this). Default **8000** in code. |
-
-**Generation limits (long scores):** **`HF_MAX_CHORD_SLOTS`** (default 128) widens the chord grid so inference stays tractable; **`HF_SOLVER_MAX_NODES`** / **`HF_SOLVER_MAX_MS`** cap SATB backtracking. See [backend/.env.example](../backend/.env.example).
-
-Optional PDF/OMR: **`PDFALTO_BIN`**, **`POPPLER_PDFTOPPM`**, **`OEMER_BIN`** — see [plan.md](plan.md) section **1.9m**. Reference container for Python + oemer: [backend/docker/oemer-omr.Dockerfile](../backend/docker/oemer-omr.Dockerfile).
-
-**PDF / MXL / MIDI preview failures on Upload:** the Playground calls the engine’s **`POST /api/to-preview-musicxml`**. If the response is an error, check engine logs and host tooling; contributors should read **[progress.md — Multi-format intake & PDF](progress.md#multi-format-pdf-intake)** (oemer checkpoints, Python 3.10–12, Poppler, pdfalto).
-
----
-
-## 2. Frontend (Vercel)
+## 1. Fullstack app (Vercel)
 
 1. **Import** the GitHub repo into Vercel.
 2. **Root Directory:** `frontend` (required).
@@ -55,11 +28,13 @@ Optional PDF/OMR: **`PDFALTO_BIN`**, **`POPPLER_PDFTOPPM`**, **`OEMER_BIN`** —
 
 | Variable | Where it runs | Notes |
 |----------|----------------|--------|
-| **`NEXT_PUBLIC_API_URL`** | Browser bundle | **Public.** Base URL of the engine, e.g. `https://your-api.example.com`. Changing it requires a **new deployment** (build-time inlining). |
-| **`NEXT_PUBLIC_GENERATE_TIMEOUT_MS`** | Browser | Optional. Abort **`generate-from-file`** after this many ms (default **180000**). Set below your engine/proxy max duration so users see a clear timeout instead of a generic network failure. |
+| **`NEXT_PUBLIC_GENERATE_TIMEOUT_MS`** | Browser | Optional. Abort **`generate-from-file`** after this many ms (default **180000**). Set high enough for your typical inputs; PDFs can spend most time in OMR. |
 | **`OPENAI_API_KEY`** | Server (API routes) | **Secret.** Theory Inspector; omit for offline fallbacks where supported. |
 | **`OPENAI_BASE_URL`** / **`OPENAI_URL`** | Server | Optional compatible API base. |
 | **`OPENAI_MODEL`** | Server | Optional. |
+| **`HF_SOLVER_MAX_MS`** | Server | Optional. Wall-clock SATB limit for file routes. **0 = unlimited**; if unset, file routes default to ~108s. |
+| **`HF_SOLVER_MAX_NODES`** | Server | Optional. SATB node budget. |
+| **`HF_MAX_CHORD_SLOTS`** | Server | Optional. Caps chord-grid density for long melodies. |
 | M5 **`NEXT_PUBLIC_HF_*`** | Browser | Study toggles — see [plan.md](plan.md) M5 section. |
 
 > **Never** put API keys in **`NEXT_PUBLIC_*`** variables — they are exposed in the client bundle.
@@ -68,23 +43,19 @@ Template for local dev: **[../frontend/.env.example](../frontend/.env.example)**
 
 ---
 
-## 3. CORS and preview deployments
+## 2. Notes on PDF/OMR
 
-The engine sends a **single** `Access-Control-Allow-Origin` header from **`CORS_ORIGIN`**.
+PDF preview/generation still depends on external tooling (`pdfalto`, Poppler `pdftoppm`, and Python `oemer`). On Vercel this is typically **not** available; prefer **MusicXML / MXL / MIDI** for production deploys unless you’ve explicitly built a custom runtime.
 
-| Scenario | What to do |
-|----------|------------|
-| **Production** | Set **`CORS_ORIGIN`** to your production Vercel URL (or custom domain). |
-| **Vercel Preview** | Each preview has a **different** `*.vercel.app` URL. One fixed **`CORS_ORIGIN`** will **not** allow all previews unless you run a **staging** API with that preview origin, or **change the server** to allow multiple origins (not implemented in-repo today). |
+More details and current status live in **[progress.md — Multi-format intake & PDF](progress.md#multi-format-pdf-intake)** and **[plan.md](plan.md)** section **1.9m**.
 
 ---
 
-## 4. Safety checklist
+## 3. Safety checklist
 
-- [ ] **`.env.local`** and **`.env`** under `frontend/` are **gitignored**; secrets live in **Vercel** / backend dashboard only.
-- [ ] **`NEXT_PUBLIC_API_URL`** points to **HTTPS** in production.
-- [ ] **`CORS_ORIGIN`** matches the **exact** frontend URL users open in the browser.
-- [ ] Backend process is **started with `node`** on compiled `dist`, not dev watch mode.
+- [ ] **`.env.local`** and **`.env`** under `frontend/` are **gitignored**; secrets live in **Vercel** only.
+- [ ] No secrets are placed in `NEXT_PUBLIC_*` variables.
+- [ ] Solver budgets are tuned (`HF_SOLVER_MAX_MS`, `HF_SOLVER_MAX_NODES`) so requests fail with clear 4xx errors instead of timing out.
 
 ---
 
@@ -94,4 +65,5 @@ The engine sends a **single** `Access-Control-Allow-Origin` header from **`CORS_
 |-----|-----|
 | [README.md](../README.md) | Local run, Makefile, folder map |
 | [../frontend/README.md](../frontend/README.md) | Routes, `src/` layout, patch-package |
-| [../backend/README.md](../backend/README.md) | Engine layout, `build:engine`, Python/PDF note |
+| [../backend/README.md](../backend/README.md) | Legacy engine layout (kept for CLI/tests) |
+

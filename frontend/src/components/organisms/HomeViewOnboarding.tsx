@@ -16,8 +16,6 @@ import { useUploadStore } from "@/store/useUploadStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 /**
  * Standalone playground + onboarding modal for `/onboarding`.
  * Modal shows on every visit; upload flow matches production `/`.
@@ -51,7 +49,7 @@ export function HomeViewOnboarding() {
       if (needsServerPreview) {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch(`${API_BASE}/api/to-preview-musicxml`, {
+        const res = await fetch(`/api/to-preview-musicxml`, {
           method: "POST",
           body: formData,
         });
