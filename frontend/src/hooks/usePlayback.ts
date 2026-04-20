@@ -30,6 +30,11 @@ function loadStoredVolumeDb(): number {
   }
 }
 
+/** Same destination gain as sandbox Riff playback (Iter2 §4). */
+export function getPlaybackDestinationDb(): number {
+  return loadStoredVolumeDb();
+}
+
 function saveVolumeDb(volumeDb: number): void {
   if (typeof window === "undefined") return;
   try {

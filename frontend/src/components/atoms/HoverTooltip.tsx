@@ -15,8 +15,9 @@ interface HoverTooltipProps {
 
 /**
  * Thin wrapper around the Tooltip atom that manages hover/focus state itself,
- * so callers can drop a "?" info trigger next to domain jargon (e.g. SATB).
- * Addresses Iter2 §1: "plain-language tooltips for domain-specific terminology".
+ * so callers can drop an info trigger next to domain jargon (e.g. SATB).
+ * Positions the tooltip with `getBoundingClientRect` + a body portal so it is
+ * not clipped by overflow or hidden under the score column on Document.
  */
 export const HoverTooltip: React.FC<HoverTooltipProps> = ({
   content,
@@ -24,16 +25,51 @@ export const HoverTooltip: React.FC<HoverTooltipProps> = ({
   ariaLabel = "More info",
 }) => {
   const [visible, setVisible] = React.useState(false);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const [floatingPosition, setFloatingPosition] = React.useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const measure = React.useCallback(() => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setFloatingPosition({
+      top: r.bottom + 8,
+      left: r.left + r.width / 2,
+    });
+  }, []);
+
+  const open = React.useCallback(() => {
+    measure();
+    setVisible(true);
+  }, [measure]);
+
+  React.useLayoutEffect(() => {
+    if (!visible) {
+      setFloatingPosition(null);
+      return;
+    }
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [visible, measure]);
 
   return (
     <span
       className="relative inline-flex items-center align-middle"
-      onMouseEnter={() => setVisible(true)}
+      onMouseEnter={open}
       onMouseLeave={() => setVisible(false)}
-      onFocus={() => setVisible(true)}
+      onFocus={open}
       onBlur={() => setVisible(false)}
     >
       <button
+        ref={buttonRef}
         type="button"
         aria-label={ariaLabel}
         aria-describedby={visible ? "hover-tooltip-describedby" : undefined}
@@ -41,12 +77,20 @@ export const HoverTooltip: React.FC<HoverTooltipProps> = ({
         style={{ color: "var(--hf-text-secondary)" }}
         onClick={(e) => {
           e.preventDefault();
-          setVisible((v) => !v);
+          setVisible((v) => {
+            if (!v) measure();
+            return !v;
+          });
         }}
       >
         <Info className="w-[12px] h-[12px]" strokeWidth={2} aria-hidden="true" />
       </button>
-      <Tooltip content={content} shortcut={shortcut} visible={visible} />
+      <Tooltip
+        content={content}
+        shortcut={shortcut}
+        visible={visible}
+        floatingPosition={floatingPosition}
+      />
     </span>
   );
 };

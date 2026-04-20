@@ -45,6 +45,15 @@ export function rsDurationToHf(d: string): DurationType {
   return RS_TO_HF_DURATION[d] ?? "q";
 }
 
+/**
+ * Chord track / letter symbols are only meaningful when there are enough parts
+ * (melody + two harmony) to justify harmonic annotation — matches RiffScore UX
+ * (avoids a misleading default “Cm7” hover on 1–2 staves).
+ */
+export function shouldShowChordNotation(score: EditableScore): boolean {
+  return score.parts.length >= 3;
+}
+
 // ---------------------------------------------------------------------------
 // Clef maps
 // ---------------------------------------------------------------------------
@@ -209,6 +218,8 @@ export function editableScoreToRiffConfig(
   options?: {
     theme?: "DARK" | "LIGHT";
     scale?: number;
+    /** Defaults to `true`. Set `false` to hide the RiffScore toolbar (export/print capture). */
+    showToolbar?: boolean;
     toolbarPlugins?: Array<{
       id?: string;
       label: string;
@@ -227,30 +238,27 @@ export function editableScoreToRiffConfig(
   const firstMeasure = score.parts[0]?.measures[0];
   const timeSignature = firstMeasure?.timeSignature ?? "4/4";
   const keySignature = hfKeySigToRs(firstMeasure?.keySignature);
+  const showToolbar = options?.showToolbar ?? true;
 
   // `toolbarPlugins` is injected into RiffScore's UI config by patch-package
   // (see frontend/patches/riffscore+*.patch). Upstream types do not yet declare
   // it, so we widen the literal via a narrow cast rather than any-ing the
   // whole config. This avoids dropping other ui fields from type coverage.
   const ui = {
-    showToolbar: true,
+    showToolbar,
     scale: options?.scale ?? 1,
     theme: options?.theme ?? "DARK",
     showBackground: false,
     showScoreTitle: false,
-    toolbarPlugins: options?.toolbarPlugins ?? [],
+    toolbarPlugins: showToolbar ? options?.toolbarPlugins ?? [] : [],
   } as RiffScoreConfig["ui"];
 
-  return {
+  const base: Partial<RiffScoreConfig> = {
     ui,
     interaction: {
       isEnabled: true,
       enableKeyboard: true,
       enablePlayback: true,
-    },
-    chord: {
-      display: { notation: "letter", useSymbols: true },
-      playback: { enabled: true, velocity: 52 },
     },
     score: {
       title: "",
@@ -260,6 +268,15 @@ export function editableScoreToRiffConfig(
       staves: score.parts.map(hfPartToRsStaff),
     },
   };
+
+  if (shouldShowChordNotation(score)) {
+    base.chord = {
+      display: { notation: "letter", useSymbols: true },
+      playback: { enabled: true, velocity: 52 },
+    };
+  }
+
+  return base;
 }
 
 /**
@@ -274,7 +291,7 @@ export function editableScoreToRsScore(score: EditableScore): RsScore {
     bpm: score.bpm ?? 120,
     staves: score.parts.map(hfPartToRsStaff),
   };
-  if (score.chords?.length) {
+  if (shouldShowChordNotation(score) && score.chords?.length) {
     rs.chordTrack = score.chords.map((c) => ({
       id: c.id,
       quant: c.quant,
@@ -389,13 +406,13 @@ export function riffScoreToEditableScore(
   }
 
   const next: EditableScore = { parts, divisions: 1 };
-  if (rsScore.chordTrack?.length) {
+  if (shouldShowChordNotation(next) && rsScore.chordTrack?.length) {
     next.chords = rsScore.chordTrack.map((c) => ({
       id: c.id,
       quant: c.quant,
       symbol: c.symbol,
     }));
-  } else if (previousScore?.chords?.length) {
+  } else if (shouldShowChordNotation(next) && previousScore?.chords?.length) {
     next.chords = previousScore.chords.map((c) => ({ ...c }));
   }
   if (typeof rsScore.bpm === "number" && Number.isFinite(rsScore.bpm) && rsScore.bpm > 0) {

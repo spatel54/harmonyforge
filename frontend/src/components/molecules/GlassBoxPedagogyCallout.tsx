@@ -13,12 +13,12 @@ const COPY: Record<GlassBoxPedagogyVariant, { title: string; body: string }> = {
   "ensemble-generate": {
     title: "How HarmonyForge uses (and doesn’t use) AI",
     body:
-      "The harmony generator runs on explicit music-theory rules and search—it is not a chat model or neural net writing your parts. Conversational AI appears only in the Theory Inspector on the next screen, where it can explain what you’re hearing, flag issues, or suggest edits. The aim is a modern arranging workflow: predictable, inspectable harmony from the engine, with AI in a coaching role instead of an opaque generator.",
+      "Baseline harmonies come from algorithms—music-theory rules and search, not a chat model or neural net—so you can trace what the engine did, not guess at a hidden process. AI shows up only in Theory Inspector on the next screen, where it explains, flags problems, and suggests edits; it does not generate the notes underneath.",
   },
   "ensemble-reviewer": {
     title: "How HarmonyForge uses (and doesn’t use) AI",
     body:
-      "You’re continuing with your melody and building harmonies yourself. When someone uses Generate Harmonies, that step is still rule-based—not a language model inventing parts. Conversational AI is reserved for the Theory Inspector (explain, critique, suggest), so your creative choices stay primary and the assistant stays in a supporting role.",
+      "In this flow you add harmonies in the editor yourself—no generative AI writes your parts. Any conversational AI stays in Theory Inspector, for explanations, critique, and suggestions, separate from the notes on the staff.",
   },
   inspector: {
     title: "This panel is where conversational AI lives",

@@ -35,6 +35,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   ) => void;
   onRiffScoreSessionReady?: (session: RiffScoreSessionHandles) => void;
   noteInputPitchLabelEnabled?: boolean;
+  /** Dropped notation-panel symbols apply the same tool id as a palette click. */
+  onPaletteSymbolDrop?: (toolId: string) => void;
 }
 
 /**
@@ -60,6 +62,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onInspectorInferredRegion,
       onRiffScoreSessionReady,
       noteInputPitchLabelEnabled = false,
+      onPaletteSymbolDrop,
       className,
       ...props
     },
@@ -422,6 +425,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onInspectorInferredRegion={onInspectorInferredRegion}
               onSessionReady={onRiffScoreSessionReady}
               noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
+              onPaletteSymbolDrop={onPaletteSymbolDrop}
             />
           </div>
         )}

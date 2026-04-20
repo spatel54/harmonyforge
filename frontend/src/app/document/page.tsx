@@ -23,6 +23,7 @@ import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
 import { useClientPdfPreview } from "@/hooks/useClientPdfPreview";
+import { AudioUnlockBanner } from "@/components/molecules/AudioUnlockBanner";
 
 const GENERATE_TIMEOUT_MS = (() => {
   const raw = process.env.NEXT_PUBLIC_GENERATE_TIMEOUT_MS;
@@ -168,6 +169,70 @@ export default function DocumentPage() {
     }
 
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    const isPdf = ext === "pdf" || file.type === "application/pdf";
+    if (isPdf) {
+      // PDF preview: wait until pdfjs has rasterized pages, then ask the
+      // server to run OMR on them and return parseable MusicXML for the panel.
+      if (pdfPreview.isRendering) {
+        setPreviewScore(null);
+        setPreviewMeta({
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          meta: "Rendering PDF pages…",
+        });
+        return;
+      }
+      if (pdfPreview.pages.length === 0) {
+        setPreviewScore(null);
+        setPreviewMeta({
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          meta: pdfPreview.error ?? "Waiting for PDF rasterization…",
+        });
+        return;
+      }
+
+      let cancelled = false;
+      void (async () => {
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          for (const page of pdfPreview.pages) {
+            fd.append(
+              "pages",
+              new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+            );
+          }
+          const res = await fetch(`/api/to-preview-musicxml`, {
+            method: "POST",
+            body: fd,
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(
+              typeof err.error === "string"
+                ? err.error
+                : `Preview failed: ${res.status}`,
+            );
+          }
+          const xml = await res.text();
+          if (cancelled) return;
+          setPreviewMusicXML(xml);
+        } catch (e) {
+          if (cancelled) return;
+          setPreviewScore(null);
+          setPreviewMeta({
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            meta:
+              e instanceof Error && e.message
+                ? e.message
+                : "Could not parse PDF — OMR may be unavailable on this server.",
+          });
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!["xml", "musicxml"].includes(ext)) {
       setPreviewScore(null);
       setPreviewMeta({
@@ -235,7 +300,15 @@ export default function DocumentPage() {
     return () => {
       cancelled = true;
     };
-  }, [file, storePreviewXml, setPreviewMusicXML, setDetectedKey]);
+  }, [
+    file,
+    storePreviewXml,
+    setPreviewMusicXML,
+    setDetectedKey,
+    pdfPreview.isRendering,
+    pdfPreview.pages,
+    pdfPreview.error,
+  ]);
 
   // Don't render document UI while redirecting (no file), unless product tour is active
   if (!file && !coachmarkTourActive) {
@@ -345,6 +418,7 @@ export default function DocumentPage() {
       <div className="relative flex flex-col w-screen h-screen overflow-hidden bg-(--hf-bg)">
         {/* Top navigation bar */}
         <DocumentHeader currentStep={2} />
+        <AudioUnlockBanner />
 
         {/* Two-panel body */}
         <div className="flex flex-row flex-1 min-h-0">

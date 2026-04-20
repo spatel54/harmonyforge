@@ -52,8 +52,8 @@ export function extractNotePositions(
 
       const rect = el.getBoundingClientRect();
       positions.push({
-        x: rect.left - containerRect.left + (container.scrollLeft || 0),
-        y: rect.top - containerRect.top + (container.scrollTop || 0),
+        x: rect.left - containerRect.left,
+        y: rect.top - containerRect.top,
         w: Math.max(rect.width, 12),
         h: Math.max(rect.height, 12),
         selection: sel,
@@ -90,8 +90,8 @@ export function extractNotePositions(
           if (rect.width === 0 && rect.height === 0) continue;
 
           positions.push({
-            x: rect.left - containerRect.left + (container.scrollLeft || 0),
-            y: rect.top - containerRect.top + (container.scrollTop || 0),
+            x: rect.left - containerRect.left,
+            y: rect.top - containerRect.top,
             w: Math.max(rect.width, 12),
             h: Math.max(rect.height, 12),
             selection: {
@@ -127,8 +127,8 @@ export function extractNotePositions(
         if (rect.width === 0 && rect.height === 0) continue;
 
         positions.push({
-          x: rect.left - containerRect.left + (container.scrollLeft || 0),
-          y: rect.top - containerRect.top + (container.scrollTop || 0),
+          x: rect.left - containerRect.left,
+          y: rect.top - containerRect.top,
           w: Math.max(rect.width, 12),
           h: Math.max(rect.height, 12),
           selection: {
@@ -179,12 +179,26 @@ export function extractStaffLabelLayout(
     const rect = g.getBoundingClientRect();
     if (rect.height < 4) continue;
     out.push({
-      top: rect.top - containerRect.top + (container.scrollTop || 0),
+      top: rect.top - containerRect.top,
       height: rect.height,
     });
   }
 
   return out;
+}
+
+/**
+ * Elements inside RiffScore that can scroll (vertical score panes, horizontal canvas).
+ * Overlays use `getBoundingClientRect` against the HF wrapper; listeners on these
+ * nodes keep positions in sync when ResizeObserver does not run (e.g. wheel / trackpad).
+ */
+export function getRiffScoreScrollRoots(container: HTMLElement): HTMLElement[] {
+  const roots: HTMLElement[] = [];
+  const content = container.querySelector<HTMLElement>(".riff-ScoreEditor__content");
+  if (content) roots.push(content);
+  const canvas = container.querySelector<HTMLElement>(".riff-ScoreCanvas");
+  if (canvas && canvas !== content) roots.push(canvas);
+  return roots;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,8 +333,6 @@ export function findNoteInputPreviewLayout(
   if (!svg) return null;
 
   const containerRect = container.getBoundingClientRect();
-  const scrollTop = container.scrollTop || 0;
-  const scrollLeft = container.scrollLeft || 0;
 
   const staffGroups = svg.querySelectorAll("g.staff");
   if (staffGroups.length === 0) return null;
@@ -358,7 +370,7 @@ export function findNoteInputPreviewLayout(
     const lineCenters = horizLines
       .map((l) => {
         const r = l.getBoundingClientRect();
-        return r.top + r.height / 2 - containerRect.top + scrollTop;
+        return r.top + r.height / 2 - containerRect.top;
       })
       .sort((a, b) => a - b);
 
@@ -374,7 +386,7 @@ export function findNoteInputPreviewLayout(
     if (lineYsFive.length < 5) continue;
 
     const rect = (previewEl as SVGGraphicsElement).getBoundingClientRect();
-    const centerY = rect.top + rect.height / 2 - containerRect.top + scrollTop;
+    const centerY = rect.top + rect.height / 2 - containerRect.top;
     const pitch = pitchFromStaffGeometry(
       part.clef,
       lineYsFive.slice(0, 5),
@@ -382,8 +394,8 @@ export function findNoteInputPreviewLayout(
     );
     if (!pitch) continue;
 
-    const left = rect.right - containerRect.left + scrollLeft + 4;
-    const top = rect.top - containerRect.top + scrollTop - 2;
+    const left = rect.right - containerRect.left + 4;
+    const top = rect.top - containerRect.top - 2;
 
     return { pitch, left, top };
   }

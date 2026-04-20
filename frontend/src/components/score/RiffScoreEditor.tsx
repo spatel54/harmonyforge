@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useTheme as useNextTheme } from "next-themes";
-import { SlidersHorizontal } from "lucide-react";
 import "riffscore/styles.css";
 import type { MusicEditorAPI, Selection as RsSelection } from "riffscore";
 import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
@@ -11,7 +10,7 @@ import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import { useScoreStore } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
-import { editableScoreToRiffConfig } from "@/lib/music/riffscoreAdapter";
+import { editableScoreToRiffConfig, shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
 import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
@@ -19,6 +18,7 @@ import {
   extractNotePositions,
   extractStaffLabelLayout,
   findNoteInputPreviewLayout,
+  getRiffScoreScrollRoots,
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
@@ -58,36 +58,15 @@ export interface RiffScoreEditorProps {
   onSessionReady?: (session: RiffScoreSessionHandles) => void;
   /** Show scientific pitch next to RiffScore’s note-input preview ghost */
   noteInputPitchLabelEnabled?: boolean;
+  /** Present-only flag: hide editor chrome (toolbar, bars strip, fabs) for export/print capture. */
+  presentation?: boolean;
+  /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
+  onPaletteSymbolDrop?: (toolId: string) => void;
+  /** Fired when the RiffScore editor API is ready (e.g. document preview playback). */
+  onEditorApiReady?: (api: MusicEditorAPI) => void;
+  /** Instance id registered on `window.riffScore` — lets parents resolve the API if React state lags. */
+  onRiffInstanceId?: (instanceId: string) => void;
 }
-
-const TOOLBAR_PALETTES = [
-  "SCORE",
-  "EDIT",
-  "DURATION",
-  "PITCH",
-  "MEASURE",
-  "PLAYBACK",
-] as const;
-
-type ToolbarPalette = (typeof TOOLBAR_PALETTES)[number];
-
-const PALETTE_LABELS: Record<ToolbarPalette, string[]> = {
-  SCORE: ["File Menu", "Library", "Keyboard Shortcuts"],
-  EDIT: ["Undo", "Redo"],
-  DURATION: ["Whole", "Half", "Quarter", "Eighth", "16th", "32nd", "64th", "Dotted Note", "Tie (T)", "Toggle Input Mode"],
-  PITCH: ["Flat", "Natural", "Sharp"],
-  MEASURE: ["Treble", "Bass", "Alto", "Tenor", "Add Measure", "Remove Measure", "Toggle Pickup"],
-  PLAYBACK: ["Play"],
-};
-
-const PALETTE_SHORT_LABELS: Record<ToolbarPalette, string> = {
-  SCORE: "Sc",
-  EDIT: "Ed",
-  DURATION: "Du",
-  PITCH: "Pi",
-  MEASURE: "Ms",
-  PLAYBACK: "Pb",
-};
 
 export function RiffScoreEditor({
   score,
@@ -106,6 +85,10 @@ export function RiffScoreEditor({
   onInspectorInferredRegion,
   onSessionReady,
   noteInputPitchLabelEnabled = false,
+  presentation = false,
+  onPaletteSymbolDrop,
+  onEditorApiReady,
+  onRiffInstanceId,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -114,15 +97,11 @@ export function RiffScoreEditor({
   const [staffLabelLayouts, setStaffLabelLayouts] = useState<StaffLabelLayout[]>([]);
   const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [showPaletteMenu, setShowPaletteMenu] = useState(false);
   const [inputPreviewLabel, setInputPreviewLabel] = useState<{
     pitch: string;
     left: number;
     top: number;
   } | null>(null);
-  const [visiblePalettes, setVisiblePalettes] = useState<Set<ToolbarPalette>>(
-    () => new Set(TOOLBAR_PALETTES),
-  );
   const prevScoreRef = useRef<EditableScore | null>(null);
 
   const { resolvedTheme } = useNextTheme();
@@ -199,55 +178,7 @@ export function RiffScoreEditor({
         isEmphasized?: boolean;
         isDashed?: boolean;
         className?: string;
-      }> = [
-        {
-          id: "hf-palettes",
-          label: "Palettes",
-          title: "Choose visible toolbar palettes",
-          icon: <SlidersHorizontal size={16} />,
-          isActive: showPaletteMenu,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--menu",
-          onClick: () => setShowPaletteMenu((open) => !open),
-        },
-        {
-          id: "hf-palettes-all",
-          label: "Show all",
-          title: "Show all built-in toolbar palettes",
-          icon: <span className="text-[10px] font-semibold">ALL</span>,
-          isDashed: visiblePalettes.size !== TOOLBAR_PALETTES.length,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--all",
-          onClick: () => setVisiblePalettes(new Set(TOOLBAR_PALETTES)),
-        },
-      ];
-
-      TOOLBAR_PALETTES.forEach((palette) => {
-        const hasBuiltInControls = PALETTE_LABELS[palette].length > 0;
-        const isVisible = visiblePalettes.has(palette);
-        plugins.push({
-          id: `hf-palette-${palette.toLowerCase()}`,
-          label: palette,
-          title: hasBuiltInControls
-            ? `${isVisible ? "Hide" : "Show"} ${palette} palette controls`
-            : `${palette} has no built-in RiffScore controls yet`,
-          icon: (
-            <span className="text-[10px] font-semibold">
-              {PALETTE_SHORT_LABELS[palette]}
-            </span>
-          ),
-          isActive: hasBuiltInControls && isVisible,
-          isEmphasized: !hasBuiltInControls,
-          isDashed: !hasBuiltInControls,
-          showLabel: true,
-          className: hasBuiltInControls
-            ? "hf-plugin-btn hf-plugin-btn--palette"
-            : "hf-plugin-btn hf-plugin-btn--unsupported",
-          onClick: hasBuiltInControls
-            ? () => togglePalette(palette)
-            : () => setShowPaletteMenu(true),
-        });
-      });
+      }> = [];
 
       plugins.push(
         {
@@ -380,36 +311,42 @@ export function RiffScoreEditor({
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visiblePalettes, showPaletteMenu, hasSelection, score, selectedNoteIds],
+    [hasSelection, score, selectedNoteIds],
   );
 
   // Build config from score, passing current theme
   const config = useMemo(
-    () => score ? editableScoreToRiffConfig(score, { theme: rsTheme, toolbarPlugins }) : undefined,
-    [score, rsTheme, toolbarPlugins],
+    () =>
+      score
+        ? editableScoreToRiffConfig(score, {
+            theme: rsTheme,
+            toolbarPlugins: presentation ? [] : toolbarPlugins,
+            showToolbar: !presentation,
+          })
+        : undefined,
+    [score, rsTheme, toolbarPlugins, presentation],
   );
 
-  const hiddenPaletteSelectors = useMemo(() => {
-    const hiddenLabels = TOOLBAR_PALETTES
-      .filter((palette) => !visiblePalettes.has(palette))
-      .flatMap((palette) => PALETTE_LABELS[palette]);
-    return hiddenLabels
-      .map((label) => label.replace(/"/g, '\\"'))
-      .map((label) => [
-        `.riff-ControlGroup:has(.riff-ToolbarButton[aria-label="${label}"])`,
-        `.riff-ToolbarButton[aria-label="${label}"]`,
-      ].join(", "))
-      .join(", ");
-  }, [visiblePalettes]);
+  /**
+   * Noteflight / MuseScore repitch hint — when exactly one rest is selected
+   * tell the user they can type A–G to put a note back in its place.
+   */
+  const restHint = useMemo(() => {
+    if (presentation) return null;
+    if (!score || selection.length !== 1) return null;
+    const only = selection[0]!;
+    const part = score.parts.find((p) => p.id === only.partId);
+    const measure = part?.measures[only.measureIndex];
+    const note = measure?.notes.find((n) => n.id === only.noteId);
+    if (!note?.isRest) return null;
+    const pos = notePositions.find((p) => p.selection.noteId === only.noteId);
+    if (!pos) return null;
+    return { left: pos.x, top: pos.y + pos.h + 6 };
+  }, [presentation, score, selection, notePositions]);
 
-  function togglePalette(palette: ToolbarPalette) {
-    setVisiblePalettes((prev) => {
-      const next = new Set(prev);
-      if (next.has(palette)) next.delete(palette);
-      else next.add(palette);
-      return next;
-    });
-  }
+  useEffect(() => {
+    onRiffInstanceId?.(instanceId);
+  }, [instanceId, onRiffInstanceId]);
 
   // Acquire the API handle once RiffScore mounts
   useEffect(() => {
@@ -432,11 +369,11 @@ export function RiffScoreEditor({
 
     if (tryAcquire()) return;
 
-    // Poll briefly if not immediately available
+    // Poll briefly if not immediately available (dynamic import + Strict Mode can exceed a few hundred ms)
     const interval = setInterval(() => {
       if (tryAcquire()) clearInterval(interval);
-    }, 100);
-    const timeout = setTimeout(() => clearInterval(interval), 3000);
+    }, 50);
+    const timeout = setTimeout(() => clearInterval(interval), 10_000);
 
     return () => {
       clearInterval(interval);
@@ -458,6 +395,12 @@ export function RiffScoreEditor({
     onSessionReady(session);
   }, [isReady, onSessionReady, flushToZustand]);
 
+  useEffect(() => {
+    if (!isReady || !onEditorApiReady) return;
+    const api = apiRef.current;
+    if (api) onEditorApiReady(api);
+  }, [isReady, onEditorApiReady, score]);
+
   // Push score to RiffScore when it changes externally (e.g., undo/redo, file load)
   useEffect(() => {
     if (!isReady || !score) return;
@@ -472,6 +415,7 @@ export function RiffScoreEditor({
   useEffect(() => {
     if (!isReady || !containerRef.current || !score) return;
 
+    let scrollRaf = 0;
     const updatePositions = () => {
       if (!containerRef.current) return;
       const positions = extractNotePositions(containerRef.current, score, rsToHf);
@@ -484,6 +428,14 @@ export function RiffScoreEditor({
       setStaffLabelLayouts(overlayOk ? layouts : []);
     };
 
+    const scheduleFromScroll = () => {
+      if (scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        updatePositions();
+      });
+    };
+
     // Wait for RiffScore to render
     const timer = setTimeout(updatePositions, 200);
 
@@ -493,9 +445,17 @@ export function RiffScoreEditor({
     });
     resizeObserver.observe(containerRef.current);
 
+    const scrollRoots = getRiffScoreScrollRoots(containerRef.current);
+    for (const el of scrollRoots) {
+      el.addEventListener("scroll", scheduleFromScroll, { passive: true });
+    }
+
     return () => {
       clearTimeout(timer);
       resizeObserver.disconnect();
+      for (const el of scrollRoots) {
+        el.removeEventListener("scroll", scheduleFromScroll);
+      }
     };
   }, [isReady, score, rsToHf]);
 
@@ -629,11 +589,43 @@ export function RiffScoreEditor({
 
   const selectedIds = new Set(selection.map((s) => s.noteId));
 
+  const onPaletteDragOverCapture = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!onPaletteSymbolDrop) return;
+      if (![...e.dataTransfer.types].includes("application/x-hf-palette-item")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    [onPaletteSymbolDrop],
+  );
+
+  const onPaletteDropCapture = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!onPaletteSymbolDrop) return;
+      const raw = e.dataTransfer.getData("application/x-hf-palette-item");
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const parsed = JSON.parse(raw) as { toolId?: string };
+        if (parsed.toolId) onPaletteSymbolDrop(parsed.toolId);
+      } catch {
+        /* ignore malformed drop payload */
+      }
+    },
+    [onPaletteSymbolDrop],
+  );
+
+  const chordUiOn = Boolean(score && shouldShowChordNotation(score));
+
   return (
     <div
       ref={containerRef}
       className={`relative w-full h-full min-h-[200px] riffscore-hf-wrapper ${className ?? ""}`}
+      data-hf-chord-ui={chordUiOn ? "1" : "0"}
       style={{ position: "relative" }}
+      onDragOverCapture={onPaletteSymbolDrop ? onPaletteDragOverCapture : undefined}
+      onDropCapture={onPaletteSymbolDrop ? onPaletteDropCapture : undefined}
     >
       {/* Override RiffScore styles to match HarmonyForge design system */}
       <style>{`
@@ -648,12 +640,44 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-ScoreEditor__content {
           background: transparent !important;
         }
+        /* Multi-staff scores: RiffScore defaults to overflow:hidden on __content, which
+           clips lower instruments. Let the editor body scroll vertically (and horizontally
+           for wide scores) inside the sandbox column. */
+        .riffscore-hf-wrapper .RiffScore {
+          display: flex !important;
+          flex-direction: column !important;
+          height: 100% !important;
+          min-height: 0 !important;
+        }
+        .riffscore-hf-wrapper .riff-ScoreEditor {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          height: 100% !important;
+        }
+        .riffscore-hf-wrapper .riff-ScoreEditor__content {
+          overflow: auto !important;
+          min-height: 0 !important;
+        }
         .riffscore-hf-wrapper .riff-ScoreCanvas {
           background: transparent !important;
         }
         /* Draggable HarmonyForge scrub line replaces the built-in cursor hit-testing */
         .riffscore-hf-wrapper [data-testid="playback-cursor"] {
           opacity: 0 !important;
+        }
+        /* Fewer than 3 staves: hide RiffScore chord track (avoids misleading Cm7 hover). */
+        .riffscore-hf-wrapper[data-hf-chord-ui="0"] g.riff-ChordTrack,
+        .riffscore-hf-wrapper[data-hf-chord-ui="0"] [data-testid="chord-track"] {
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+        /* Hide RiffScore “Library” (melody presets) — scores come from upload/generate, not bundled melodies. */
+        .riffscore-hf-wrapper .riff-Toolbar__library-wrapper {
+          display: none !important;
+        }
+        .riffscore-hf-wrapper .riff-Toolbar__row > *:has(+ .riff-Toolbar__library-wrapper) {
+          display: none !important;
         }
         /*
          * Iter1 §1 selection feedback:
@@ -687,18 +711,6 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-editable] {
           pointer-events: stroke;
         }
-        .riffscore-hf-wrapper .hf-palette-menu {
-          position: absolute;
-          right: 8px;
-          top: 44px;
-          z-index: 40;
-          background: var(--hf-bg);
-          border: 1px solid var(--hf-detail);
-          border-radius: 8px;
-          padding: 6px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          min-width: 180px;
-        }
         .riffscore-hf-wrapper .riff-ToolbarButton.hf-plugin-btn {
           border-color: color-mix(in srgb, var(--hf-detail, rgba(255,255,255,0.2)) 75%, transparent);
           transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
@@ -724,51 +736,30 @@ export function RiffScoreEditor({
           background: color-mix(in srgb, #0ea5e9 18%, transparent);
           border-color: color-mix(in srgb, #0ea5e9 60%, var(--hf-detail, rgba(255,255,255,0.2)));
         }
-        ${hiddenPaletteSelectors ? `${hiddenPaletteSelectors} { display: none !important; }` : ""}
       `}</style>
-      {showPaletteMenu && (
-        <div className="hf-palette-menu">
-          {TOOLBAR_PALETTES.map((palette) => (
-            <label
-              key={palette}
-              className="flex items-center gap-2 py-1 text-xs"
-              style={{ color: "var(--hf-text-primary)" }}
-            >
-              <input
-                type="checkbox"
-                checked={visiblePalettes.has(palette)}
-                disabled={PALETTE_LABELS[palette].length === 0}
-                onChange={() => togglePalette(palette)}
-              />
-              {palette}
-              {PALETTE_LABELS[palette].length === 0 && (
-                <span style={{ color: "var(--hf-text-secondary)" }}>(builtin N/A)</span>
-              )}
-            </label>
-          ))}
-        </div>
-      )}
       <RiffScoreComponent
         id={instanceId}
         config={config}
       />
 
-      <PlaybackScrubOverlay
-        containerRef={containerRef}
-        apiRef={apiRef}
-        score={score}
-        notePositions={notePositions}
-        measureCount={measureCount}
-        isReady={isReady}
-        contentTopPx={
-          noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure
-            ? 92
-            : 52
-        }
-      />
+      {!presentation && (
+        <PlaybackScrubOverlay
+          containerRef={containerRef}
+          apiRef={apiRef}
+          score={score}
+          notePositions={notePositions}
+          measureCount={measureCount}
+          isReady={isReady}
+          contentTopPx={
+            noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure
+              ? 92
+              : 52
+          }
+        />
+      )}
 
       {/* Theory Inspector: click bar numbers to focus the whole measure */}
-      {noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure && (
+      {!presentation && noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure && (
         <div
           className="absolute left-0 right-0 z-[25] flex flex-wrap items-center gap-1 px-2 py-1"
           style={{
@@ -810,7 +801,7 @@ export function RiffScoreEditor({
       )}
 
       {/* Part names when SVG staff geometry is unavailable */}
-      {score.parts.length > 0 && !staffLabelsUseOverlay && (
+      {!presentation && score.parts.length > 0 && !staffLabelsUseOverlay && (
         <div
           className="absolute left-0 right-0 z-[6] px-2 py-1 pointer-events-none"
           style={{
@@ -829,16 +820,19 @@ export function RiffScoreEditor({
             className="m-0 pl-4 text-[11px] leading-snug list-decimal"
             style={{ color: "var(--hf-text-primary)" }}
           >
-            {score.parts.map((p, i) => (
+            {score.parts.map((p, i) => {
+              const multi = score.parts.length > 1;
+              const showMelody = multi && i === 0;
+              return (
               <li key={p.id} className={noteInspectionEnabled && onInspectorSelectPart ? "pointer-events-auto" : ""}>
                 {noteInspectionEnabled && onInspectorSelectPart ? (
                   <button
                     type="button"
-                    className="text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit"
+                    className="text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit w-full"
                     style={{ color: "var(--hf-text-primary)" }}
                     title={
-                      i === 0 && score.parts.length > 1
-                        ? `Melody (score part “${p.name}”) — focus for chat`
+                      showMelody
+                        ? `Melody — ${p.name} — focus this part for chat`
                         : `Focus whole part “${p.name}” for chat`
                     }
                     onClick={(e) => {
@@ -848,47 +842,78 @@ export function RiffScoreEditor({
                       onInspectorSelectPart(i);
                     }}
                   >
-                    {i === 0 && score.parts.length > 1 ? "Melody" : p.name}
+                    {showMelody ? (
+                      <span className="flex flex-col items-start gap-0">
+                        <span className="font-medium">Melody</span>
+                        <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
+                      </span>
+                    ) : (
+                      p.name
+                    )}
                   </button>
                 ) : (
-                  <>
-                    {i === 0 && score.parts.length > 1 ? "Melody" : p.name}
-                  </>
+                  showMelody ? (
+                    <span className="flex flex-col items-start gap-0">
+                      <span className="font-medium">Melody</span>
+                      <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
+                    </span>
+                  ) : (
+                    p.name
+                  )
                 )}
               </li>
-            ))}
+              );
+            })}
           </ol>
         </div>
       )}
 
       {/* Part names aligned to each staff */}
-      {staffLabelsUseOverlay &&
+      {!presentation && staffLabelsUseOverlay &&
         staffLabelLayouts.map((layout, si) => {
           const part = score.parts[si];
           if (!part) return null;
           const centerY = layout.top + layout.height / 2;
-          const displayStaffName =
-            si === 0 && score.parts.length > 1 ? "Melody" : part.name;
-          const labelTitle =
-            si === 0 && score.parts.length > 1
-              ? `Melody (${part.name})`
-              : part.name;
+          const multi = score.parts.length > 1;
+          const primaryLabel = multi && si === 0 ? "Melody" : part.name;
+          const secondaryLabel = multi && si === 0 ? part.name : null;
+          const labelTitle = multi && si === 0 ? `Melody — ${part.name}` : part.name;
           const canPartInspect = noteInspectionEnabled && onInspectorSelectPart;
+          const textShadow =
+            "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)";
+          const labelInner = (
+            <span className="flex flex-col items-start gap-0 min-w-0 text-left">
+              <span
+                className="truncate font-body text-[11px] font-semibold leading-tight"
+                style={{ color: "var(--hf-text-primary)", textShadow }}
+              >
+                {primaryLabel}
+              </span>
+              {secondaryLabel ? (
+                <span
+                  className="truncate font-mono text-[9px] leading-tight opacity-90"
+                  style={{ color: "var(--hf-text-secondary)", textShadow }}
+                >
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          );
           return (
             <div
               key={part.id}
-              className={`absolute z-[25] flex items-center gap-1 max-w-[min(160px,32vw)] ${canPartInspect ? "" : "pointer-events-none"}`}
+              className={`absolute z-[25] flex items-center gap-1 max-w-[min(180px,36vw)] ${canPartInspect ? "" : "pointer-events-none"}`}
               style={{
                 left: 4,
                 top: centerY,
                 transform: "translateY(-50%)",
               }}
-              title={canPartInspect ? `${labelTitle} — click to focus whole part for chat` : labelTitle}
+              title={canPartInspect ? `${labelTitle} — click to focus this part in Theory Inspector` : labelTitle}
             >
               {canPartInspect ? (
                 <button
                   type="button"
-                  className="flex items-center gap-1 max-w-full text-left bg-transparent border-none p-0 cursor-pointer rounded-sm hover:opacity-90"
+                  className="flex max-w-full text-left bg-transparent border-none p-0 cursor-pointer rounded-sm hover:opacity-90"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -896,28 +921,10 @@ export function RiffScoreEditor({
                     onInspectorSelectPart(si);
                   }}
                 >
-                  <span
-                    className="truncate font-body text-[11px] font-medium leading-tight"
-                    style={{
-                      color: "var(--hf-text-primary)",
-                      textShadow:
-                        "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
-                    }}
-                  >
-                    {displayStaffName}
-                  </span>
+                  {labelInner}
                 </button>
               ) : (
-                <span
-                  className="truncate font-body text-[11px] font-medium leading-tight"
-                  style={{
-                    color: "var(--hf-text-primary)",
-                    textShadow:
-                      "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)",
-                  }}
-                >
-                  {displayStaffName}
-                </span>
+                labelInner
               )}
             </div>
           );
@@ -986,6 +993,24 @@ export function RiffScoreEditor({
           aria-label={`Input pitch ${inputPreviewLabel.pitch}`}
         >
           {inputPreviewLabel.pitch}
+        </div>
+      )}
+
+      {/* Rest repitch hint — "Type A–G to place a note here" (Noteflight/MuseScore). */}
+      {restHint && (
+        <div
+          className="absolute pointer-events-none z-[7] rounded-[4px] font-mono text-[10px] font-semibold px-2 py-1 whitespace-nowrap"
+          style={{
+            left: restHint.left,
+            top: restHint.top,
+            backgroundColor: "color-mix(in srgb, var(--hf-accent, #ffb300) 22%, var(--hf-bg))",
+            color: "var(--hf-text-primary)",
+            border: "1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 60%, var(--hf-detail))",
+            textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+          }}
+          aria-live="polite"
+        >
+          Type A–G to place a note
         </div>
       )}
 

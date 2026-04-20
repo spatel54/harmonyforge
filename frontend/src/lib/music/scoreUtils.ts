@@ -2,7 +2,14 @@
  * Utilities for EditableScore manipulation.
  */
 
-import type { EditableScore, Note, Part, Measure, DurationType } from "./scoreTypes";
+import type {
+  BarlineStyle,
+  EditableScore,
+  Note,
+  Part,
+  Measure,
+  DurationType,
+} from "./scoreTypes";
 import { generateId } from "./scoreTypes";
 import type { ScoreCorrection } from "./suggestionTypes";
 
@@ -266,20 +273,153 @@ export function toggleNoteDots(score: EditableScore, noteIds: Set<string>): Edit
   return next;
 }
 
-/** Set pitch to a specific letter (A–G) in the same octave as current note. For MuseScore-style A–G shortcut. */
-export function setPitchByLetter(score: EditableScore, noteIds: Set<string>, letter: string): EditableScore {
-  const LETTER_SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  const targetPc = LETTER_SEMITONES[letter.toUpperCase()] ?? 0;
+const LETTER_TO_PC: Record<string, number> = {
+  C: 0,
+  D: 2,
+  E: 4,
+  F: 5,
+  G: 7,
+  A: 9,
+  B: 11,
+};
+
+const CLEF_REPITCH_DEFAULT: Record<string, string> = {
+  treble: "B4",
+  alto: "C4",
+  tenor: "A3",
+  bass: "D3",
+};
+
+/**
+ * Pick a sensible starting octave for restoring a rest back to a pitched note.
+ * Priority:
+ *   1. The nearest pitched neighbor in the same measure.
+ *   2. Any pitched note elsewhere in the part (in measure distance order).
+ *   3. The part's clef default (treble → B4, bass → D3, etc.).
+ *   4. Middle-C octave (4).
+ */
+function neighborOctaveForRepitch(
+  part: Part,
+  measureIdx: number,
+  noteIdx: number,
+): number {
+  const measure = part.measures[measureIdx];
+  if (measure) {
+    for (let i = noteIdx - 1; i >= 0; i--) {
+      const prev = measure.notes[i];
+      if (prev && !prev.isRest) {
+        const m = prev.pitch.match(/^[A-G](#|b)?(\d+)$/);
+        if (m?.[2]) return Number.parseInt(m[2], 10);
+      }
+    }
+    for (let i = noteIdx + 1; i < measure.notes.length; i++) {
+      const next = measure.notes[i];
+      if (next && !next.isRest) {
+        const m = next.pitch.match(/^[A-G](#|b)?(\d+)$/);
+        if (m?.[2]) return Number.parseInt(m[2], 10);
+      }
+    }
+  }
+  const offsets = [];
+  for (let d = 1; d <= part.measures.length; d++) {
+    offsets.push(-d, d);
+  }
+  for (const delta of offsets) {
+    const other = part.measures[measureIdx + delta];
+    if (!other) continue;
+    for (const n of other.notes) {
+      if (n.isRest) continue;
+      const m = n.pitch.match(/^[A-G](#|b)?(\d+)$/);
+      if (m?.[2]) return Number.parseInt(m[2], 10);
+    }
+  }
+  const defaultPitch = CLEF_REPITCH_DEFAULT[part.clef.toLowerCase()] ?? "B4";
+  const m = defaultPitch.match(/^[A-G](#|b)?(\d+)$/);
+  return m?.[2] ? Number.parseInt(m[2], 10) : 4;
+}
+
+/**
+ * Pick the octave whose semitone distance is closest to the neighbor pitch.
+ * Prevents "A" defaulting to A4 when the surrounding melody lives in octave 5.
+ */
+function nearestOctaveForLetter(
+  part: Part,
+  measureIdx: number,
+  noteIdx: number,
+  letter: string,
+): number {
+  const measure = part.measures[measureIdx];
+  const pickNeighbor = (m?: Measure): string | null => {
+    if (!m) return null;
+    for (const n of m.notes) {
+      if (!n.isRest) return n.pitch;
+    }
+    return null;
+  };
+  const neighborPitch = (() => {
+    if (!measure) return null;
+    for (let i = noteIdx - 1; i >= 0; i--) {
+      const n = measure.notes[i];
+      if (n && !n.isRest) return n.pitch;
+    }
+    for (let i = noteIdx + 1; i < measure.notes.length; i++) {
+      const n = measure.notes[i];
+      if (n && !n.isRest) return n.pitch;
+    }
+    return (
+      pickNeighbor(part.measures[measureIdx - 1]) ??
+      pickNeighbor(part.measures[measureIdx + 1])
+    );
+  })();
+  if (!neighborPitch) {
+    return neighborOctaveForRepitch(part, measureIdx, noteIdx);
+  }
+  const neighborMidi = pitchToMidi(neighborPitch);
+  const neighborOct = (() => {
+    const m = neighborPitch.match(/^[A-G](#|b)?(\d+)$/);
+    return m?.[2] ? Number.parseInt(m[2], 10) : 4;
+  })();
+  let bestOct = neighborOct;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const oct of [neighborOct - 1, neighborOct, neighborOct + 1]) {
+    const candidateMidi = pitchToMidi(`${letter}${oct}`);
+    const dist = Math.abs(candidateMidi - neighborMidi);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestOct = oct;
+    }
+  }
+  return bestOct;
+}
+
+/**
+ * Re-pitch: convert the matching rests into pitched notes at the given letter,
+ * preserving each rest's duration/dots (MuseScore "type over rest" behavior).
+ * Non-rest notes in `noteIds` get their letter rewritten at the nearest octave.
+ */
+export function restsToNotes(
+  score: EditableScore,
+  noteIds: Set<string>,
+  letter: string,
+): EditableScore {
+  if (noteIds.size === 0) return score;
+  const letterKey = letter.toUpperCase();
+  if (!(letterKey in LETTER_TO_PC)) return score;
   const next = cloneScore(score);
   for (const part of next.parts) {
-    for (const measure of part.measures) {
-      for (const note of measure.notes) {
-        if (noteIds.has(note.id)) {
-          if (note.isRest) continue;
-          const midi = pitchToMidi(note.pitch);
-          const oct = Math.floor(midi / 12) - 1;
-          const newMidi = (oct + 1) * 12 + targetPc;
-          note.pitch = midiToPitch(newMidi);
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni];
+        if (!noteIds.has(note.id)) continue;
+        const octave = nearestOctaveForLetter(part, mi, ni, letterKey);
+        note.pitch = `${letterKey}${octave}`;
+        if (note.isRest) {
+          note.isRest = false;
+          delete note.articulations;
+          delete note.dynamics;
+          delete note.tie;
+          delete note.originalGeneratedPitch;
         }
       }
     }
@@ -287,17 +427,86 @@ export function setPitchByLetter(score: EditableScore, noteIds: Set<string>, let
   return next;
 }
 
-/** Transpose notes by ID by semitones */
-export function transposeNotes(score: EditableScore, noteIds: Set<string>, semitones: number): EditableScore {
+/**
+ * Convert a single rest into a pitched note at an explicit pitch; duration is
+ * preserved. Used by drag-from-palette and keyboard-with-cursor affordances.
+ */
+export function convertRestToPitch(
+  score: EditableScore,
+  noteId: string,
+  pitch: string,
+): EditableScore {
+  const next = cloneScore(score);
+  const found = getNoteById(next, noteId);
+  if (!found) return score;
+  found.note.pitch = pitch;
+  if (found.note.isRest) {
+    found.note.isRest = false;
+    delete found.note.articulations;
+    delete found.note.dynamics;
+    delete found.note.tie;
+    delete found.note.originalGeneratedPitch;
+  }
+  return next;
+}
+
+/**
+ * Set pitch to a specific letter (A–G) keeping the octave close to current.
+ *
+ * When the target note is a rest we delegate to `restsToNotes`, matching
+ * MuseScore / Noteflight where typing A–G on a selected rest turns the rest
+ * into a note of the same duration at that pitch.
+ */
+export function setPitchByLetter(score: EditableScore, noteIds: Set<string>, letter: string): EditableScore {
+  const letterKey = letter.toUpperCase();
+  if (!(letterKey in LETTER_TO_PC)) return score;
+  const targetPc = LETTER_TO_PC[letterKey];
+  let needsRepitchPass = false;
   const next = cloneScore(score);
   for (const part of next.parts) {
     for (const measure of part.measures) {
       for (const note of measure.notes) {
-        if (noteIds.has(note.id)) {
-          if (note.isRest) continue;
-          const midi = pitchToMidi(note.pitch);
-          note.pitch = midiToPitch(midi + semitones);
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) {
+          needsRepitchPass = true;
+          continue;
         }
+        const midi = pitchToMidi(note.pitch);
+        const oct = Math.floor(midi / 12) - 1;
+        const newMidi = (oct + 1) * 12 + targetPc;
+        note.pitch = midiToPitch(newMidi);
+      }
+    }
+  }
+  return needsRepitchPass ? restsToNotes(next, noteIds, letterKey) : next;
+}
+
+/**
+ * Transpose notes by ID by semitones. Rests are converted to a pitched note at
+ * their neighbor-derived default pitch first (so arrow-up on a selected rest
+ * restores a usable note, matching MuseScore repitch), then transposed.
+ */
+export function transposeNotes(score: EditableScore, noteIds: Set<string>, semitones: number): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni];
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) {
+          const octave = neighborOctaveForRepitch(part, mi, ni);
+          const defaultPitch = `B${octave}`;
+          note.isRest = false;
+          note.pitch = midiToPitch(pitchToMidi(defaultPitch) + semitones);
+          delete note.articulations;
+          delete note.dynamics;
+          delete note.tie;
+          delete note.originalGeneratedPitch;
+          continue;
+        }
+        const midi = pitchToMidi(note.pitch);
+        note.pitch = midiToPitch(midi + semitones);
       }
     }
   }
@@ -423,5 +632,169 @@ export function applySuggestions(
       found.note.duration = correction.suggestedDuration;
     }
   }
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// Palette-driven reducers (MuseScore/Noteflight parity)
+// ---------------------------------------------------------------------------
+
+/** Apply a barline style to the given measure for every part. */
+export function setMeasureBarline(
+  score: EditableScore,
+  measureIndex: number,
+  style: BarlineStyle,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    const measure = part.measures[measureIndex];
+    if (measure) measure.barline = style;
+  }
+  return next;
+}
+
+/** Attach a repeat / jump marker (segno, coda, D.C., D.S., fine) to a measure. */
+export function setMeasureRepeatMark(
+  score: EditableScore,
+  measureIndex: number,
+  mark: "segno" | "coda" | "dc" | "ds" | "fine" | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    const measure = part.measures[measureIndex];
+    if (measure) {
+      if (mark === null) delete measure.repeatMark;
+      else measure.repeatMark = mark;
+    }
+  }
+  return next;
+}
+
+/** Set a tempo text annotation (e.g. "Andante", "q = 120") on a measure. */
+export function setMeasureTempoText(
+  score: EditableScore,
+  measureIndex: number,
+  text: string | null,
+  bpm?: number,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    const measure = part.measures[measureIndex];
+    if (measure) {
+      if (text === null) delete measure.tempoText;
+      else measure.tempoText = text;
+    }
+  }
+  if (bpm && bpm > 0) next.bpm = bpm;
+  return next;
+}
+
+/** Add an ornament (trill, mordent, turn, etc.) to selected notes. */
+export function setOrnament(
+  score: EditableScore,
+  noteIds: Set<string>,
+  ornament: string | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) continue;
+        if (ornament === null) delete note.ornament;
+        else note.ornament = ornament;
+      }
+    }
+  }
+  return next;
+}
+
+/** Tag a group of selected notes with a tuplet number (3 = triplet, 5 = quintuplet…). */
+export function setTuplet(
+  score: EditableScore,
+  noteIds: Set<string>,
+  tuplet: number | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (tuplet === null) delete note.tuplet;
+        else note.tuplet = tuplet;
+      }
+    }
+  }
+  return next;
+}
+
+/** Mark a slur / hairpin / 8va line start + end on the first/last selected note. */
+export function setLineOnSelection(
+  score: EditableScore,
+  noteIds: Set<string>,
+  kind: string,
+): EditableScore {
+  if (noteIds.size === 0) return score;
+  const next = cloneScore(score);
+  let first: Note | null = null;
+  let last: Note | null = null;
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (!first) first = note;
+        last = note;
+      }
+    }
+  }
+  if (first) first.lineStart = kind;
+  if (last && last !== first) last.lineEnd = kind;
+  else if (last && last === first) last.lineEnd = kind;
+  return next;
+}
+
+/** Attach lyric text to each selected note (syllable-per-note). */
+export function setNoteLyric(
+  score: EditableScore,
+  noteIds: Set<string>,
+  lyric: string | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (lyric === null) delete note.lyric;
+        else note.lyric = lyric;
+      }
+    }
+  }
+  return next;
+}
+
+/** Attach a chord symbol / performance / expression text to the first selected note. */
+export function setNoteChordSymbol(
+  score: EditableScore,
+  noteIds: Set<string>,
+  symbol: string | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (symbol === null) delete note.chordSymbol;
+        else note.chordSymbol = symbol;
+      }
+    }
+  }
+  return next;
+}
+
+/** Update the score's BPM (playback tempo). */
+export function setScoreBpm(score: EditableScore, bpm: number): EditableScore {
+  if (!Number.isFinite(bpm) || bpm <= 0) return score;
+  const next = cloneScore(score);
+  next.bpm = bpm;
   return next;
 }

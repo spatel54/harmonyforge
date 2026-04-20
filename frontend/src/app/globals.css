@@ -386,7 +386,37 @@ body {
   }
 }
 
-/* Tactile Sandbox — print / Save as PDF: hide chrome, show score region */
+/* ---------------------------------------------------------------------------
+ * Export / print pipeline
+ *
+ * Two-track strategy:
+ *   1. Legacy path: `hf-sandbox-print-target` + `hf-print-hide` hide chrome
+ *      around the live sandbox canvas.  Kept for backward compatibility with
+ *      older code paths that still use `score-print` directly.
+ *   2. New path (2026-04-20): `body.hf-printing-score` blesses a dedicated
+ *      hidden `ExportPrintRoot` that contains ONLY the score (no toolbar, no
+ *      palette, no bars strip), so PDF and print output never capture app
+ *      chrome regardless of which elements happen to be flagged
+ *      `hf-print-hide`.
+ * ------------------------------------------------------------------------- */
+
+/* Hide the export print root on screen — it's strictly for `window.print()`. */
+.hf-print-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1000px;
+  max-width: 1000px;
+  pointer-events: none;
+  z-index: -1;
+}
+.hf-print-root__score {
+  width: 100%;
+  background: white;
+  color: black;
+  padding: 12px;
+}
+
 @media print {
   @page {
     margin: 0.4in;
@@ -416,5 +446,24 @@ body {
     max-height: none !important;
     min-height: 0 !important;
     page-break-inside: avoid;
+  }
+
+  /* New print pipeline — only the ExportPrintRoot renders. */
+  body.hf-printing-score > * {
+    display: none !important;
+  }
+  body.hf-printing-score .hf-print-root,
+  body.hf-printing-score .hf-print-root * {
+    display: revert !important;
+  }
+  body.hf-printing-score .hf-print-root {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
   }
 }

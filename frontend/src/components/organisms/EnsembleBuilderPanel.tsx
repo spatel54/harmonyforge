@@ -35,15 +35,15 @@ export interface GenerationConfig {
 const RHYTHM_DENSITY_LABELS: Record<RhythmDensity, { title: string; hint: string }> = {
   chordal: {
     title: "Chordal",
-    hint: "Long sustained harmony — one note per chord change (whole / half notes).",
+    hint: "Long, sustained backing—chords change slowly (fewer harmony updates).",
   },
   mixed: {
     title: "Mixed",
-    hint: "Harmony re-attacks on every melody onset; matches the source rhythm.",
+    hint: "Backing refreshes when your melody starts a new note—fits most tunes.",
   },
   flowing: {
     title: "Flowing",
-    hint: "Running harmony notes — subdivided to the smallest value in the melody.",
+    hint: "Busier backing—harmony moves more often between melody notes.",
   },
 };
 
@@ -144,8 +144,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
         >
           Mood
           <HoverTooltip
-            ariaLabel="About Mood"
-            content="Major sounds bright and stable; Minor sounds darker and pensive."
+            ariaLabel="About mood"
+            content={
+              "Major vs minor: brighter vs darker overall mood (the key’s character).\nNot the same as tempo or how fast notes go by."
+            }
           />
         </span>
         <div className="flex gap-[8px]">
@@ -154,7 +156,11 @@ export const EnsembleBuilderPanel = React.forwardRef<
               key={m}
               type="button"
               onClick={() => setMood(m)}
-              title={m === "major" ? "Bright, stable tonality" : "Darker, more pensive tonality"}
+              title={
+                m === "major"
+                  ? "Often brighter or more uplifting (major key)"
+                  : "Often darker or more serious (minor key)"
+              }
               className={cn(
                 "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
                 "transition-opacity hover:opacity-90",
@@ -177,8 +183,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
         >
           Genre
           <HoverTooltip
-            ariaLabel="About Genre"
-            content="Genre only adjusts chord vocabulary and voice-leading strictness, not tempo or style."
+            ariaLabel="About genre"
+            content={
+              "Which chord style the engine leans toward (classical, jazz, pop).\nDoesn’t change tempo or groove—only harmony choices."
+            }
           />
         </span>
         <div className="flex flex-wrap gap-[8px]">
@@ -189,10 +197,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
               onClick={() => setGenre(g)}
               title={
                 g === "classical"
-                  ? "Strict voice-leading, diatonic triads"
+                  ? "Classical-style: triads and smooth voice-leading"
                   : g === "jazz"
-                    ? "7th chords, ii–V–I, relaxed voice-leading"
-                    : "Cyclical progressions, modal borrowing"
+                    ? "Jazz-style: sevenths and ii–V-type movement"
+                    : "Pop-style: repeating progressions and borrowed color"
               }
               className={cn(
                 "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
@@ -207,9 +215,12 @@ export const EnsembleBuilderPanel = React.forwardRef<
           ))}
         </div>
         <span className="font-mono text-[10px] opacity-60" style={{ color: "var(--hf-text-secondary)" }}>
-          {genre === "classical" && "Strict voice-leading, diatonic triads"}
-          {genre === "jazz" && "7th chords, ii–V–I, relaxed voice-leading"}
-          {genre === "pop" && "Cyclical progressions, modal borrowing"}
+          {genre === "classical" &&
+            "Careful part-writing and familiar triads in the key (common-practice style)."}
+          {genre === "jazz" &&
+            "Seventh chords and jazz progressions; inner parts can move more freely."}
+          {genre === "pop" &&
+            "Catchy repeating chord loops and occasional borrowed chords for color."}
         </span>
       </div>
 
@@ -221,8 +232,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
         >
           Harmony motion
           <HoverTooltip
-            ariaLabel="About Harmony motion"
-            content="Choose how active the generated harmony is: long sustained notes (chordal), matching the melody (mixed), or running notes (flowing)."
+            ariaLabel="About harmony motion"
+            content={
+              "How dense the backing is under your tune.\n\n• Held — long chords\n• Mixed — hits with the melody\n• Flowing — busier fills"
+            }
           />
         </span>
         <div className="flex flex-wrap gap-[8px]">
@@ -257,8 +270,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
         >
           SATB voices
           <HoverTooltip
-            ariaLabel="What does SATB mean"
-            content="SATB = Soprano (high), Alto (mid-high), Tenor (mid-low), Bass (low). Pick any mix of instruments for each voice."
+            ariaLabel="What SATB means"
+            content={
+              "Four ranges, high to low: soprano, alto, tenor, bass.\nPick any instruments per line—mix freely."
+            }
           />
         </span>
         <div className="flex flex-col gap-[10px] w-full">

@@ -7,6 +7,8 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 ### Quick links
 
 - [Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20) — **end goal, approach, steps so far, current focus / risks**
+- [Work log — Palettes, rest repitch, clean export (2026-04-20)](#wl-palettes-repitch-2026-04-20)
+- [Work log — Document UX: chord gating, playback, pedagogy & tooltips (2026-04-20)](#wl-document-ux-2026-04-20)
 - [Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)
 - [Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)
 - [End Goal](#end-goal)
@@ -33,6 +35,8 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Last updated (2026-04-20)
 
+- **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20):** RiffScore **chord track / chord symbols** are shown and synced only when the score has **≥ 3 parts** (`shouldShowChordNotation` in [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts), gated `chord` config / `chordTrack` / pull merge; [`RiffScoreEditor`](../frontend/src/components/score/RiffScoreEditor.tsx) `data-hf-chord-ui` + CSS hides `g.riff-ChordTrack` when off — avoids RiffScore’s misleading default chord hover on 1–2 staves). **Document** preview: [`AudioUnlockBanner`](../frontend/src/components/molecules/AudioUnlockBanner.tsx) under the header; **Play/Pause** as a floating control on the preview canvas with **`Tone.start()`** before RiffScore `play`; removed the old bordered footer (**bars · BPM** + play); **Re-upload** moved into the title block. [`GlassBoxPedagogyCallout`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) copy tightened (baseline harmony = **algorithms**, AI = **Theory Inspector** explainer/critic only). [`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) **(i)** tooltips shortened for musicians + non-musicians; [`Tooltip`](../frontend/src/components/atoms/Tooltip.tsx) uses an **explicit width** so shrink-to-fit inside the 16px trigger no longer produces a tall, narrow popover. Vitest [`riffscoreAdapter.test.ts`](../frontend/src/lib/music/riffscoreAdapter.test.ts) covers 1/2/3-part chord behavior. See **[Work log — Document UX…](#wl-document-ux-2026-04-20)**. **`make test`:** **204** Vitest tests pass (as of this update).
+- **Rest re-pitch, palette panel, PDF verification, export cleanup (2026-04-20 — evening):** MuseScore/Noteflight parity pass. Selecting a rest and typing **A–G** (or typing on a rest at the cursor) now restores a pitched note at the rest's **same duration**, octave inferred from neighbors — see [Work log — Palettes, rest repitch, clean export (2026-04-20)](#wl-palettes-repitch-2026-04-20). A new **SandboxPalettePanel** renders the full MuseScore taxonomy (Clefs, Key/Time, Barlines, Accidentals, Articulations & Ornaments, Dynamics, Lines, Repeats & Jumps, Tempo, Text, Tuplets, Breaths) wired through the existing `handleToolSelect` dispatcher; **F9** toggles the panel. `ExportPrintRoot` + `body.hf-printing-score` replace the blanket print CSS so PDF/Print output contains only the score (no toolbar, palette, bars strip, inspector). `ScorePreviewPane` now renders in `presentation` mode — PNG/export previews are score-only. `rasterizePdf` gained a unit test; `useClientPdfPreview` pages are now posted to `/api/to-preview-musicxml` as well, so PDF previews on Document get a parsed melody whenever the server can run OMR. **Verification:** 204/204 vitests pass (current suite; includes chord-gating adapter tests); `npm run lint` clean; `npm run build` green.
 - **Repository hygiene & documentation (2026-04-20):** Removed legacy folders (`miscellaneous/chamber-music-fullstack/`, Azure/DO deploy scaffolding, duplicate frontend Dockerfile, root `node_modules`, Claude-flow tooling), merged iteration notes into **[iterations.md](iterations.md)**, consolidated design specs under **`docs/design/`**, added **`docs/archive/`** index, simplified **`.env.example`** (OpenAI key only), tightened **`.gitignore`**, added **`.github/workflows/ci.yml`**. Updated root / `frontend` / `miscellaneous` / `docs` READMEs; repaired stale links in `plan.md`, `Taxonomy.md`, and `context/system-map.md`. See **[Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)**.
 - **Consolidation + PDF + residual sweep (2026-04-19):** Single-deployable Next.js app; engine under `frontend/src/server/engine/*`; PDF path: client `pdfjs-dist` + Docker OMR; **plan §1.9m resolved**. INTENT → `intentRouter.ts`; IDEA_ACTIONS + `staffIndex`; ADR 003 transpose slice; `make verify` green. See **[Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)**.
 - **Canonical handover:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** (anchor `#program-narrative-2026-04-19` retained below for old links).
@@ -99,17 +103,35 @@ This section is the **handover-friendly summary**: end goal, approach, what has 
 | **Sandbox exports (2026-04-13)** | Live flush; XML/MIDI/PNG/WAV/ZIP/chord-chart/print — [work log](#wl-sandbox-exports-2026-04-13). |
 | **Glass Box pedagogy (2026-04-19)** | Document + Inspector callouts — [work log](#wl-glass-box-pedagogy-2026-04-19). |
 | **Repository hygiene (2026-04-20)** | Removed legacy demos and duplicate deploy scaffolding; **`docs/design/`** + **`docs/archive/`**; minimal **`.env.example`**; **CI** workflow; README + link sweep — [work log](#wl-repo-hygiene-2026-04-20). |
+| **Sandbox parity — palettes, rest repitch, clean export (2026-04-20)** | MuseScore/Noteflight-style **palette panel** (F9); **rest → note re-pitch** (`restsToNotes`, A–G on selected rest); **export/print score-only** (`ExportPrintRoot`, `presentation` RiffScore, `body.hf-printing-score`); Document **PDF preview** posts `pages[]` to `/api/to-preview-musicxml`; Vitest **`rasterizePdf`** tests — [work log](#wl-palettes-repitch-2026-04-20). |
+| **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20)** | **Chord track gated** to 3+ parts; Document **audio unlock** + floating **play**; **Glass Box** + **(i)** copy; **tooltip width** fix — [work log](#wl-document-ux-2026-04-20). |
+
+### Approach (this program, in one paragraph)
+
+Ship a **single Next.js app** with a **deterministic engine** under `frontend/src/server/engine/` and **RiffScore** as the primary editor. Prove behavior with **Vitest** + **`make verify`**. Treat **PDF/OMR** as environment-dependent (browser rasterization everywhere; full OMR on Docker or equipped hosts). Iterate in **dated work logs** in this file so handover does not depend on chat history. For editor UX, align with **MuseScore / Noteflight** where it reduces friction (rest repitch, grouped palettes, exports that omit app chrome) while keeping **`EditableScore`** as the canonical model and RiffScore as the renderer.
 
 ### Current failure / what we are working on now
 
-There is **no single “the app is blocked” engineering failure** at this snapshot: **`make verify`** is the green bar (tests + lint + build).
+There is **no single “the app is blocked” engineering failure** at this snapshot: **`make verify`** is the green bar (**204** Vitest tests + lint + Next build as of 2026-04-20; includes `riffscoreAdapter` chord-gating cases).
+
+**Recently fixed UX issue (not a server failure):** Info **(i)** tooltips beside Mood / Genre / etc. rendered in a **tall, narrow column** because the absolutely positioned tooltip was shrink-to-fit inside the **~16px-wide** trigger; **`Tooltip`** now sets an explicit **`w-[min(20rem,…)]`** so copy wraps at a readable width.
+
+**What is *not* done yet (residual product / tech debt):**
+
+| Area | Gap |
+|------|-----|
+| **Palette → MusicXML** | New `Measure` / `Note` fields (barlines, ornaments, tuplets, lyrics-as-data, etc.) are stored on `EditableScore` but **`scoreToMusicXML`** does not yet emit all of them — round-trip to MuseScore-class files is partial until export is extended. |
+| **Palette drag-and-drop** | `PaletteButton` emits `application/x-hf-palette-item`; the score canvas does not yet handle drop targets — **click-to-apply** is the supported path. |
+| **SMuFL / engraved glyphs** | Palette uses Unicode / short labels; dedicated SMuFL font wiring is deferred. |
+| **RiffScore built-in palettes** | Plan called for collapsing fake SCORE/EDIT/MEASURE toggles and moving “Palettes / Show all” into the HarmonyForge panel — **partially** addressed by the new docked panel; further toolbar consolidation can follow. |
+| **SandboxActionBar “Repitch” toggle** | Plan specified a dedicated Repitch mode + **R** shortcut; **not shipped** — rest repitch works via selection + A–G and cursor-on-rest. |
 
 **Active focus (choose by role):**
 
 | Track | Status / next move |
 |--------|---------------------|
 | **Deploy** | Runbook: [deployment.md](deployment.md) — Vercel (**root = `frontend`**) vs **Docker** for full PDF OMR. Align env secrets (e.g. `OPENAI_API_KEY`) with host docs. |
-| **PDF / OMR** | **Vercel:** preview only for PDF; generation returns **501** with actionable copy when binaries are absent — **expected**. **Docker / bare metal:** ensure pdfalto build + oemer checkpoints per deployment doc. *Note:* **`miscellaneous/pdfalto/`** may be empty until the vendored tree is populated — `make pdfalto` needs sources there. |
+| **PDF / OMR** | **Vercel:** preview raster + optional melody XML when server can OMR; generation may return **501** without tooling — **expected**. **Docker / bare metal:** ensure pdfalto build + oemer checkpoints per deployment doc. *Note:* **`miscellaneous/pdfalto/`** may be empty until the vendored tree is populated — `make pdfalto` needs sources there. |
 | **Product / study** | **M5** execution (sessions, surveys off-repo), monitoring [iterations.md](iterations.md)-style friction in new runs. |
 | **Code health (non-blocking)** | Residual **IDEA_ACTIONS** edge cases (duplicate part names, rare `noteId` mismatch); optional **`react-hooks/exhaustive-deps`** cleanups; **ADR 003** follow-ons (deeper multi-clef, JSON score deltas) per [adr/003](adr/003-multi-clef-transposition-scope.md). |
 
@@ -197,7 +219,7 @@ Merge HarmonyForge into **one deployable Next.js app**, make **PDF input truly w
 | **Form handling** | `readFormFile` + new `readFormFiles` in runtime.ts so routes accept `pages[]` alongside `file`. Document `/document` generates PDF uploads with rasterized pages attached. |
 | **Self-hosted image** | Root [`Dockerfile`](../Dockerfile) (3-stage: pdfalto-builder → next-builder → runtime with Poppler + Python 3.11 venv + oemer). [`docker-compose.yml`](../docker-compose.yml) references it and persists oemer checkpoints via a named volume. [`preflight-omr.sh`](../frontend/scripts/preflight-omr.sh) warms the checkpoint cache on first boot. |
 | **Error UX** | [`intakeErrorHints.ts`](../frontend/src/lib/ui/intakeErrorHints.ts) now classifies PDF failures (tooling missing, checkpoints missing, no staves) and emits matching copy. |
-| **Baseline test fix** | `needsEnginePreviewForExtension.test.ts` updated to match the canonical "always server intake" contract. 190/190 Vitest tests pass. |
+| **Baseline test fix** | `needsEnginePreviewForExtension.test.ts` updated to match the canonical "always server intake" contract. Vitest suite green (**204** tests as of 2026-04-20 Document UX pass; see [Last updated](#last-updated-2026-04-20)). |
 | **Lint warnings** | Fixed the remaining four `react-hooks/exhaustive-deps` + `prefer-const` warnings. ESLint exits 0 with **0 warnings**. `public/pdfjs/**` and `.next/**` excluded from lint globs. |
 | **IDEA_ACTIONS resolver** | [`ideaActionResolve.ts`](../frontend/src/lib/music/ideaActionResolve.ts) adds `staffIndex` hint (serialized by the tutor when present), and a nearest-in-measure fallback so ambiguous summaries still land somewhere plausible. [`ideaActionSchema.ts`](../frontend/src/lib/ai/ideaActionSchema.ts) extended with the optional field; `noteExplainContext.ts` emits `STAFF_HINT=<n>` on each `NOTE_ID` FACT line; `NOTE_EXPLAIN_TUTOR_BRIEF` instructs the tutor to copy the hint verbatim. New vitest covers both paths. |
 | **Tutor INTENT auto-wiring** | New [`intentRouter.ts`](../frontend/src/lib/ai/intentRouter.ts) parses `<<<INTENT>>>{…}` JSON with a Zod discriminated union (set_mood / set_genre / set_rhythm_density / set_pickup_beats / regenerate / open_document_page / open_sandbox_page). `useTheoryInspector` strips the block from the rendered body and stores the parsed intent on the chat message. `TheoryInspectorPanel` renders an `IntentConfirmationBubble`; sandbox wires Apply/Dismiss to `useGenerationConfigStore` setters and `router.push`. New study log events `intent_applied` / `intent_dismissed`. |
@@ -210,7 +232,7 @@ Merge HarmonyForge into **one deployable Next.js app**, make **PDF input truly w
 
 ### Verification
 
-- `cd frontend && npm test` → **190 tests pass** across 35 files (UI + engine + new intent + transpose + intakeErrorHints).
+- `cd frontend && npm test` → **204 tests pass** across 36 files (UI + engine + intent + transpose + intake + sandbox parity + riffscoreAdapter chord policy as of 2026-04-20).
 - `cd frontend && npm run lint` → exit 0, **0 warnings**.
 - `cd frontend && npm run build` → production build succeeds; every `/api/*` handler lists under the manifest; `/api/health` returns `{ status: "ok" }`.
 - Manual: MusicXML upload → Document preview → Generate → Sandbox (unchanged, faster without the HTTP proxy hop). PDF upload on local dev → Document shows the client-rendered page; Generate succeeds when pdfalto + oemer are installed (Docker path). Theory Inspector INTENT confirmation: ask "switch mood to minor and regenerate" → tutor reply includes an Apply button that jumps to `/document` with `mood=minor`.
@@ -220,6 +242,98 @@ Merge HarmonyForge into **one deployable Next.js app**, make **PDF input truly w
 - Vercel-only hosts still cannot run Python-backed OMR; that's a fundamental platform limitation, documented in [deployment.md](deployment.md) Path A.
 - `intent_applied` / `intent_dismissed` event payload is intentionally minimal (action name only) to keep the M5 study log PII-free.
 - Multi-clef writer beyond transposing instruments (alto clef, soprano clef) remains scheduled as the next ADR 003 slice; not blocking this pass.
+
+---
+
+<a id="wl-palettes-repitch-2026-04-20"></a>
+
+## Work log — Palettes, rest repitch, clean export (2026-04-20)
+
+### End goal (this thread)
+
+Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged by the user: (1) **put a note back in a rest's place** the way canonical editors do, (2) surface all the missing **palettes** (articulations, dynamics, barlines, repeats, tempo, text, tuplets, …), and (3) **fix export** so PDF/PNG output captures only the score, not the palette/toolbar chrome.
+
+### Approach
+
+1. Extend [`scoreUtils.ts`](../frontend/src/lib/music/scoreUtils.ts) with a **repitch** path (`restsToNotes` + `convertRestToPitch`) that preserves the rest's duration and infers octave from pitched neighbors — matching MuseScore's [Re-pitch mode](https://musescore.org/en/handbook/2/replace-pitches-without-changing-rhythms) and Noteflight's "type over rest" keyboard behavior. Wire the sandbox keyboard handler to prefer repitch when the insertion target is a rest.
+2. Publish a canonical palette taxonomy in [`paletteRegistry.ts`](../frontend/src/lib/palettes/paletteRegistry.ts), render it via [`SandboxPalettePanel.tsx`](../frontend/src/components/organisms/SandboxPalettePanel.tsx) + [`PaletteButton.tsx`](../frontend/src/components/atoms/PaletteButton.tsx), and dispatch clicks through the existing `handleToolSelect` in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) so keyboard + toolbar + palette share one undo history. Extend `EditableScore` (`Measure.barline / repeatMark / rehearsalMark / tempoText`, `Note.ornament / tuplet / lyric / chordSymbol / lineStart / lineEnd`) with optional fields so new reducers have somewhere to write.
+3. PDF intake: verify the existing `useClientPdfPreview` → `/api/to-preview-musicxml` + `/api/generate-from-file` hand-off; add a test for `rasterizePdf` and forward `pages[]` to the **preview** endpoint too, so Document's preview panel parses the melody even when only the browser has Poppler.
+4. Export: add `presentation` to [`RiffScoreEditor`](../frontend/src/components/score/RiffScoreEditor.tsx) (no toolbar / no bars strip / no FABs), apply it inside [`ScorePreviewPane`](../frontend/src/components/molecules/ScorePreviewPane.tsx) for PNG capture, and introduce a hidden [`ExportPrintRoot.tsx`](../frontend/src/components/organisms/ExportPrintRoot.tsx) that the new `body.hf-printing-score` CSS in [`globals.css`](../frontend/src/app/globals.css) uses as the sole print target when `printScoreOnly()` fires.
+
+### What shipped (artifact map)
+
+| Area | What shipped |
+|------|--------------|
+| **Rest → note repitch** | `restsToNotes`, `convertRestToPitch`, `nearestOctaveForLetter`, `neighborOctaveForRepitch` in `scoreUtils.ts`; `setPitchByLetter` + `transposeNotes` no longer skip rests; sandbox keyboard handler triggers `restsToNotes` when the cursor sits on a rest; Vitest coverage (`scoreUtils.test.ts` — 7 new cases). |
+| **Rest hint overlay** | `RiffScoreEditor` renders a small "Type A–G to place a note" badge under the selected rest using `notePositions`. Honoured in edit mode only. |
+| **Palette panel** | `SandboxPalettePanel` + `PaletteButton` + `paletteRegistry` (13 sections, 60+ items); F9 toggles visibility; draggable palette items emit `application/x-hf-palette-item` for future drop-on-score work; section filter box searches across titles. |
+| **New reducers** | `setMeasureBarline`, `setMeasureRepeatMark`, `setMeasureTempoText`, `setOrnament`, `setTuplet`, `setLineOnSelection`, `setNoteLyric`, `setNoteChordSymbol`, `setScoreBpm` (exported from `scoreUtils.ts`). |
+| **Extended types** | `BarlineStyle` + optional `Measure.{barline, repeatMark, rehearsalMark, tempoText}` and `Note.{ornament, tuplet, lyric, chordSymbol, lineStart, lineEnd}` in `scoreTypes.ts`. |
+| **PDF intake** | Document now posts `pages[]` to `/api/to-preview-musicxml` whenever `useClientPdfPreview` has rasterized pages, so PDF previews parse a melody on Vercel even without `pdftoppm`. New `useClientPdfPreview.test.ts` covers 1-page, 3-page, and `maxPages` cases. |
+| **Presentation mode** | `RiffScoreEditor` prop `presentation` hides toolbar, bars strip, staff labels, palette menu, scrub overlay, and empty-part fabs. `editableScoreToRiffConfig` in [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts) gained `showToolbar` so the flag strips toolbar plugins when printing/exporting score-only views. |
+| **Clean print / PDF** | [`ExportPrintRoot.tsx`](../frontend/src/components/organisms/ExportPrintRoot.tsx) + `body.hf-printing-score` in [`globals.css`](../frontend/src/app/globals.css); `printScoreOnly()` in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) drives both the `score-print` toolbar action and `ExportModal` PDF. Legacy `.hf-print-hide` + `.hf-sandbox-print-target` rules remain for compat. |
+
+### Verification
+
+- `npx vitest run` — **204 tests pass** (includes rest-repitch + PDF preview + riffscoreAdapter chord-gating cases; count as of 2026-04-20 Document UX pass).
+- `npm run lint` — clean.
+- `npm run build` — green Turbopack build.
+- Manual smoke test instructions for the user: open Sandbox with `tour_demo.xml`, select a rest, type **A** → expect a pitched note of the rest's original duration at an octave close to neighbor notes. Press **F9** to toggle palette; click any palette item with a selection to apply the reducer. Export → **PDF** / **PNG** / **Print** should render only the score.
+
+### Residual / deferred
+
+- **SMuFL fidelity:** palette buttons use Unicode music glyphs (𝄞, 𝄢, ♯, ♭) as a stand-in; wiring to SMuFL fonts is deferred.
+- **Drag-drop application:** palette drag payloads are sent but the score canvas does not yet implement drop handling — clicks are the primary interaction this pass.
+- **Barlines / ornaments in MusicXML export:** the new `Note.ornament`, `Measure.barline`, and `Measure.repeatMark` fields round-trip into `EditableScore` but `scoreToMusicXML.ts` does not yet emit them; follow-up work.
+- **Lyrics / chord symbols:** stored on the note model but RiffScore visual rendering is a follow-up.
+- **Repitch mode toggle + R shortcut:** original plan mentioned a dedicated mode and **R**; behavior is covered by selection + **A–G** and cursor-on-rest — explicit toggle remains optional UX.
+- **Percussion clef:** not yet listed in `paletteRegistry` / `handleToolSelect` (add when percussion staff editing is in scope).
+- **RiffScore toolbar consolidation:** docked palette reduces reliance on legacy SCORE/EDIT/MEASURE toggles; full removal/relabel is follow-up.
+
+---
+
+<a id="wl-document-ux-2026-04-20"></a>
+
+## Work log — Document UX: chord gating, playback, pedagogy & tooltips (2026-04-20)
+
+### End goal (this thread)
+
+1. **Chord UI honesty:** RiffScore draws a global **chord track** with a **hardcoded hover label** when chord mode is on; small ensembles (1–2 parts) should not show misleading chord chrome or sync **`chordTrack`** until there are enough staves for harmonic annotation to be meaningful.
+2. **Document preview audio:** Users should hear the uploaded/preview score on **`/document`** with a clear **Play** control and browser **audio-unlock** affordance (same class of “first click silent” issue as Sandbox **Iter2 §4**).
+3. **Pedagogy & discoverability:** **Glass Box** copy and **(i)** tooltips should read well for **musicians and non-musicians**; tooltip **layout** must not collapse to a unreadable narrow column.
+
+### Approach
+
+| Topic | Decision |
+|-------|------------|
+| **Chord policy** | `shouldShowChordNotation(score) := score.parts.length >= 3` (melody + two harmony lines). |
+| **Adapter push** | `editableScoreToRiffConfig`: include `chord` block only when policy true. `editableScoreToRsScore`: set `chordTrack` only when policy true **and** `score.chords?.length`. |
+| **Adapter pull** | `riffScoreToEditableScore`: populate `next.chords` from RiffScore or `previousScore` only when `shouldShowChordNotation(next)` — prevents re-injecting chords after part count drops. |
+| **Editor safety net** | `RiffScoreEditor`: `data-hf-chord-ui="1"\|"0"` on `.riffscore-hf-wrapper`; CSS hides `g.riff-ChordTrack` / `[data-testid="chord-track"]` when off. |
+| **Tests** | [`riffscoreAdapter.test.ts`](../frontend/src/lib/music/riffscoreAdapter.test.ts) — 1- and 2-part omit `chordTrack`; 3-part round-trips chords. |
+| **Document playback** | [`AudioUnlockBanner`](../frontend/src/components/molecules/AudioUnlockBanner.tsx) on [`document/page.tsx`](../frontend/src/app/document/page.tsx); [`ScorePreviewPanel`](../frontend/src/components/organisms/ScorePreviewPanel.tsx) — `Tone.start()` then `api.play(0,0)` / `pause`; play control moved to **floating** button on canvas; **Re-upload** moved out of removed footer bar. |
+| **Copy** | [`GlassBoxPedagogyCallout`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) — two short sentences per variant (algorithms vs AI). [`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) — shorter tooltips + button `title`s + rhythm-density hints. |
+| **Tooltip width** | [`Tooltip`](../frontend/src/components/atoms/Tooltip.tsx): explicit `w-[min(20rem,calc(100vw-2.5rem))]` because the trigger lives in a **~16px** [`HoverTooltip`](../frontend/src/components/atoms/HoverTooltip.tsx) wrapper — absolute children were shrink-to-fit to that width. |
+
+### Steps completed (files)
+
+- `frontend/src/lib/music/riffscoreAdapter.ts` — `shouldShowChordNotation`, gated chord config / `chordTrack` / merge.
+- `frontend/src/components/score/RiffScoreEditor.tsx` — `data-hf-chord-ui`, scoped CSS.
+- `frontend/src/lib/music/riffscoreAdapter.test.ts` — 1/2/3-part cases.
+- `frontend/src/app/document/page.tsx` — `AudioUnlockBanner`.
+- `frontend/src/components/organisms/ScorePreviewPanel.tsx` — floating transport, `Tone.start`, footer removal, Re-upload placement.
+- `frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx` — pedagogy strings.
+- `frontend/src/components/organisms/EnsembleBuilderPanel.tsx` — tooltip copy + hints.
+- `frontend/src/components/atoms/Tooltip.tsx` — width + padding.
+
+### Verification
+
+- `make test` — **204** Vitest tests pass (includes `riffscoreAdapter`).
+
+### Current failure / residual
+
+- **No blocking engineering failure** for this thread: tests green, change set is UX + policy + copy.
+- **Follow-up (optional):** Manual QA on **`/document`** across browsers (Safari autoplay policies). Residual **IDEA_ACTIONS** / duplicate part-name edge cases unchanged from the **Current failure / what we are working on now** subsection in [Program narrative](#program-narrative-2026-04-20) above.
 
 ---
 

@@ -30,13 +30,42 @@ export interface Note {
   tie?: "start" | "stop" | "continue";
   articulations?: string[];
   dynamics?: string;
+  /** Ornament symbol ("trill", "mordent", "turn", etc.) — renderer-optional. */
+  ornament?: string;
+  /** Tuplet grouping (e.g. 3 = triplet). Renderer-optional; XML export falls back to normal durations. */
+  tuplet?: number;
+  /** Free-form lyric text attached to this note. */
+  lyric?: string;
+  /** Chord symbol / performance/expression text annotations. */
+  chordSymbol?: string;
+  /** Line starts anchored at this note: slur, hairpin, 8va, etc. Renderer-optional. */
+  lineStart?: string;
+  /** Line ends anchored at this note. */
+  lineEnd?: string;
 }
+
+export type BarlineStyle =
+  | "normal"
+  | "double"
+  | "final"
+  | "start-repeat"
+  | "end-repeat"
+  | "dashed"
+  | "tick";
 
 export interface Measure {
   id: string;
   notes: Note[];
   timeSignature?: string;
   keySignature?: number;
+  /** Barline style for the end of this measure. Renderer-optional (MusicXML export may ignore). */
+  barline?: BarlineStyle;
+  /** Repeat / jump markers rendered above the measure. */
+  repeatMark?: "segno" | "coda" | "dc" | "ds" | "fine";
+  /** Rehearsal-mark text attached to this measure. */
+  rehearsalMark?: string;
+  /** Tempo text ("Andante", "q = 120", etc.) attached to this measure. */
+  tempoText?: string;
 }
 
 export interface Part {

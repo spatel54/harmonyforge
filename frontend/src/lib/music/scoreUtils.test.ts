@@ -5,7 +5,14 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { deleteNotesAsRests, normalizeScoreRests } from "./scoreUtils";
+import {
+  convertRestToPitch,
+  deleteNotesAsRests,
+  normalizeScoreRests,
+  restsToNotes,
+  setPitchByLetter,
+  transposeNotes,
+} from "./scoreUtils";
 import type { EditableScore } from "./scoreTypes";
 
 function makeScore(): EditableScore {
@@ -110,5 +117,122 @@ describe("deleteNotesAsRests", () => {
     expect(notes.length).toBeGreaterThanOrEqual(4);
     expect(notes[0]!.isRest).toBe(true);
     expect(notes[0]!.duration).toBe("q");
+  });
+});
+
+describe("restsToNotes (MuseScore repitch)", () => {
+  function makeRestScore(): EditableScore {
+    return {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "n1", pitch: "C5", duration: "q" },
+                {
+                  id: "n2",
+                  pitch: "B4",
+                  duration: "h",
+                  isRest: true,
+                  articulations: ["staccato"],
+                  dynamics: "mf",
+                  tie: "start",
+                },
+                { id: "n3", pitch: "E5", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+  }
+
+  it("converts a rest into a note at the same duration", () => {
+    const score = makeRestScore();
+    const next = restsToNotes(score, new Set(["n2"]), "G");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[1]!.isRest).toBeFalsy();
+    expect(notes[1]!.duration).toBe("h");
+    expect(notes[1]!.pitch).toMatch(/^G\d$/);
+  });
+
+  it("inherits octave from nearest pitched neighbor", () => {
+    const score = makeRestScore();
+    const next = restsToNotes(score, new Set(["n2"]), "D");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    // Neighbors live in octave 5 (C5, E5) → D should resolve to D5 not D4.
+    expect(notes[1]!.pitch).toBe("D5");
+  });
+
+  it("strips rest metadata (tie/articulation/dynamics) on conversion", () => {
+    const score = makeRestScore();
+    const next = restsToNotes(score, new Set(["n2"]), "A");
+    const note = next.parts[0]!.measures[0]!.notes[1]!;
+    expect(note.articulations).toBeUndefined();
+    expect(note.dynamics).toBeUndefined();
+    expect(note.tie).toBeUndefined();
+  });
+
+  it("keeps an empty-measure rest at its declared duration", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "bass",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [{ id: "r1", pitch: "B4", duration: "w", isRest: true }],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = restsToNotes(score, new Set(["r1"]), "F");
+    const note = next.parts[0]!.measures[0]!.notes[0]!;
+    expect(note.duration).toBe("w");
+    expect(note.isRest).toBeFalsy();
+    // Bass clef default octave (D3) → F3.
+    expect(note.pitch).toBe("F3");
+  });
+
+  it("no-ops on empty id set", () => {
+    const score = makeRestScore();
+    expect(restsToNotes(score, new Set(), "C")).toBe(score);
+  });
+
+  it("setPitchByLetter repitches selected rests as notes", () => {
+    const score = makeRestScore();
+    const next = setPitchByLetter(score, new Set(["n2"]), "F");
+    const note = next.parts[0]!.measures[0]!.notes[1]!;
+    expect(note.isRest).toBeFalsy();
+    expect(note.duration).toBe("h");
+    expect(note.pitch).toMatch(/^F\d$/);
+  });
+
+  it("transposeNotes converts a rest before transposing", () => {
+    const score = makeRestScore();
+    const next = transposeNotes(score, new Set(["n2"]), 1);
+    const note = next.parts[0]!.measures[0]!.notes[1]!;
+    expect(note.isRest).toBeFalsy();
+    expect(note.duration).toBe("h");
+  });
+
+  it("convertRestToPitch applies an explicit pitch at the same duration", () => {
+    const score = makeRestScore();
+    const next = convertRestToPitch(score, "n2", "A3");
+    const note = next.parts[0]!.measures[0]!.notes[1]!;
+    expect(note.isRest).toBeFalsy();
+    expect(note.pitch).toBe("A3");
+    expect(note.duration).toBe("h");
   });
 });

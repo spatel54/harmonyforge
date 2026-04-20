@@ -119,22 +119,22 @@ export function PlaybackScrubOverlay({
 
     const tick = () => {
       if (!draggingRef.current) {
-        const g = container.querySelector("[data-testid=\"playback-cursor\"]");
+        // Prefer the score SVG’s playhead — same element RiffScore animates during audio.
+        const g =
+          container.querySelector<SVGElement>(
+            "svg.riff-ScoreCanvas__svg [data-testid=\"playback-cursor\"]",
+          ) ?? container.querySelector("[data-testid=\"playback-cursor\"]");
         if (g) {
           const gRect = g.getBoundingClientRect();
           const cRect = container.getBoundingClientRect();
+          // Viewport rects already reflect inner scroll; only add wrapper scrollLeft.
           const cx =
             gRect.left - cRect.left + container.scrollLeft + gRect.width / 2;
 
           if (!suppressDomSyncRef.current) {
-            const prev = prevDomCursorXRef.current;
-            const cursorMoving =
-              prev !== null && Math.abs(cx - prev) > 0.35;
-            const shouldFollow =
-              playingRef.current || cursorMoving;
-            if (shouldFollow) {
-              applyLineX(cx);
-            }
+            // Always mirror the SVG playhead. Programmatic `api.play()` may not emit
+            // `operation: play`, and the old gate missed slow/sub-pixel motion.
+            applyLineX(cx);
           }
           prevDomCursorXRef.current = cx;
         }

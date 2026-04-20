@@ -45,6 +45,7 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
             <RiffScoreEditor
               score={score}
               className="w-full min-h-full"
+              presentation
             />
           </div>
         ) : (
