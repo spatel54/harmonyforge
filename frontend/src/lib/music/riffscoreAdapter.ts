@@ -228,15 +228,21 @@ export function editableScoreToRiffConfig(
   const timeSignature = firstMeasure?.timeSignature ?? "4/4";
   const keySignature = hfKeySigToRs(firstMeasure?.keySignature);
 
+  // `toolbarPlugins` is injected into RiffScore's UI config by patch-package
+  // (see frontend/patches/riffscore+*.patch). Upstream types do not yet declare
+  // it, so we widen the literal via a narrow cast rather than any-ing the
+  // whole config. This avoids dropping other ui fields from type coverage.
+  const ui = {
+    showToolbar: true,
+    scale: options?.scale ?? 1,
+    theme: options?.theme ?? "DARK",
+    showBackground: false,
+    showScoreTitle: false,
+    toolbarPlugins: options?.toolbarPlugins ?? [],
+  } as RiffScoreConfig["ui"];
+
   return {
-    ui: {
-      showToolbar: true,
-      scale: options?.scale ?? 1,
-      theme: options?.theme ?? "DARK",
-      showBackground: false,
-      showScoreTitle: false,
-      toolbarPlugins: options?.toolbarPlugins ?? [],
-    },
+    ui,
     interaction: {
       isEnabled: true,
       enableKeyboard: true,

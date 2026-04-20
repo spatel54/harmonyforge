@@ -1,55 +1,29 @@
 # Miscellaneous
 
-> **Stuff that is not the main app.**  
-> Day-to-day HarmonyForge work happens in **`../backend/`** and **`../frontend/`**. This folder is for legacy demos, PDF tooling, and small helper scripts.
+Not part of the main Next.js app — **PDF tooling** and optional local assets.
 
 ---
 
-## What is here
+## Layout
 
 ```text
 miscellaneous/
-├── chamber-music-fullstack/   ← older reference project (read its own README)
-├── pdfalto/                   ← vendored PDF→ALTO build (see below)
-├── run-amp.sh                 ← optional Amp automation script
-└── .playwright-mcp/           ← local tooling artifacts (safe to ignore)
+└── pdfalto/          # Vendored pdfalto source (see pdfalto/README or upstream)
 ```
 
 ---
 
-## `chamber-music-fullstack/`
+## pdfalto
 
-| | |
-|--|--|
-| **What** | Legacy / reference full-stack from an earlier layout |
-| **Important** | **Not** the canonical HarmonyForge app — do not deploy this by mistake |
-| **Details** | [chamber-music-fullstack/README.md](chamber-music-fullstack/README.md) |
+Used by the engine when converting PDFs to ALTO/XML on hosts that build the binary. The root **`Makefile`** exposes `make pdfalto` to compile **`miscellaneous/pdfalto/`** (CMake + submodules).
+
+Full PDF/OMR (Poppler, **oemer**, checkpoints) is documented in **[docs/deployment.md](../docs/deployment.md)** and the root **`Dockerfile`**.
 
 ---
 
-## `pdfalto/`
+## See also
 
-| | |
-|--|--|
-| **What** | Vendored **pdfalto** sources and build output for PDF → ALTO (used on the intake path) |
-| **How to build** | From **repo root**: `make pdfalto` |
-| **After build** | Binary and upstream files appear under this tree (may include an upstream readme) |
-
----
-
-## `run-amp.sh`
-
-| | |
-|--|--|
-| **What** | Runs [Sourcegraph Amp](https://ampcode.com/install) against a local **`PROMPT.md`**, retrying every 5s until it succeeds |
-| **Needs** | **`AMP_API_KEY`** in a `.env` file **next to this script** (or exported in the shell) |
-| **Tip** | If your prompt lives in **`docs/PROMPT.md`**, edit the script’s `cat PROMPT.md` line to point there |
-
----
-
-## `.playwright-mcp/`
-
-| | |
-|--|--|
-| **What** | Local Playwright / MCP-related files |
-| **Need it?** | **No** for normal HarmonyForge development |
+| Doc | Purpose |
+|-----|---------|
+| [../docs/deployment.md](../docs/deployment.md) | Where PDF pipelines run (Vercel vs Docker) |
+| [../Makefile](../Makefile) | `pdfalto`, `docker-build`, `preflight-omr` |

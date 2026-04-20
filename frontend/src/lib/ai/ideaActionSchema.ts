@@ -17,6 +17,12 @@ export const ideaActionItemSchema = z.object({
   noteId: z.string().min(1),
   suggestedPitch: scientificPitch,
   summary: z.string().min(1).max(280),
+  /**
+   * Optional zero-based staff index hint (`STAFF_HINT:` in tutor evidence).
+   * Used by `resolveIdeaActionNoteId` to break ties when duplicate part names
+   * exist or a summary omits a part reference entirely.
+   */
+  staffIndex: z.number().int().min(0).max(64).optional(),
 });
 
 export const ideaActionsArraySchema = z.array(ideaActionItemSchema).max(8);

@@ -1,5 +1,11 @@
-temp
+# Accidental root install (canonical deps live in frontend/)
+/node_modules/
 
-# Root-level npm artifacts (not canonical for this repo — see node_modules/README.md)
-/node_modules/*
-!/node_modules/README.md
+# Secrets — copy from .env.example only what you need locally
+.env
+.env*.local
+
+# OS / editor
+.DS_Store
+
+temp

@@ -10,6 +10,10 @@ export interface ScorePreviewPanelProps extends React.HTMLAttributes<HTMLDivElem
   scoreTitle?: string;
   scoreMeta?: string;
   onReupload?: () => void;
+  /** Object URL for page 1 of an uploaded PDF (client-side rasterization). Shown when `score` is null. */
+  pdfPreviewUrl?: string | null;
+  /** Copy shown on top of the PDF preview (e.g. "Page 1 of 4"). */
+  pdfPreviewCaption?: string;
 }
 
 /**
@@ -28,6 +32,8 @@ export const ScorePreviewPanel = React.forwardRef<
       scoreTitle = "The First Noel",
       scoreMeta = "Traditional • 4 voices • Page 1 of 4",
       onReupload,
+      pdfPreviewUrl,
+      pdfPreviewCaption,
       className,
       ...props
     },
@@ -126,6 +132,27 @@ export const ScorePreviewPanel = React.forwardRef<
         >
           {score ? (
             <RiffScoreEditor score={score} className="w-full h-full min-h-[280px]" />
+          ) : pdfPreviewUrl ? (
+            <div className="relative w-full h-full flex flex-col items-center justify-center bg-black/5">
+              {/* Disable linting for next-image: client object URLs (blob:) aren't compatible with next/image. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={pdfPreviewUrl}
+                alt="PDF page preview"
+                className="max-w-full max-h-full object-contain"
+              />
+              {pdfPreviewCaption ? (
+                <div
+                  className="absolute bottom-2 left-2 right-2 text-center font-mono text-[11px] leading-none rounded px-2 py-1"
+                  style={{
+                    color: "var(--hf-text-secondary)",
+                    backgroundColor: "color-mix(in srgb, var(--hf-bg) 80%, transparent)",
+                  }}
+                >
+                  {pdfPreviewCaption}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <StaffLinePlaceholder />
           )}

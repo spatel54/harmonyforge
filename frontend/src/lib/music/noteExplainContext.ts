@@ -498,7 +498,7 @@ export function buildAdditiveNoteContextLines(
         ? `Melody (staff ${i + 1})`
         : `staff ${i + 1}`;
     lines.push(
-      `FACT: NOTE_ID ${role} "${part.name}" pitch=${sn.note.isRest ? "REST" : sn.note.pitch} noteId=${sn.note.id}`,
+      `FACT: NOTE_ID ${role} "${part.name}" pitch=${sn.note.isRest ? "REST" : sn.note.pitch} noteId=${sn.note.id} STAFF_HINT=${i}`,
     );
   }
 

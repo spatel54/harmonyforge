@@ -3,6 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { SandboxHeader } from "@/components/organisms/SandboxHeader";
+import { AudioUnlockBanner } from "@/components/molecules/AudioUnlockBanner";
 import { ScoreCanvas } from "@/components/organisms/ScoreCanvas";
 import { useUploadStore } from "@/store/useUploadStore";
 import { useScoreStore, getClipboard, setClipboard, pasteNotes, type NoteSelection } from "@/store/useScoreStore";
@@ -57,6 +58,8 @@ import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 import { resolveIdeaActionNoteId } from "@/lib/music/ideaActionResolve";
+import { applyIntent, type Intent } from "@/lib/ai/intentRouter";
+import { useGenerationConfigStore } from "@/store/useGenerationConfigStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import {
   RiffScoreSessionContext,
@@ -116,6 +119,7 @@ function TactileSandboxPageInner({
     runAudit,
     explainViolationMore,
     suggestFixForViolation,
+    requestSuggestion: requestRegionSuggestion,
   } = useTheoryInspector();
   const suggestionStore = useSuggestionStore();
   const pendingCorrections = suggestionStore.getPendingCorrections();
@@ -132,16 +136,21 @@ function TactileSandboxPageInner({
   // Accept/reject correction handlers
   const handleAcceptCorrection = React.useCallback(
     (correctionId: string) => {
-      if (!score) return;
+      // Flush any pending RiffScore edits into Zustand first — applying against a
+      // stale `score` closure would otherwise overwrite the user's uncommitted
+      // edits and look like a destructive undo (Iter2 §2).
+      riffSessionRef.current?.flushToZustand();
+      const live = useScoreStore.getState().score;
+      if (!live) return;
       const allCorrections = suggestionStore.batches.flatMap((b) => b.corrections);
       const correction = allCorrections.find((c) => c.id === correctionId);
       if (!correction) return;
       logStudyEvent("suggestion_accepted", { correctionId });
-      const nextScore = applySuggestion(score, correction);
+      const nextScore = applySuggestion(live, correction);
       applyScore(nextScore);
       suggestionStore.acceptCorrection(correctionId);
     },
-    [score, applyScore, suggestionStore],
+    [applyScore, suggestionStore],
   );
 
   const handleRejectCorrection = React.useCallback(
@@ -154,7 +163,9 @@ function TactileSandboxPageInner({
 
   const handleAcceptAll = React.useCallback(
     (batchId: string) => {
-      if (!score) return;
+      riffSessionRef.current?.flushToZustand();
+      const live = useScoreStore.getState().score;
+      if (!live) return;
       const batch = suggestionStore.batches.find((b) => b.id === batchId);
       if (!batch) return;
       const pending = batch.corrections.filter(
@@ -162,11 +173,11 @@ function TactileSandboxPageInner({
       );
       if (pending.length === 0) return;
       logStudyEvent("suggestion_accept_all", { batchId });
-      const nextScore = applySuggestions(score, pending);
+      const nextScore = applySuggestions(live, pending);
       applyScore(nextScore);
       suggestionStore.acceptAll(batchId);
     },
-    [score, applyScore, suggestionStore],
+    [applyScore, suggestionStore],
   );
 
   const handleRejectAll = React.useCallback(
@@ -245,6 +256,40 @@ function TactileSandboxPageInner({
       });
     },
     [patchSelectedNoteInsight],
+  );
+
+  const handleApplyIntent = React.useCallback(
+    (msgId: string, intent: Intent) => {
+      const cfgStore = useGenerationConfigStore.getState();
+      const msg = useTheoryInspectorStore.getState().messages.find((m) => m.id === msgId);
+      logStudyEvent("intent_applied", {
+        action: intent.action,
+      });
+      const handled = applyIntent(intent, {
+        setMood: (m) => cfgStore.setMood(m),
+        setGenre: (g) => cfgStore.setGenre(g),
+        setRhythmDensity: (v) => cfgStore.setRhythmDensity(v),
+        setPickupBeats: (beats) => cfgStore.setPickupBeats(beats),
+        regenerate: () => router.push("/document"),
+        navigate: (path) => router.push(path),
+      });
+      if (!handled) {
+        setInspectorDebugStatus("Could not apply that action yet — open Document to adjust manually.");
+        return;
+      }
+      // Clear the INTENT from the message so the bubble collapses.
+      if (msg) {
+        useTheoryInspectorStore.getState().updateMessage(msgId, { intent: null });
+      }
+    },
+    [router],
+  );
+
+  const handleDismissIntent = React.useCallback(
+    (msgId: string) => {
+      useTheoryInspectorStore.getState().updateMessage(msgId, { intent: null });
+    },
+    [],
   );
 
   const { cursor, setCursor, clearCursor } = useEditCursorStore();
@@ -848,6 +893,13 @@ function TactileSandboxPageInner({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+    // Hoisting caveat: `isNoteInputMode`, `moveCursorHorizontally`, and
+    // `moveCursorVertically` are declared after this effect (useCallback).
+    // They are referenced inside the keydown handler via closure; the listener
+    // fires after render so the closure sees the current values. Including
+    // them in deps would require reordering the whole component and offers no
+    // user-visible benefit — the handler only reads the latest state at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clearSelection,
     selection,
@@ -1253,6 +1305,7 @@ function TactileSandboxPageInner({
     >
       {/* Zone 1: Header */}
       <SandboxHeader onExportClick={openExportModal} />
+      <AudioUnlockBanner />
 
       {/* Body */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -1381,6 +1434,18 @@ function TactileSandboxPageInner({
               }
               onAcceptIdeaAction={handleAcceptIdeaAction}
               onRejectIdeaAction={handleRejectIdeaAction}
+              onStarterPromptClick={(prompt) => {
+                void sendInspectorMessage(prompt);
+              }}
+              onEditFocusedRegion={
+                score
+                  ? () => {
+                      void requestRegionSuggestion(score);
+                    }
+                  : undefined
+              }
+              onApplyIntent={handleApplyIntent}
+              onDismissIntent={handleDismissIntent}
             />
           </div>
         )}

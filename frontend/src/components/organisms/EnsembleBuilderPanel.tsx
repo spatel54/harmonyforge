@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceDropdown } from "@/components/molecules/VoiceDropdown";
 import { EnsemblePreviewCard, type SelectedPart } from "@/components/molecules/EnsemblePreviewCard";
+import { HoverTooltip } from "@/components/atoms/HoverTooltip";
+import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogyCallout";
 import type { VoiceType } from "@/components/atoms/PartChip";
+import {
+  useGenerationConfigStore,
+  type RhythmDensity,
+} from "@/store/useGenerationConfigStore";
 
 /** Placeholder instrument lists per voice — replaced by backend data later */
 const VOICE_INSTRUMENTS: Record<VoiceType, string[]> = {
@@ -22,8 +28,24 @@ export type Genre = "classical" | "jazz" | "pop";
 export interface GenerationConfig {
   mood: "major" | "minor";
   genre?: Genre;
+  rhythmDensity?: RhythmDensity;
   instruments: Record<VoiceType, string[]>;
 }
+
+const RHYTHM_DENSITY_LABELS: Record<RhythmDensity, { title: string; hint: string }> = {
+  chordal: {
+    title: "Chordal",
+    hint: "Long sustained harmony — one note per chord change (whole / half notes).",
+  },
+  mixed: {
+    title: "Mixed",
+    hint: "Harmony re-attacks on every melody onset; matches the source rhythm.",
+  },
+  flowing: {
+    title: "Flowing",
+    hint: "Running harmony notes — subdivided to the smallest value in the melody.",
+  },
+};
 
 export interface EnsembleBuilderPanelProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -48,35 +70,27 @@ export const EnsembleBuilderPanel = React.forwardRef<
   HTMLDivElement,
   EnsembleBuilderPanelProps
 >(({ onGenerateHarmonies, isGenerating = false, studyPrimaryVariant = "generate", studyPanelSubtitle, className, ...props }, ref) => {
-  const [mood, setMood] = useState<"major" | "minor">("major");
-  const [genre, setGenre] = useState<Genre>("classical");
-  const [selections, setSelections] = useState<Record<VoiceType, string[]>>({
-    soprano: [],
-    alto: [],
-    tenor: [],
-    bass: [],
-  });
+  const mood = useGenerationConfigStore((s) => s.mood);
+  const genre = useGenerationConfigStore((s) => s.genre);
+  const rhythmDensity = useGenerationConfigStore((s) => s.rhythmDensity);
+  const selections = useGenerationConfigStore((s) => s.instruments);
+  const setMood = useGenerationConfigStore((s) => s.setMood);
+  const setGenre = useGenerationConfigStore((s) => s.setGenre);
+  const setRhythmDensity = useGenerationConfigStore((s) => s.setRhythmDensity);
+  const toggleInstrument = useGenerationConfigStore((s) => s.toggleInstrument);
+  const removeInstrument = useGenerationConfigStore((s) => s.removeInstrument);
+  const restoreFromStorage = useGenerationConfigStore((s) => s.restoreFromStorage);
+
+  React.useEffect(() => {
+    restoreFromStorage();
+  }, [restoreFromStorage]);
 
   const handleToggle = (voice: VoiceType, instrument: string) => {
-    setSelections((prev) => {
-      const current = prev[voice];
-      return {
-        ...prev,
-        [voice]: current.includes(instrument)
-          ? current.filter((i) => i !== instrument)
-          : [...current, instrument],
-      };
-    });
+    toggleInstrument(voice, instrument);
   };
 
   const handleRemovePart = (label: string) => {
-    setSelections((prev) => {
-      const next = { ...prev };
-      for (const voice of VOICE_ORDER) {
-        next[voice] = next[voice].filter((i) => i !== label);
-      }
-      return next;
-    });
+    removeInstrument(label);
   };
 
   // Flatten all selected parts into SelectedPart[] for preview card
@@ -118,13 +132,21 @@ export const EnsembleBuilderPanel = React.forwardRef<
         </p>
       </div>
 
+      <GlassBoxPedagogyCallout
+        variant={studyPrimaryVariant === "reviewer_melody" ? "ensemble-reviewer" : "ensemble-generate"}
+      />
+
       {/* Mood selector */}
       <div className="flex flex-col gap-[8px]">
         <span
-          className="font-mono text-[11px] font-medium leading-none"
+          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
           style={{ color: "var(--hf-text-secondary)" }}
         >
           Mood
+          <HoverTooltip
+            ariaLabel="About Mood"
+            content="Major sounds bright and stable; Minor sounds darker and pensive."
+          />
         </span>
         <div className="flex gap-[8px]">
           {(["major", "minor"] as const).map((m) => (
@@ -132,6 +154,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
               key={m}
               type="button"
               onClick={() => setMood(m)}
+              title={m === "major" ? "Bright, stable tonality" : "Darker, more pensive tonality"}
               className={cn(
                 "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
                 "transition-opacity hover:opacity-90",
@@ -149,10 +172,14 @@ export const EnsembleBuilderPanel = React.forwardRef<
       {/* Genre preset — affects harmony theory only (chord inference, voice-leading) */}
       <div className="flex flex-col gap-[8px]">
         <span
-          className="font-mono text-[11px] font-medium leading-none"
+          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
           style={{ color: "var(--hf-text-secondary)" }}
         >
           Genre
+          <HoverTooltip
+            ariaLabel="About Genre"
+            content="Genre only adjusts chord vocabulary and voice-leading strictness, not tempo or style."
+          />
         </span>
         <div className="flex flex-wrap gap-[8px]">
           {(["classical", "jazz", "pop"] as const).map((g) => (
@@ -160,6 +187,13 @@ export const EnsembleBuilderPanel = React.forwardRef<
               key={g}
               type="button"
               onClick={() => setGenre(g)}
+              title={
+                g === "classical"
+                  ? "Strict voice-leading, diatonic triads"
+                  : g === "jazz"
+                    ? "7th chords, ii–V–I, relaxed voice-leading"
+                    : "Cyclical progressions, modal borrowing"
+              }
               className={cn(
                 "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
                 "transition-opacity hover:opacity-90",
@@ -179,17 +213,65 @@ export const EnsembleBuilderPanel = React.forwardRef<
         </span>
       </div>
 
-      {/* Voice List — Node iVLue */}
-      <div className="flex flex-col gap-[10px] w-full">
-        {VOICE_ORDER.map((voice) => (
-          <VoiceDropdown
-            key={voice}
-            voice={voice}
-            instruments={VOICE_INSTRUMENTS[voice]}
-            selected={selections[voice]}
-            onToggle={(instrument) => handleToggle(voice, instrument)}
+      {/* Harmony motion (rhythm density) — Iter2 §2 */}
+      <div className="flex flex-col gap-[8px]">
+        <span
+          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+          style={{ color: "var(--hf-text-secondary)" }}
+        >
+          Harmony motion
+          <HoverTooltip
+            ariaLabel="About Harmony motion"
+            content="Choose how active the generated harmony is: long sustained notes (chordal), matching the melody (mixed), or running notes (flowing)."
           />
-        ))}
+        </span>
+        <div className="flex flex-wrap gap-[8px]">
+          {(["chordal", "mixed", "flowing"] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setRhythmDensity(d)}
+              title={RHYTHM_DENSITY_LABELS[d].hint}
+              className={cn(
+                "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
+                "transition-opacity hover:opacity-90",
+                rhythmDensity === d
+                  ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                  : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
+              )}
+            >
+              {RHYTHM_DENSITY_LABELS[d].title}
+            </button>
+          ))}
+        </div>
+        <span className="font-mono text-[10px] opacity-60" style={{ color: "var(--hf-text-secondary)" }}>
+          {RHYTHM_DENSITY_LABELS[rhythmDensity].hint}
+        </span>
+      </div>
+
+      {/* Voice List — Node iVLue */}
+      <div className="flex flex-col gap-[8px] w-full">
+        <span
+          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+          style={{ color: "var(--hf-text-secondary)" }}
+        >
+          SATB voices
+          <HoverTooltip
+            ariaLabel="What does SATB mean"
+            content="SATB = Soprano (high), Alto (mid-high), Tenor (mid-low), Bass (low). Pick any mix of instruments for each voice."
+          />
+        </span>
+        <div className="flex flex-col gap-[10px] w-full">
+          {VOICE_ORDER.map((voice) => (
+            <VoiceDropdown
+              key={voice}
+              voice={voice}
+              instruments={VOICE_INSTRUMENTS[voice]}
+              selected={selections[voice]}
+              onToggle={(instrument) => handleToggle(voice, instrument)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Divider — Node IPbv5 */}
@@ -218,6 +300,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
             onGenerateHarmonies?.({
               mood,
               genre,
+              rhythmDensity,
               instruments: selections,
             })
           }

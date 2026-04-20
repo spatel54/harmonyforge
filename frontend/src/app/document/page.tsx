@@ -11,6 +11,7 @@ import {
 } from "@/components/organisms/TransitionOverlay";
 import { awaitMinElapsedSince } from "@/lib/ui/awaitMinElapsed";
 import { useUploadStore } from "@/store/useUploadStore";
+import { useGenerationConfigStore } from "@/store/useGenerationConfigStore";
 import type { GenerationConfig } from "@/components/organisms/EnsembleBuilderPanel";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import type { EditableScore } from "@/lib/music/scoreTypes";
@@ -21,6 +22,7 @@ import { getStudyCondition } from "@/lib/study/studyConfig";
 import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
+import { useClientPdfPreview } from "@/hooks/useClientPdfPreview";
 
 const GENERATE_TIMEOUT_MS = (() => {
   const raw = process.env.NEXT_PUBLIC_GENERATE_TIMEOUT_MS;
@@ -88,10 +90,24 @@ export default function DocumentPage() {
   const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
   const setPreviewMusicXML = useUploadStore((s) => s.setPreviewMusicXML);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
+  const restoreGenerationConfig = useGenerationConfigStore((s) => s.restoreFromStorage);
+  const setDetectedKey = useGenerationConfigStore((s) => s.setDetectedKey);
+
+  // Client-side PDF rasterization — always renders a visible first page, even
+  // when the server OMR pipeline is degraded (Vercel without pdfalto/oemer).
+  const pdfPreview = useClientPdfPreview(file);
+  const pdfPreviewCaption = pdfPreview.isRendering
+    ? "Rendering PDF…"
+    : pdfPreview.pages.length > 1
+      ? `Page 1 of ${pdfPreview.pages.length}`
+      : pdfPreview.pages.length === 1
+        ? "Page 1"
+        : undefined;
 
   React.useEffect(() => {
     restoreFromStorage();
-  }, [restoreFromStorage]);
+    restoreGenerationConfig();
+  }, [restoreFromStorage, restoreGenerationConfig]);
 
   // Redirect to upload if no file (e.g. direct nav or refresh) — coachmark tour may visit without a file
   React.useEffect(() => {
@@ -116,10 +132,34 @@ export default function DocumentPage() {
       return;
     }
 
+    const detectTonicFromXml = (xml: string): { tonic: string | null; mode: "major" | "minor" | null } => {
+      try {
+        if (typeof window === "undefined") return { tonic: null, mode: null };
+        const doc = new DOMParser().parseFromString(xml, "text/xml");
+        if (doc.querySelector("parsererror")) return { tonic: null, mode: null };
+        const keyEl = doc.querySelector("key");
+        if (!keyEl) return { tonic: null, mode: null };
+        const fifthsRaw = keyEl.querySelector("fifths")?.textContent ?? "";
+        const modeRaw = keyEl.querySelector("mode")?.textContent?.trim().toLowerCase() ?? "";
+        const fifths = parseInt(fifthsRaw, 10);
+        if (!Number.isFinite(fifths)) return { tonic: null, mode: null };
+        const majors = ["C", "G", "D", "A", "E", "B", "F#", "C#", "G#", "D#", "A#", "F"];
+        const minors = ["A", "E", "B", "F#", "C#", "G#", "D#", "A#", "F", "C", "G", "D"];
+        const idx = ((fifths % 12) + 12) % 12;
+        const mode: "major" | "minor" = modeRaw === "minor" ? "minor" : "major";
+        const tonic = mode === "minor" ? minors[idx] ?? null : majors[idx] ?? null;
+        return { tonic, mode };
+      } catch {
+        return { tonic: null, mode: null };
+      }
+    };
+
     const applyXml = (xml: string) => {
       const meta = extractMusicXMLMetadata(xml);
       setPreviewMeta(meta);
       setPreviewScore(parseMusicXML(xml));
+      const detected = detectTonicFromXml(xml);
+      setDetectedKey(detected.tonic, detected.mode);
     };
 
     if (storePreviewXml && storePreviewXml.trim().length > 0) {
@@ -195,7 +235,7 @@ export default function DocumentPage() {
     return () => {
       cancelled = true;
     };
-  }, [file, storePreviewXml, setPreviewMusicXML]);
+  }, [file, storePreviewXml, setPreviewMusicXML, setDetectedKey]);
 
   // Don't render document UI while redirecting (no file), unless product tour is active
   if (!file && !coachmarkTourActive) {
@@ -243,11 +283,26 @@ export default function DocumentPage() {
             )
           : file;
       formData.append("file", normalizedSource);
+      // Attach browser-rasterized PDF pages (when any) so servers without
+      // `pdftoppm` can still run oemer directly — and multi-page PDFs get a
+      // continuous melody via mergeParsedScores on the engine.
+      if (
+        pdfPreview.pages.length > 0 &&
+        (!storePreviewXml || storePreviewXml.trim().length === 0)
+      ) {
+        for (const page of pdfPreview.pages) {
+          formData.append(
+            "pages",
+            new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+          );
+        }
+      }
       formData.append(
         "config",
         JSON.stringify({
           mood: config.mood,
           genre: config.genre,
+          rhythmDensity: config.rhythmDensity,
           instruments: config.instruments,
         })
       );
@@ -306,6 +361,8 @@ export default function DocumentPage() {
                 : "Traditional • 4 voices • Page 1 of 4")
             }
             onReupload={() => router.push("/")}
+            pdfPreviewUrl={pdfPreview.previewUrl}
+            pdfPreviewCaption={pdfPreviewCaption}
           />
           <EnsembleBuilderPanel
             onGenerateHarmonies={handleGenerate}

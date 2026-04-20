@@ -1,88 +1,45 @@
-# Documentation hub
+# Documentation
 
-> **You are in `docs/`** — plans, architecture notes, and long-running logs.  
-> **New to the repo?** Start at the root [README.md](../README.md), then come back here when you need detail.
-
----
-
-## Suggested reading order
-
-```text
-1. Root README     →  what the product is + how to run
-2. plan.md         →  what is built vs still open (checklist)
-3. progress.md     →  how we got here (work log)
-4. system-map.md   →  how pieces connect (diagram)
-5. deployment.md   →  Vercel + engine host + env / CORS (production)
-```
+Plans, ADRs, design specs, and long-running logs. **New here?** Read the root [README.md](../README.md), then use the table below.
 
 ---
 
-## Doc map (everything in this folder)
+## Reading order
 
-```mermaid
-flowchart LR
-  A[plan + progress] --> B[system-map + ADRs]
-  B --> C[Taxonomy + theory prep]
-  C --> D[verification prompts]
-  D --> E[engine test log]
-  A --> F[deployment]
-```
+1. [README.md](../README.md) — run the app, repo layout  
+2. [plan.md](plan.md) — checklist and verification  
+3. [progress.md](progress.md) — start at **[Program narrative (2026-04-20)](progress.md#program-narrative-2026-04-20)**, then work logs  
+4. [context/system-map.md](context/system-map.md) — architecture (dense)  
+5. [deployment.md](deployment.md) — Vercel vs Docker  
 
 ---
 
-### Core workflow (read these first)
+## Index
 
-| File | Plain-English purpose |
-|------|------------------------|
-| [plan.md](plan.md) | Goals, research notes, and the numbered checklist (backend, frontend, inspector, verification). |
-| [progress.md](progress.md) | Running log: what we tried, what worked, what is still rough. **Tactile Sandbox exports (2026-04-13):** [live flush, MIDI/PNG/WAV/ZIP, print CSS, build note](progress.md#wl-sandbox-exports-2026-04-13). **Holistic refinement (2026-04):** [end goal, approach, completed steps, current failure](progress.md#holistic-refinement-2026-04). **Symbolic intake (2026-04-07):** [MusicXML/MIDI markers, preview parity, ZIP-as-`.xml`, `tsx` MIDI fix](progress.md#wl-intake-symbolic-2026-04-07). **Theory Inspector (2026-04-06):** [split panel, IDEA_ACTIONS, ghost labels, apply fix](progress.md#wl-inspector-split-ideas-2026-04-06). **Generation timeout mitigation (2026-04-07):** [greedy-first + file-route solver cap + UX/docs sync](progress.md#wl-generate-timeout-2026-04-07). |
-| [MVP-Last-Four-Roadmap.md](MVP-Last-Four-Roadmap.md) | Tight list + prompting questions for the last MVP feature bundle. |
+| Topic | File |
+|-------|------|
+| Checklist & verification | [plan.md](plan.md) |
+| History & decisions | [progress.md](progress.md) (see [Program narrative 2026-04-20](progress.md#program-narrative-2026-04-20), [Repo hygiene 2026-04-20](progress.md#wl-repo-hygiene-2026-04-20)) |
+| Architecture diagram | [context/system-map.md](context/system-map.md) |
+| Deploy targets | [deployment.md](deployment.md) |
+| Theory vocabulary (inspector / RAG) | [Taxonomy.md](Taxonomy.md) |
+| User-study takeaways (condensed) | [iterations.md](iterations.md) |
+| Design tokens & surfaces | [design/README.md](design/README.md) |
+| Legacy planning drafts | [archive/](archive/) |
 
-### Architecture
+### ADRs (`adr/`)
 
-| File | Plain-English purpose |
-|------|------------------------|
-| [context/system-map.md](context/system-map.md) | Picture of how the browser app, engine API, and inspector talk to each other. |
-
-### Deployment
-
-| File | Plain-English purpose |
-|------|------------------------|
-| [deployment.md](deployment.md) | Host the **engine** on its own service, **Next.js** on Vercel with **`frontend/`** as root, set **`NEXT_PUBLIC_API_URL`** and **`CORS_ORIGIN`**, and keep secrets out of `NEXT_PUBLIC_*`. |
-
-### Theory and AI prep
-
-| File | Plain-English purpose |
-|------|------------------------|
-| [Taxonomy.md](Taxonomy.md) | Shared vocabulary linking textbooks to what the code actually does (feeds the inspector). |
-| [Theory-Inspector-Prep.md](Theory-Inspector-Prep.md) | Early design notes (genre ↔ taxonomy); partly historical. |
-
-### Verification and automation prompts
-
-| File | Plain-English purpose |
-|------|------------------------|
-| [verification-prompt.md](verification-prompt.md) | Copy-paste checklist to regression-test upload → document → sandbox. |
-| [PROMPT.md](PROMPT.md) | Stricter “agent” instructions: read key docs, run `make test` / `make lint`, fix until green. |
-
-### Engine testing notes
-
-| File | Plain-English purpose |
-|------|------------------------|
-| [Engine-Test-Run-Log.md](Engine-Test-Run-Log.md) | Chord-progression smoke tests and follow-up ideas. |
-
-### Architectural Decision Records (`adr/`)
-
-| File | Plain-English purpose |
-|------|------------------------|
-| [adr/001-sandbox-display-mode.md](adr/001-sandbox-display-mode.md) | Why we switch between “view” (OSMD) and “edit” (VexFlow) modes in older paths. |
-| [adr/002-m4-mvp-onboarding-inspector-playback.md](adr/002-m4-mvp-onboarding-inspector-playback.md) | How we shipped onboarding, inspector wiring, and playback for the MVP milestone. |
-| [adr/003-multi-clef-transposition-scope.md](adr/003-multi-clef-transposition-scope.md) | Backlog scope: one transposing-instrument vertical slice first; tab + JSON score deltas deferred until ADR/design. |
+| ADR | Subject |
+|-----|---------|
+| [001](adr/001-sandbox-display-mode.md) | Sandbox display modes (historical paths) |
+| [002](adr/002-m4-mvp-onboarding-inspector-playback.md) | MVP onboarding / inspector / playback |
+| [003](adr/003-multi-clef-transposition-scope.md) | Transposing instruments & scope |
 
 ---
 
-## Code outside `docs/`
+## Code
 
-| Location | README |
+| Location | Notes |
 |----------|--------|
-| [../frontend/](../frontend/) | [../frontend/README.md](../frontend/README.md) |
-| [../backend/](../backend/) | [../backend/README.md](../backend/README.md) |
+| [../frontend/](../frontend/) | Next.js app — UI, `src/server/engine/`, `/api/*` |
+| [../miscellaneous/](../miscellaneous/) | `pdfalto` vendored build |

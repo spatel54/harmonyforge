@@ -185,7 +185,6 @@ export function RiffScoreEditor({
   };
 
   /* RiffScore toolbar: onClick handlers read apiRef only when the user clicks, not during render. */
-  /* eslint-disable react-hooks/refs */
   const toolbarPlugins = useMemo(
     () => {
       const plugins: Array<{
@@ -207,15 +206,17 @@ export function RiffScoreEditor({
           title: "Choose visible toolbar palettes",
           icon: <SlidersHorizontal size={16} />,
           isActive: showPaletteMenu,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--menu",
           onClick: () => setShowPaletteMenu((open) => !open),
         },
         {
           id: "hf-palettes-all",
-          label: "All",
+          label: "Show all",
           title: "Show all built-in toolbar palettes",
           icon: <span className="text-[10px] font-semibold">ALL</span>,
           isDashed: visiblePalettes.size !== TOOLBAR_PALETTES.length,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--all",
           onClick: () => setVisiblePalettes(new Set(TOOLBAR_PALETTES)),
         },
@@ -238,6 +239,7 @@ export function RiffScoreEditor({
           isActive: hasBuiltInControls && isVisible,
           isEmphasized: !hasBuiltInControls,
           isDashed: !hasBuiltInControls,
+          showLabel: true,
           className: hasBuiltInControls
             ? "hf-plugin-btn hf-plugin-btn--palette"
             : "hf-plugin-btn hf-plugin-btn--unsupported",
@@ -251,8 +253,9 @@ export function RiffScoreEditor({
         {
           id: "hf-action-undo",
           label: "Undo",
-          title: "Undo last edit (RiffScore)",
+          title: "Undo last edit (⌘Z)",
           icon: <span className="text-[10px] font-semibold">UN</span>,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
             apiRef.current?.undo();
@@ -261,8 +264,9 @@ export function RiffScoreEditor({
         {
           id: "hf-action-redo",
           label: "Redo",
-          title: "Redo last edit (RiffScore)",
+          title: "Redo last edit (⇧⌘Z)",
           icon: <span className="text-[10px] font-semibold">RE</span>,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
             apiRef.current?.redo();
@@ -270,91 +274,101 @@ export function RiffScoreEditor({
         },
         {
           id: "hf-action-transpose-up",
-          label: "Transpose +1",
-          title: "Transpose selected notes up one semitone",
+          label: "+ Semitone",
+          title: "Transpose selected notes up one semitone (↑)",
           icon: <span className="text-[10px] font-semibold">+1</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 1)),
         },
         {
           id: "hf-action-transpose-down",
-          label: "Transpose -1",
-          title: "Transpose selected notes down one semitone",
+          label: "− Semitone",
+          title: "Transpose selected notes down one semitone (↓)",
           icon: <span className="text-[10px] font-semibold">-1</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -1)),
         },
         {
           id: "hf-action-octave-up",
-          label: "Octave +",
-          title: "Transpose selected notes up one octave",
+          label: "Octave ↑",
+          title: "Transpose selected notes up one octave (⌘↑)",
           icon: <span className="text-[10px] font-semibold">8+</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 12)),
         },
         {
           id: "hf-action-octave-down",
-          label: "Octave -",
-          title: "Transpose selected notes down one octave",
+          label: "Octave ↓",
+          title: "Transpose selected notes down one octave (⌘↓)",
           icon: <span className="text-[10px] font-semibold">8-</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -12)),
         },
         {
           id: "hf-action-dot-toggle",
-          label: "Toggle Dot",
-          title: "Toggle dotted rhythm on selected notes",
+          label: "Dotted",
+          title: "Add/remove a dot on selected notes (. key)",
           icon: <span className="text-[10px] font-semibold">DOT</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => toggleNoteDots(current, ids)),
         },
         {
           id: "hf-action-rest-toggle",
-          label: "Toggle Rest",
-          title: "Toggle selected notes between note/rest",
+          label: "Rest",
+          title: "Swap selection between note and rest (0)",
           icon: <span className="text-[10px] font-semibold">RST</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: toggleSelectedRests,
         },
         {
           id: "hf-action-dyn-p",
-          label: "Set p",
-          title: "Set selected note dynamics to piano (p)",
+          label: "Piano",
+          title: "Mark selection piano (soft — p)",
           icon: <span className="text-[10px] font-semibold">p</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "p")),
         },
         {
           id: "hf-action-dyn-f",
-          label: "Set f",
-          title: "Set selected note dynamics to forte (f)",
+          label: "Forte",
+          title: "Mark selection forte (loud — f)",
           icon: <span className="text-[10px] font-semibold">f</span>,
           disabled: !hasSelection,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "f")),
         },
         {
           id: "hf-action-export-xml",
-          label: "XML",
-          title: "Download MusicXML",
+          label: "Export XML",
+          title: "Download the score as MusicXML",
           icon: <span className="text-[10px] font-semibold">XML</span>,
           disabled: !score,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: downloadXml,
         },
         {
           id: "hf-action-print",
           label: "Print",
-          title: "Print current score",
+          title: "Print the current score (⌘P)",
           icon: <span className="text-[10px] font-semibold">PRN</span>,
           disabled: !score,
+          showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => window.print(),
         },
@@ -362,9 +376,12 @@ export function RiffScoreEditor({
 
       return plugins;
     },
+    // `applyOnSelection` / `downloadXml` / `toggleSelectedRests` are inline helpers
+    // closed over the state we already depend on; including them would force the
+    // memo to recompute every render and fight RiffScore's toolbar identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [visiblePalettes, showPaletteMenu, hasSelection, score, selectedNoteIds],
   );
-  /* eslint-enable react-hooks/refs */
 
   // Build config from score, passing current theme
   const config = useMemo(
@@ -637,6 +654,38 @@ export function RiffScoreEditor({
         /* Draggable HarmonyForge scrub line replaces the built-in cursor hit-testing */
         .riffscore-hf-wrapper [data-testid="playback-cursor"] {
           opacity: 0 !important;
+        }
+        /*
+         * Iter1 §1 selection feedback:
+         *   - Show a "grab" cursor over the score canvas so users know notes are movable.
+         *   - Switch to "grabbing" while a pointer is held down (hints at drag-in-progress).
+         *   - Prefer noteheads over stems / beams as hit targets by giving SVG
+         *     lines a narrower pointer-events region; glyphs (noteheads) stay
+         *     fully clickable.
+         */
+        .riffscore-hf-wrapper .riff-ScoreCanvas {
+          cursor: grab;
+        }
+        .riffscore-hf-wrapper .riff-ScoreCanvas:active,
+        .riffscore-hf-wrapper .riff-ScoreCanvas[data-dragging="true"] {
+          cursor: grabbing;
+        }
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg text,
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg path {
+          cursor: grab;
+        }
+        /* Iter1 §1: selection should prefer noteheads over stems. Stems render as
+           SVG <line> elements; giving them pointer-events:none pushes hit-testing
+           down to the notehead path/glyph. Beams (also <line>) become visual-only. */
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg line {
+          pointer-events: none;
+        }
+        /* Restore interactivity on elements that genuinely need line-level hit-testing:
+           staff cursor, playback line, measure bar selection overlays. */
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-testid="playback-cursor"],
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-measure-bar],
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-editable] {
+          pointer-events: stroke;
         }
         .riffscore-hf-wrapper .hf-palette-menu {
           position: absolute;

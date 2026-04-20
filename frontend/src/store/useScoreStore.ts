@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EditableScore, Note } from "@/lib/music/scoreTypes";
-import { cloneScore, deleteNotes, normalizeScoreRests } from "@/lib/music/scoreUtils";
+import { cloneScore, deleteNotesAsRests, normalizeScoreRests } from "@/lib/music/scoreUtils";
 import { generateId } from "@/lib/music/scoreTypes";
 
 export interface NoteSelection {
@@ -96,7 +96,11 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   deleteSelection: (noteIds) => {
     const { score } = get();
     if (!score || noteIds.length === 0) return;
-    const next = deleteNotes(score, new Set(noteIds));
+    // Per Iter2 §2: convert selected notes to rests of the same duration
+    // (preserves surrounding durations + overall measure length). The raw
+    // `deleteNotes` helper is still available for callers that truly want
+    // to remove events (e.g. programmatic insert flows).
+    const next = deleteNotesAsRests(score, new Set(noteIds));
     get().applyScore(next);
   },
   applyScore: (nextScore: EditableScore) => {

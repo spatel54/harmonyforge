@@ -1,9 +1,8 @@
 /**
- * HarmonyForge Engine — Shared types and pitch helpers
- *
- * This is a server-only copy of `backend/engine/types.ts` so the Next app can run the engine
- * without a separate backend service.
+ * HarmonyForge Logic Core — Shared types and pitch helpers
+ * SATB ranges: conventional choral clamps (Aldwell & Schachter / Open Music Theory pedagogy); see Taxonomy.md §1.6.
  */
+
 export type PitchClass =
   | "C"
   | "C#"
@@ -20,14 +19,24 @@ export type PitchClass =
 
 export type Voice = "Soprano" | "Alto" | "Tenor" | "Bass";
 
-/** Genre affects harmony theory only (chord inference, voice-leading strictness). */
+/** Genre affects harmony theory only (chord inference, voice-leading strictness). Per HFLitReview. */
 export type Genre = "classical" | "jazz" | "pop";
+
+/**
+ * Harmony rhythm density (per Iter1 §2 / Iter2 §2 study feedback):
+ * - "chordal": one sustained note per chord slot (original behavior; static whole/half notes).
+ * - "mixed":   subdivide harmony to the melody's onsets inside each slot (default — matches rhythmic integrity of source).
+ * - "flowing": rearticulate harmony on every melody onset AND fill long rests with chord-tone filler at the smallest melodic value.
+ */
+export type RhythmDensity = "chordal" | "mixed" | "flowing";
 
 /** Config for generation: mood + genre affect chord inference/voice-leading; instruments used for MusicXML part names */
 export interface GenerationConfig {
   mood?: "major" | "minor";
   genre?: Genre;
   instruments?: Record<Voice, string[]>;
+  /** Optional harmony rhythm density; default "mixed". */
+  rhythmDensity?: RhythmDensity;
 }
 
 export interface KeyContext {
@@ -67,6 +76,14 @@ export interface ParsedScore {
   totalMeasures?: number;
   /** Original melody part name from input (e.g. "Violin") for additive output */
   melodyPartName?: string;
+  /**
+   * Anacrusis / pickup beats at the start of the score (per Iter2 §1).
+   * When non-zero, chord inference skips these beats and harmony staves emit
+   * leading rests so every downbeat lines up with the source meter.
+   * Detected from MusicXML `implicit="yes"` on measure 0 or a first-measure
+   * whose summed durations are shorter than the stated beats-per-measure.
+   */
+  pickupBeats?: number;
 }
 
 export interface SATBVoices {
@@ -87,7 +104,7 @@ export interface ParsedChord {
   chordTones: number[];
 }
 
-// ─── SATB Ranges (MIDI note numbers) ──────────────────────────────────────────
+// ─── SATB Ranges (MIDI note numbers) per Taxonomy.md §1.6 ─────────────────────
 const RANGES: Record<Voice, { min: number; max: number }> = {
   Soprano: { min: 60, max: 79 }, // C4–G5
   Alto: { min: 55, max: 74 }, // G3–D5
@@ -149,4 +166,3 @@ export function pitchToPc(pitch: string): number {
   if (idx < 0) throw new Error(`Unknown pitch class: ${pc}`);
   return idx;
 }
-

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && node scripts/copy-pdfjs-worker.mjs",
+    "test-engine": "tsx scripts/run-engine-cli.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.1.35",
@@ -24,6 +25,7 @@
     "musicxml-interfaces": "^0.0.21",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
+    "pdfjs-dist": "^4.7.76",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
@@ -41,9 +43,11 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "fflate": "^0.8.2",
     "happy-dom": "^15.11.7",
     "patch-package": "^8.0.1",
     "tailwindcss": "^4",
+    "tsx": "^4.19.0",
     "typescript": "^5",
     "vitest": "^3.0.5"
   }

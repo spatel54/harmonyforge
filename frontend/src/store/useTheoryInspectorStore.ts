@@ -107,6 +107,14 @@ export interface TheoryInspectorState {
   hasApiKey: boolean;
   setHasApiKey: (v: boolean) => void;
 
+  /** User-stated musical goal for the current session (Iter1 §3). Empty = not set. */
+  musicalGoal: string;
+  setMusicalGoal: (goal: string) => void;
+
+  /** Progressive-disclosure toggle for the note panel rationale stack (Iter1 §3 / Iter2 §3). */
+  showInspectorRationale: boolean;
+  setShowInspectorRationale: (v: boolean) => void;
+
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
   clearIssueHighlights: () => void;
@@ -165,6 +173,12 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     hasApiKey: false,
     setHasApiKey: (hasApiKey) => set({ hasApiKey }),
+
+    musicalGoal: "",
+    setMusicalGoal: (musicalGoal) => set({ musicalGoal }),
+
+    showInspectorRationale: false,
+    setShowInspectorRationale: (showInspectorRationale) => set({ showInspectorRationale }),
 
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),

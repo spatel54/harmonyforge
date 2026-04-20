@@ -5,6 +5,8 @@ import { StepBar } from "@/components/molecules/StepBar";
 import { ThemeToggle } from "@/components/atoms/ThemeToggle";
 import { CoachmarkTourButton } from "@/components/organisms/CoachmarkTourButton";
 import { WelcomeGuideButton } from "@/components/organisms/WelcomeGuideButton";
+import { VolumeSlider } from "@/components/molecules/VolumeSlider";
+import { useDestinationVolume } from "@/hooks/useDestinationVolume";
 
 import { Download } from "lucide-react";
 
@@ -20,6 +22,7 @@ export interface SandboxHeaderProps extends React.HTMLAttributes<HTMLElement> {
  */
 export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
   ({ className, onExportClick, ...props }, ref) => {
+    const { volumeDb, setVolumeDb } = useDestinationVolume();
     return (
       <header
         ref={ref}
@@ -42,6 +45,8 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
 
         {/* Right controls — Node 9zJvZ */}
         <div className="flex items-center gap-[12px]">
+          <VolumeSlider volumeDb={volumeDb} onVolumeDbChange={setVolumeDb} />
+          <div className="w-[1px] h-[16px] bg-[var(--hf-detail)] opacity-50" />
           <WelcomeGuideButton />
           <CoachmarkTourButton />
           <div data-coachmark="step-5">

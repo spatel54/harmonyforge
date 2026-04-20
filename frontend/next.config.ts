@@ -11,7 +11,12 @@ const appDir = path.dirname(fileURLToPath(import.meta.url));
 loadEnvConfig(appDir);
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: [
+    "@tonejs/midi",
+    "adm-zip",
+    "fast-xml-parser",
+    "musicxml-interfaces",
+  ],
 };
 
 export default nextConfig;

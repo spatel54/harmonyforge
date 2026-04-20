@@ -1,59 +1,52 @@
 version: "3.9"
 
-# Local parity with DigitalOcean App Platform deployment.
+# Local parity with a self-hosted single-image deploy.
+#
 # Usage:
 #   cp .env.example .env.local
 #   docker compose up --build
 #
-# Browser → frontend (localhost:3000) → backend (localhost:8000)
-# NEXT_PUBLIC_API_URL must be a URL the browser can reach, so we use
-# localhost:8000 (mapped from the backend container) rather than a
-# Docker-internal hostname.
+# Browser → http://localhost:3000 (Next.js + engine + pdfalto + oemer all in one).
 
 services:
-  backend:
+  harmonyforge:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
+      args:
+        OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+        OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
     ports:
-      - "8000:8000"
+      - "3000:3000"
     environment:
       NODE_ENV: production
-      CORS_ORIGIN: http://localhost:3000
+      PORT: 3000
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
+      HF_SOLVER_MAX_MS: "${HF_SOLVER_MAX_MS:-}"
+      HF_SOLVER_MAX_NODES: "${HF_SOLVER_MAX_NODES:-}"
+      HF_MAX_CHORD_SLOTS: "${HF_MAX_CHORD_SLOTS:-}"
+      OEMER_CHECKPOINT_DIR: /var/oemer
+    volumes:
+      - oemer-checkpoints:/var/oemer
     healthcheck:
       test:
         - CMD
         - node
         - -e
         - >
-          require('http').get('http://localhost:8000/health',
-          (r) => process.exit(r.statusCode === 200 ? 0 : 1))
+          require('http').get('http://localhost:3000/api/health',
+          (r) => process.exit(r.statusCode < 500 ? 0 : 1))
           .on('error', () => process.exit(1))
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 5
-      start_period: 10s
+      start_period: 30s
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        # Browser-reachable backend URL (host port mapping)
-        NEXT_PUBLIC_API_URL: http://localhost:8000
-        OPENAI_API_KEY: ${OPENAI_API_KEY}
-        OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
+volumes:
+  oemer-checkpoints: {}
 
 networks:
   default:

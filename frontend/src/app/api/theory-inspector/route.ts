@@ -25,6 +25,8 @@ interface TheoryInspectorRequestBody {
   theoryInspectorNoteMode?: TheoryInspectorMode;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   explanationLevel?: ExplanationLevel;
+  /** User-stated musical goal (Iter1 §3) — aligns tutor responses with user intent. */
+  musicalGoal?: string;
 }
 
 /**
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     violationContext,
     scoreSelectionContext,
     theoryInspectorNoteMode,
+    musicalGoal,
   } = body;
 
   // Validate required fields
@@ -82,6 +85,7 @@ export async function POST(request: NextRequest) {
     scoreSelectionContext: scoreSelectionContext ?? violationContext,
     theoryInspectorNoteMode,
     explanationLevel,
+    musicalGoal,
   });
 
   // Build conversation history (capped at last 10 exchanges)

@@ -428,6 +428,10 @@ export function CoachmarkOverlay() {
     return () => window.removeEventListener("resize", onResize);
   }, [isActive, currentStep]);
 
+  // Measure card height after each paint so the cutout + caret line up with the
+  // dynamic copy for the current step. `cardRef` and setter identities are stable;
+  // no dep array keeps this runs-after-every-render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useLayoutEffect(() => {
     if (cardRef.current) {
       const h = cardRef.current.offsetHeight;

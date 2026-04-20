@@ -12,9 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Agent/helper scripts (CommonJS); not part of the Next app bundle
-    ".claude/**",
     "patches/**",
+    // Static assets shipped from /public (e.g. pdfjs worker bundle)
+    "public/**",
+    // Build artifacts / caches
+    "engine-cli-output/**",
+    ".next/**/*",
   ]),
 ]);
 

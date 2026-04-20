@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { X, SendHorizontal, Check } from "lucide-react";
+import { X, SendHorizontal, Check, ChevronDown, ChevronRight, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatBubble } from "@/components/molecules/ChatBubble";
+import { describeIntent, type Intent } from "@/lib/ai/intentRouter";
 import { MarkdownText } from "@/components/molecules/MarkdownText";
 import { ViolationCard } from "@/components/molecules/ViolationCard";
 import { QuickReplyChips } from "@/components/molecules/QuickReplyChips";
@@ -15,6 +16,8 @@ import type {
 } from "@/store/useTheoryInspectorStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
+import { resolveStarterPrompts } from "@/lib/ai/starterPrompts";
+import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogyCallout";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 
 export interface TheoryInspectorMessage {
@@ -25,6 +28,11 @@ export interface TheoryInspectorMessage {
   violationType?: string;
   chips?: string[];
   suggestionBatchId?: string;
+  /**
+   * Parsed `<<<INTENT>>>` JSON from the tutor stream (app actions the user
+   * asked for that need confirmation). Surfaced as a confirmation bubble.
+   */
+  intent?: import("@/lib/ai/intentRouter").Intent | null;
 }
 
 export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -55,6 +63,14 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   /** Apply tutor <<<IDEA_ACTIONS>>> pitch edits */
   onAcceptIdeaAction?: (action: IdeaAction) => void;
   onRejectIdeaAction?: (action: IdeaAction) => void;
+  /** Fires when a starter prompt chip is clicked (text passed verbatim to chat). */
+  onStarterPromptClick?: (prompt: string) => void;
+  /** Fires when the user clicks "Edit this bar" on the measure focus card. */
+  onEditFocusedRegion?: () => void;
+  /** Accept a tutor INTENT (mood/genre/pickup/regenerate/navigation). */
+  onApplyIntent?: (msgId: string, intent: import("@/lib/ai/intentRouter").Intent) => void;
+  /** Dismiss an INTENT confirmation bubble without applying it. */
+  onDismissIntent?: (msgId: string) => void;
 }
 
 /**
@@ -105,6 +121,10 @@ export const TheoryInspectorPanel = React.forwardRef<
       onRejectAllCorrections,
       onAcceptIdeaAction,
       onRejectIdeaAction,
+      onStarterPromptClick,
+      onEditFocusedRegion,
+      onApplyIntent,
+      onDismissIntent,
       className,
       ...props
     },
@@ -112,8 +132,25 @@ export const TheoryInspectorPanel = React.forwardRef<
   ) => {
     const chatScrollRef = React.useRef<HTMLDivElement>(null);
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
+    const musicalGoal = useTheoryInspectorStore((s) => s.musicalGoal);
+    const setMusicalGoal = useTheoryInspectorStore((s) => s.setMusicalGoal);
+    const showInspectorRationale = useTheoryInspectorStore((s) => s.showInspectorRationale);
+    const setShowInspectorRationale = useTheoryInspectorStore(
+      (s) => s.setShowInspectorRationale,
+    );
+    const [goalEditing, setGoalEditing] = React.useState(false);
+    const [goalDraft, setGoalDraft] = React.useState(musicalGoal);
+    React.useEffect(() => {
+      if (!goalEditing) setGoalDraft(musicalGoal);
+    }, [musicalGoal, goalEditing]);
     const suppressSuggestionProse = isMinimalSuggestionExplanation();
     const chatInputLocked = isStreaming && streamingMessageId != null;
+    const starterPrompts = React.useMemo(
+      () => resolveStarterPrompts(inspectorScoreFocus),
+      [inspectorScoreFocus],
+    );
+    const showStarterPrompts =
+      messages.length === 0 && !isStreaming && Boolean(onStarterPromptClick);
 
     const renderChatMessage = (msg: TheoryInspectorMessage): React.ReactNode => {
       switch (msg.type) {
@@ -167,12 +204,21 @@ export const TheoryInspectorPanel = React.forwardRef<
           );
         case "ai":
           return (
-            <ChatBubble
-              key={msg.id}
-              variant="ai"
-              content={msg.content ?? ""}
-              timestamp={msg.timestamp}
-            />
+            <React.Fragment key={msg.id}>
+              <ChatBubble
+                variant="ai"
+                content={msg.content ?? ""}
+                timestamp={msg.timestamp}
+              />
+              {msg.intent ? (
+                <IntentConfirmationBubble
+                  messageId={msg.id}
+                  intent={msg.intent}
+                  onApply={onApplyIntent}
+                  onDismiss={onDismissIntent}
+                />
+              ) : null}
+            </React.Fragment>
           );
         case "chips":
           return (
@@ -231,11 +277,17 @@ export const TheoryInspectorPanel = React.forwardRef<
       }
     };
 
-    // No dependency array: React Compiler / Turbopack can rewrite multi-entry effect deps and trigger
-    // "final argument changed size" errors. Scrolling after every paint is cheap for this small panel.
+    // Near-bottom guard (Iter2 §3): only auto-scroll the chat pane when the user
+    // is already close to the bottom, otherwise reading older context would keep
+    // being ripped to the latest message. No deps array avoids React Compiler /
+    // Turbopack "final argument changed size" errors on this small panel.
     React.useLayoutEffect(() => {
       const el = chatScrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      if (!el) return;
+      const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+      if (distance < 120 || isStreaming) {
+        el.scrollTop = el.scrollHeight;
+      }
     });
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -321,6 +373,84 @@ export const TheoryInspectorPanel = React.forwardRef<
           </div>
         )}
 
+        {/* Musical goal — Iter1 §3: let the user state what they want,
+            which the tutor then aligns to in every reply. */}
+        <div
+          className="px-[12px] py-[8px] shrink-0"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
+            borderBottom: "1px solid var(--hf-detail)",
+          }}
+          aria-label="Musical goal for this session"
+        >
+          <div className="flex items-center gap-[6px] mb-[4px]">
+            <Target className="w-[12px] h-[12px]" style={{ color: "var(--hf-text-secondary)" }} aria-hidden="true" />
+            <span
+              className="font-mono text-[10px] font-medium"
+              style={{ color: "var(--hf-text-secondary)" }}
+            >
+              My musical goal
+            </span>
+          </div>
+          {goalEditing ? (
+            <div className="flex items-center gap-[6px]">
+              <input
+                type="text"
+                value={goalDraft}
+                onChange={(e) => setGoalDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setMusicalGoal(goalDraft.trim());
+                    setGoalEditing(false);
+                  } else if (e.key === "Escape") {
+                    setGoalDraft(musicalGoal);
+                    setGoalEditing(false);
+                  }
+                }}
+                placeholder="e.g. establish a stable C major cadence here"
+                className="flex-1 rounded-[4px] px-[8px] py-[4px] font-body text-[11px]"
+                style={{
+                  backgroundColor: "var(--hf-bg)",
+                  border: "1px solid var(--hf-detail)",
+                  color: "var(--hf-text-primary)",
+                }}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setMusicalGoal(goalDraft.trim());
+                  setGoalEditing(false);
+                }}
+                className="font-mono text-[10px] px-[8px] py-[4px] rounded-[4px]"
+                style={{
+                  backgroundColor: "var(--hf-accent)",
+                  color: "var(--text-on-light)",
+                }}
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setGoalEditing(true)}
+              className="text-left w-full rounded-[4px] px-[8px] py-[4px] font-body text-[11px] hover:bg-black/10"
+              style={{ color: "var(--hf-text-primary)" }}
+            >
+              {musicalGoal?.trim() || (
+                <span style={{ color: "var(--hf-text-secondary)" }}>
+                  Click to describe what you want (used to align the tutor).
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="px-[12px] pb-[8px] shrink-0">
+          <GlassBoxPedagogyCallout variant="inspector" />
+        </div>
+
         {/* ── Body: note details (top) + chat (bottom), equal split ── */}
         <div className="flex-1 min-h-0 flex flex-col">
           <div
@@ -339,16 +469,38 @@ export const TheoryInspectorPanel = React.forwardRef<
                   border: "1px solid var(--hf-detail)",
                 }}
               >
-                <div
-                  className="font-mono text-[10px] mb-[6px]"
-                  style={{ color: "var(--hf-text-secondary)" }}
-                >
-                  {inspectorScoreFocus.kind === "measure" ? "This measure" : "This part"}
-                </div>
-                <div className="text-[14px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
-                  {inspectorScoreFocus.kind === "measure"
-                    ? `Bar ${inspectorScoreFocus.measureIndex + 1}`
-                    : inspectorScoreFocus.partName}
+                <div className="flex items-center justify-between gap-[8px]">
+                  <div>
+                    <div
+                      className="font-mono text-[10px] mb-[2px]"
+                      style={{ color: "var(--hf-text-secondary)" }}
+                    >
+                      {inspectorScoreFocus.kind === "measure" ? "This measure" : "This part"}
+                    </div>
+                    <div className="text-[14px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
+                      {inspectorScoreFocus.kind === "measure"
+                        ? `Bar ${inspectorScoreFocus.measureIndex + 1}`
+                        : inspectorScoreFocus.partName}
+                    </div>
+                  </div>
+                  {onEditFocusedRegion && tutorEnabled && (
+                    <button
+                      type="button"
+                      onClick={onEditFocusedRegion}
+                      className="shrink-0 rounded-[6px] px-[10px] py-[6px] font-mono text-[11px] font-medium"
+                      style={{
+                        backgroundColor: "var(--hf-accent)",
+                        color: "var(--text-on-light)",
+                      }}
+                      aria-label={
+                        inspectorScoreFocus.kind === "measure"
+                          ? "Ask the assistant to suggest edits for this bar"
+                          : "Ask the assistant to suggest edits for this part"
+                      }
+                    >
+                      {inspectorScoreFocus.kind === "measure" ? "Edit this bar" : "Suggest edits"}
+                    </button>
+                  )}
                 </div>
                 <div
                   className="text-[11px] mt-[6px] leading-snug"
@@ -440,65 +592,92 @@ export const TheoryInspectorPanel = React.forwardRef<
                   )}
                 </div>
 
-                {noteInsight.engineOriginExplanation ? (
-                  <div
-                    className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                    style={{
-                      backgroundColor: "var(--hf-bg)",
-                      border: "1px solid var(--hf-detail)",
-                      color: "var(--hf-text-primary)",
-                    }}
-                  >
-                    <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
-                      What the tool first wrote
-                    </div>
-                    <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                      Frozen snapshot from when the score was generated (if we have it).
-                    </div>
-                    <MarkdownText content={noteInsight.engineOriginExplanation} variant="panel" />
-                  </div>
-                ) : null}
-
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                {/* Progressive disclosure (Iter1 §3 / Iter2 §3): the three
+                    rationale blocks (engine origin, what this click means,
+                    verifiable export) default hidden to avoid "wall of text".
+                    Users opt in via a disclosure toggle for the deeper story. */}
+                <button
+                  type="button"
+                  onClick={() => setShowInspectorRationale(!showInspectorRationale)}
+                  className="flex items-center gap-[6px] rounded-[4px] px-[8px] py-[4px] font-mono text-[10px] self-start"
                   style={{
-                    backgroundColor: "var(--hf-bg)",
+                    color: "var(--hf-text-secondary)",
                     border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
+                    backgroundColor: "transparent",
                   }}
+                  aria-expanded={showInspectorRationale}
                 >
-                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
-                    What this click means
-                  </div>
-                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    {noteInsight.insightKind === "melody-guide"
-                      ? "How your tune sits at this beat with the other staves. (HarmonyForge did not generate the melody—focus on fit and rhythm; full detail is in the export.)"
-                      : "Why HarmonyForge’s axiomatic engine chose the original harmony pitch at generation, and how that relates to what you see now—then use the export to verify every staff."}
-                  </div>
-                  <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" />
-                </div>
+                  {showInspectorRationale ? (
+                    <ChevronDown className="w-[12px] h-[12px]" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="w-[12px] h-[12px]" aria-hidden="true" />
+                  )}
+                  {showInspectorRationale ? "Hide rationale" : "Show rationale"}
+                </button>
 
-                <div
-                  className="rounded-[6px] p-[10px] text-[11px] leading-[1.45]"
-                  style={{
-                    backgroundColor: "color-mix(in srgb, var(--hf-accent) 8%, transparent)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div className="font-body text-[12px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
-                    Verifiable score export
-                  </div>
-                  <div className="font-body text-[10px] mb-[6px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Copied from your score so answers stay checkable—use this to confirm rhythm, meter, and what each staff is doing.
-                  </div>
-                  <pre
-                    className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
-                    style={{ color: "var(--hf-text-primary)" }}
-                  >
-                    {noteInsight.evidenceLines.join("\n")}
-                  </pre>
-                </div>
+                {showInspectorRationale && (
+                  <>
+                    {noteInsight.engineOriginExplanation ? (
+                      <div
+                        className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                        style={{
+                          backgroundColor: "var(--hf-bg)",
+                          border: "1px solid var(--hf-detail)",
+                          color: "var(--hf-text-primary)",
+                        }}
+                      >
+                        <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                          What the tool first wrote
+                        </div>
+                        <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                          Frozen snapshot from when the score was generated (if we have it).
+                        </div>
+                        <MarkdownText content={noteInsight.engineOriginExplanation} variant="panel" />
+                      </div>
+                    ) : null}
+
+                    <div
+                      className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
+                      style={{
+                        backgroundColor: "var(--hf-bg)",
+                        border: "1px solid var(--hf-detail)",
+                        color: "var(--hf-text-primary)",
+                      }}
+                    >
+                      <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                        What this click means
+                      </div>
+                      <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                        {noteInsight.insightKind === "melody-guide"
+                          ? "How your tune sits at this beat with the other staves. (HarmonyForge did not generate the melody—focus on fit and rhythm; full detail is in the export.)"
+                          : "Why HarmonyForge’s axiomatic engine chose the original harmony pitch at generation, and how that relates to what you see now—then use the export to verify every staff."}
+                      </div>
+                      <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" />
+                    </div>
+
+                    <div
+                      className="rounded-[6px] p-[10px] text-[11px] leading-[1.45]"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--hf-accent) 8%, transparent)",
+                        border: "1px solid var(--hf-detail)",
+                        color: "var(--hf-text-primary)",
+                      }}
+                    >
+                      <div className="font-body text-[12px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                        Verifiable score export
+                      </div>
+                      <div className="font-body text-[10px] mb-[6px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                        Copied from your score so answers stay checkable—use this to confirm rhythm, meter, and what each staff is doing.
+                      </div>
+                      <pre
+                        className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        {noteInsight.evidenceLines.join("\n")}
+                      </pre>
+                    </div>
+                  </>
+                )}
 
                 {/* Tutor summary (LLM) — after deterministic blocks; Ideas follow below */}
                 <div
@@ -684,6 +863,41 @@ export const TheoryInspectorPanel = React.forwardRef<
               aria-live="polite"
               aria-label="Theory Inspector — chat"
             >
+              {showStarterPrompts && (
+                <div
+                  className="rounded-[6px] p-[10px]"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
+                    border: "1px dashed var(--hf-detail)",
+                  }}
+                  aria-label="Suggested starts"
+                >
+                  <div
+                    className="font-mono text-[10px] mb-[6px]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    Suggested starts
+                  </div>
+                  <div className="flex flex-wrap gap-[6px]">
+                    {starterPrompts.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => onStarterPromptClick?.(p.prompt)}
+                        className="rounded-[999px] px-[10px] py-[4px] font-mono text-[11px] hover:opacity-90"
+                        style={{
+                          backgroundColor: "var(--hf-bg)",
+                          border: "1px solid var(--hf-detail)",
+                          color: "var(--hf-text-primary)",
+                        }}
+                        title={p.prompt}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {messages.map((msg) => renderChatMessage(msg))}
 
               {isStreaming && streamingMessageId != null && (
@@ -729,7 +943,11 @@ export const TheoryInspectorPanel = React.forwardRef<
               value={inputValue}
               onChange={(e) => onInputChange?.(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder=""
+              placeholder={
+                messages.length === 0
+                  ? "Ask anything about your score — try a Suggested start above"
+                  : "Ask a follow-up question"
+              }
               disabled={chatInputLocked}
               className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
               style={{ color: "var(--hf-text-primary)" }}
@@ -757,3 +975,80 @@ export const TheoryInspectorPanel = React.forwardRef<
 );
 
 TheoryInspectorPanel.displayName = "TheoryInspectorPanel";
+
+/**
+ * Visual confirmation for a tutor-emitted INTENT. Applies the change through
+ * store setters wired in the sandbox page (mood, pickup, regenerate, navigate).
+ */
+function IntentConfirmationBubble({
+  messageId,
+  intent,
+  onApply,
+  onDismiss,
+}: {
+  messageId: string;
+  intent: Intent;
+  onApply?: (msgId: string, intent: Intent) => void;
+  onDismiss?: (msgId: string) => void;
+}) {
+  return (
+    <div
+      className="self-start max-w-[92%] rounded-[10px] border px-[10px] py-[8px] flex flex-col gap-[6px]"
+      style={{
+        backgroundColor: "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
+        borderColor: "var(--hf-detail)",
+      }}
+      role="note"
+      aria-label="Suggested app action"
+    >
+      <div className="flex flex-col gap-[2px]">
+        <span
+          className="font-mono text-[10px] uppercase tracking-wide"
+          style={{ color: "var(--hf-text-secondary)" }}
+        >
+          Suggested app action
+        </span>
+        <span
+          className="font-sans text-[12px] leading-snug"
+          style={{ color: "var(--hf-text-primary)" }}
+        >
+          {describeIntent(intent)}
+        </span>
+        {intent.reason ? (
+          <span
+            className="font-sans text-[11px] leading-snug"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            {intent.reason}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex gap-[8px]">
+        <button
+          type="button"
+          className="font-mono text-[11px] rounded-[4px] px-[10px] py-[4px]"
+          style={{
+            backgroundColor: "var(--hf-surface)",
+            color: "var(--hf-text-on-surface, white)",
+          }}
+          onClick={() => onApply?.(messageId, intent)}
+          disabled={!onApply}
+        >
+          Apply
+        </button>
+        <button
+          type="button"
+          className="font-mono text-[11px] rounded-[4px] px-[10px] py-[4px] border"
+          style={{
+            borderColor: "var(--hf-detail)",
+            color: "var(--hf-text-primary)",
+          }}
+          onClick={() => onDismiss?.(messageId)}
+          disabled={!onDismiss}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}

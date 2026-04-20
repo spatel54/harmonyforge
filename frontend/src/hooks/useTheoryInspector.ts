@@ -11,6 +11,7 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import { DEFAULT_EXPLANATION_LEVEL } from "@/lib/ai/explanationLevel";
+import { parseIntentBlock } from "@/lib/ai/intentRouter";
 import type {
   NoteInsight,
   NoteInsightKind,
@@ -103,7 +104,7 @@ const NOTE_EXPLAIN_TUTOR_BRIEF =
   "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
   "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
   "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.” " +
-  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\"}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet).";
+  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\",\"staffIndex\":<int>}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). **staffIndex** is the integer from the matching `STAFF_HINT=<n>` on that line — include it so the app can resolve duplicates even when the suggestion's part name is ambiguous. Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet).";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -967,6 +968,7 @@ export function useTheoryInspector() {
           : trimmed;
 
       try {
+        const musicalGoal = snap.musicalGoal?.trim() ?? "";
         const response = await fetch("/api/theory-inspector", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -978,6 +980,7 @@ export function useTheoryInspector() {
             scoreSelectionContext,
             theoryInspectorNoteMode,
             conversationHistory,
+            ...(musicalGoal ? { musicalGoal } : {}),
             ...(gate.hasApiKey
               ? { explanationLevel: DEFAULT_EXPLANATION_LEVEL }
               : {}),
@@ -1012,7 +1015,8 @@ export function useTheoryInspector() {
             const { done, value } = await reader.read();
             if (done) break;
             accumulated += decoder.decode(value, { stream: true });
-            store.updateMessage(aiMsgId, { content: accumulated });
+            const { intent, cleaned } = parseIntentBlock(accumulated);
+            store.updateMessage(aiMsgId, { content: cleaned, intent });
           }
         }
       } catch (err) {
@@ -1163,6 +1167,20 @@ export function useTheoryInspector() {
       }
 
       const stSuggest = useTheoryInspectorStore.getState();
+      const focus = stSuggest.inspectorScoreFocus;
+      const isRegionScoped = focus?.kind === "measure" || focus?.kind === "part";
+      let scopedScoreContext = scoreContext;
+      if (focus?.kind === "measure") {
+        scopedScoreContext = scoreContext.filter((c) => c.measureIndex === focus.measureIndex);
+      } else if (focus?.kind === "part") {
+        const part = score.parts.find((p) => p.id === focus.partId);
+        if (part) {
+          scopedScoreContext = scoreContext.filter((c) => c.partName === part.name);
+        }
+      }
+      if (isRegionScoped && scopedScoreContext.length === 0) {
+        scopedScoreContext = scoreContext;
+      }
       const violationType = resolveViolationKeyForPrompt(
         stSuggest.messages,
         stSuggest.lastValidation,
@@ -1175,7 +1193,7 @@ export function useTheoryInspector() {
           body: JSON.stringify({
             genre: store.genre,
             violationType,
-            scoreContext,
+            scoreContext: scopedScoreContext,
             explanationLevel: DEFAULT_EXPLANATION_LEVEL,
             suggestionExplanationMode: getSuggestionExplanationMode(),
           }),

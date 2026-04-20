@@ -9,6 +9,22 @@ describe("enrichIntakePreviewError", () => {
     expect(out).toContain(INTAKE_TROUBLESHOOTING_PATH);
   });
 
+  it("classifies oemer checkpoint errors distinctly", () => {
+    const out = enrichIntakePreviewError(
+      "oemer: failed to download checkpoint",
+      "pdf",
+    );
+    expect(out).toContain("OEMER_CHECKPOINT_DIR");
+  });
+
+  it("classifies empty-score errors distinctly", () => {
+    const out = enrichIntakePreviewError(
+      "oemer: no .musicxml/.xml files in output (OMR may have failed silently)",
+      "pdf",
+    );
+    expect(out).toContain("no musical staves");
+  });
+
   it("appends engine hint for mxl and txt", () => {
     for (const ext of ["mxl", "txt", "mxml"]) {
       const out = enrichIntakePreviewError("Bad gateway", ext);

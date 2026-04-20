@@ -94,6 +94,30 @@ function makeRestNotes(units: number): Note[] {
 }
 
 /**
+ * Beat-aware rest filler (Iter1 §1 — fixes 8th+16th misalignment):
+ * break the gap into sub-gaps that each fit inside one quarter-note beat
+ * starting at `startUnits`. Without this, a 0.25-beat remainder after
+ * an 8th+16th inside beat 3 can get grouped as a quarter rest that spans
+ * into beat 4, pushing downstream notes onto the wrong beat.
+ */
+function makeBeatAwareRestNotes(startUnits: number, totalUnits: number): Note[] {
+  const QUARTER_UNITS = BEAT_UNITS; // 8 units = 1 quarter
+  const rests: Note[] = [];
+  let cursor = startUnits;
+  let remaining = Math.max(0, totalUnits);
+  while (remaining > 0) {
+    const beatStart = Math.floor(cursor / QUARTER_UNITS) * QUARTER_UNITS;
+    const nextBeat = beatStart + QUARTER_UNITS;
+    const gapInBeat = Math.min(nextBeat - cursor, remaining);
+    const gapUnits = gapInBeat > 0 ? gapInBeat : remaining;
+    rests.push(...makeRestNotes(gapUnits));
+    cursor += gapUnits;
+    remaining -= gapUnits;
+  }
+  return rests;
+}
+
+/**
  * Ensure every measure is rhythmically complete by appending rests when underfilled.
  * Mirrors notation-editor behavior (e.g. MuseScore/Noteflight) where empty remaining
  * duration in a measure is represented as rests.
@@ -120,7 +144,7 @@ export function normalizeScoreRests(score: EditableScore): EditableScore {
       }
 
       if (usedUnits >= measureUnits) continue;
-      const fillRests = makeRestNotes(measureUnits - usedUnits);
+      const fillRests = makeBeatAwareRestNotes(usedUnits, measureUnits - usedUnits);
       if (fillRests.length > 0) measure.notes.push(...fillRests);
     }
   }
@@ -160,6 +184,36 @@ export function deleteNotes(score: EditableScore, noteIds: Set<string>): Editabl
   for (const part of next.parts) {
     for (const measure of part.measures) {
       measure.notes = measure.notes.filter((n) => !noteIds.has(n.id));
+    }
+  }
+  return next;
+}
+
+/**
+ * Replace selected notes with rests of the *same* duration + dots (Iter2 §2):
+ * "deleting a note left the measure visually incomplete or unexpectedly
+ *  altered the duration of surrounding notes." MuseScore/Noteflight behavior
+ * is to swap the event for a rest placeholder, never shortening neighbors.
+ * Returned score keeps every note-id (easier for undo/suggestion rollback);
+ * pitch is overwritten to "B4" (middle rest position) and `isRest` set.
+ */
+export function deleteNotesAsRests(
+  score: EditableScore,
+  noteIds: Set<string>,
+): EditableScore {
+  if (noteIds.size === 0) return score;
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        note.isRest = true;
+        note.pitch = "B4";
+        delete note.articulations;
+        delete note.dynamics;
+        delete note.tie;
+        delete note.originalGeneratedPitch;
+      }
     }
   }
   return next;

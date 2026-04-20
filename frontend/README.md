@@ -1,131 +1,113 @@
-# Frontend — Tactile Sandbox
+# HarmonyForge — Next.js app
 
-> **This folder is the website:** Next.js app where you upload music, configure generation, edit the score, and use the **Theory Inspector**.  
-> The **harmony engine** lives in `../backend/` — the browser calls it over HTTP.
-
----
-
-## At a glance
-
-| Topic | Summary |
-|-------|---------|
-| **Stack** | Next.js (App Router), **RiffScore** as the main editor, Zustand for state |
-| **Default URLs** | App **:3000**, engine **:8000** (when you use `make dev` from repo root) |
-| **AI features** | Optional; need `OPENAI_API_KEY` in `.env.local` for full inspector |
+The **entire product** runs here: UI (App Router), `/api/*` route handlers, and the SATB engine under [`src/server/engine/`](src/server/engine). Same-origin `fetch` — no separate backend URL.
 
 ---
 
-## Run the app
+## Stack
 
-**Recommended (full stack from repo root):**
+| Area | Details |
+|------|---------|
+| UI | Next.js, React, Tailwind, RiffScore (see `patches/`) |
+| State | Zustand (`src/store/`) |
+| Audio | Tone.js |
+| Engine | `src/server/engine/` — parsers, solver, SATB→MusicXML |
+| Tests | Vitest — `src/**/*.test.ts` and `src/server/engine/**/*.test.ts` |
+
+---
+
+## Run
+
+From repo root (recommended):
 
 ```bash
-cd ..                    # repo root
-make install             # once
-make dev                 # engine + this app
+cd ..
+make install
+make dev
 ```
 
-Open **http://localhost:3000**.
-
-**Frontend only** (you must already have the engine running separately):
+Or from this folder:
 
 ```bash
-cd frontend
 npm install
 npm run dev
 ```
 
-```mermaid
-flowchart LR
-  subgraph browser [Your browser]
-    U[localhost:3000]
-  end
-  subgraph next [This Next.js app]
-    P[Pages + API routes]
-  end
-  subgraph engine [Backend]
-    API[localhost:8000]
-  end
-  U --> P
-  P -->|"NEXT_PUBLIC_API_URL"| API
+Default URL: **http://localhost:3000**
+
+---
+
+## Environment
+
+1. Copy **`.env.example`** → **`.env.local`** (same directory as this README).  
+2. Never commit `.env.local`.
+
+The template only defines:
+
+```bash
+OPENAI_API_KEY=
 ```
 
----
-
-## Environment variables
-
-1. Copy **`.env.example`** → **`.env.local`** (same folder as this README).
-2. Never commit `.env.local` — it is git-ignored.
-
-| Variable | Who reads it | Meaning |
-|----------|--------------|---------|
-| `OPENAI_API_KEY` | Server (API routes) | Powers Theory Inspector LLM calls; leave empty to use offline fallbacks where supported |
-| `OPENAI_BASE_URL` / `OPENAI_URL` | Server | Custom OpenAI-compatible API base |
-| `OPENAI_MODEL` | Server | Optional model override |
-| `NEXT_PUBLIC_API_URL` | **Browser** | Base URL of the engine (default `http://localhost:8000`) |
-| `NEXT_PUBLIC_*` study vars | Browser | M5 user-study toggles — see [docs/plan.md](../docs/plan.md) (M5 section) |
-
-> **`NEXT_PUBLIC_*` is public.** Do not put secrets there; anything with that prefix ships to the client bundle.
+Set it if you use the Theory Inspector LLM; leave blank for offline fallbacks. Advanced tuning (solver limits, OMR paths, etc.) is optional and documented in code comments and [docs/deployment.md](../docs/deployment.md) — not in `.env.example` on purpose.
 
 ---
 
-## Routes (pages)
+## Routes
 
-| URL | What you see |
-|-----|----------------|
-| `/` | Playground: upload, onboarding modal, link to product tour |
-| `/onboarding` | Same upload flow; onboarding always available (good for demos) |
-| `/document` | Preview score, mood + instruments, **Generate** |
-| `/sandbox` | Score editor, playback, export, **Theory Inspector** |
+| URL | Purpose |
+|-----|---------|
+| `/` | Upload / playground |
+| `/document` | Preview + generate |
+| `/sandbox` | Editor, playback, inspector |
 
-**Server APIs** live under `src/app/api/` (theory inspector, preview helpers, proxies to the engine, etc.).
+| API (sample) | Purpose |
+|--------------|---------|
+| `POST /api/generate-from-file` | Intake + SATB MusicXML |
+| `POST /api/theory-inspector` | LLM stream |
+| `GET /api/health` | Health check |
+
+See [README.md](../README.md) for the full list.
 
 ---
 
-## Where things live in `src/`
+## Source layout
 
 ```text
 src/
-├── app/           Pages, layouts, route handlers (API)
-├── components/    UI building blocks and screens
-├── lib/           AI clients, study config, music helpers
-├── store/         Zustand (upload, score, inspector, …)
-└── hooks/         Playback, RiffScore sync, etc.
+├── app/           Pages and route handlers
+├── components/    UI
+├── hooks/
+├── lib/           AI helpers, music utils
+├── server/engine/ Engine (Node)
+└── store/         Zustand
 ```
 
-| Area | Think of it as… |
-|------|------------------|
-| `app/` | URLs and server endpoints |
-| `components/` | Everything visible on screen |
-| `store/` | Single source of truth for the score (**`EditableScore`**) |
-| `hooks/` | Glue between RiffScore UI and the store |
+---
 
-**Score truth:** **`EditableScore`** in the store is canonical; **`useRiffScoreSync`** keeps the RiffScore widget and the store in sync.
+## RiffScore
+
+`riffscore` is patched via `patch-package` (`postinstall`). After upgrading the dependency, re-run `npm install`.
 
 ---
 
-## RiffScore patch
+## Scripts
 
-The **`riffscore`** package is modified with **`patch-package`** (`patches/` + `postinstall` in `package.json`). After upgrading RiffScore or changing patches, run **`npm install`** again so patches apply.
+| Command | What |
+|---------|------|
+| `npm test` | Vitest |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run test-engine` | CLI smoke → `engine-cli-output/` |
 
----
-
-## Test and build
-
-```bash
-cd frontend
-npm run test     # Vitest
-npm run build    # Production build
-```
-
-From repo root, **`make build`** also builds the engine and this app.
+From repo root, `make verify` = test + lint + build.
 
 ---
 
-## More reading
+## More docs
 
-| Doc | Use when… |
-|-----|-----------|
-| [../docs/plan.md](../docs/plan.md) | You need the feature checklist and manual verification steps |
-| [../docs/progress.md](../docs/progress.md) | You need recent decisions and known issues |
-| [../docs/README.md](../docs/README.md) | You want the full documentation index |
+| Doc | When |
+|-----|------|
+| [../docs/plan.md](../docs/plan.md) | Checklist |
+| [../docs/progress.md](../docs/progress.md) | Recent work |
+| [../docs/deployment.md](../docs/deployment.md) | Hosting |
+| [../docs/design/](../docs/design/) | UI design spec |

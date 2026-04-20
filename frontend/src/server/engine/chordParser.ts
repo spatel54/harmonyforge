@@ -1,6 +1,7 @@
 /**
- * HarmonyForge Engine — Roman numeral chord parser
+ * HarmonyForge Logic Core — Roman numeral chord parser
  * Maps Roman numerals to pitch classes given key context.
+ * Supports: I, ii, iii, IV, V, vi, vii°, V7, ii7, iiø7, inversions (6, 6/4, 6/5, 4/3, 4/2)
  */
 
 import type { KeyContext, ParsedChord } from "./types";
@@ -89,7 +90,7 @@ function parseRoman(roman: string): {
     if (s[i] === "°" || s[i] === "o") {
       quality = "diminished";
       i++;
-    } else if (s[i] === "ø" || s[i] === "∅") {
+    } else if (s[i] === "ø" || (s[i] === "∅")) {
       quality = "half-diminished";
       hasSeventh = true;
       i++;
@@ -103,25 +104,55 @@ function parseRoman(roman: string): {
     } else if (s[i] === "6") {
       if (s.slice(i, i + 3) === "6/4") {
         i += 3;
-        return { degree, accidental, quality, hasSeventh, inversion: "64" };
+      return {
+        degree,
+        accidental,
+        quality,
+        hasSeventh,
+        inversion: "64",
+      };
       }
       if (s.slice(i, i + 3) === "6/5") {
         i += 3;
         hasSeventh = true;
-        return { degree, accidental, quality, hasSeventh, inversion: "65" };
+        return {
+          degree,
+          accidental,
+          quality,
+          hasSeventh,
+          inversion: "65",
+        };
       }
       i++;
-      return { degree, accidental, quality, hasSeventh, inversion: "6" };
+      return {
+        degree,
+        accidental,
+        quality,
+        hasSeventh,
+        inversion: "6",
+      };
     } else if (s[i] === "4") {
       if (s.slice(i, i + 3) === "4/3") {
         i += 3;
         hasSeventh = true;
-        return { degree, accidental, quality, hasSeventh, inversion: "43" };
+        return {
+          degree,
+          accidental,
+          quality,
+          hasSeventh,
+          inversion: "43",
+        };
       }
       if (s.slice(i, i + 3) === "4/2") {
         i += 3;
         hasSeventh = true;
-        return { degree, accidental, quality, hasSeventh, inversion: "42" };
+        return {
+          degree,
+          accidental,
+          quality,
+          hasSeventh,
+          inversion: "42",
+        };
       }
       i++;
     } else {
@@ -129,7 +160,13 @@ function parseRoman(roman: string): {
     }
   }
 
-  return { degree, accidental, quality, hasSeventh, inversion: "root" };
+  return {
+    degree,
+    accidental,
+    quality,
+    hasSeventh,
+    inversion: "root",
+  };
 }
 
 /** Triad intervals from root: [root, third, fifth] in semitones */
@@ -171,14 +208,16 @@ function seventhInterval(quality: string, isDominant7: boolean): number {
 function degreeToRootPc(degree: number, key: KeyContext): number {
   const scale = key.mode === "major" ? MAJOR_SCALE : MINOR_SCALE;
   const d = ((degree - 1) % 7 + 7) % 7;
-  const semitones = scale[d];
+  const scaleIndex = d;
+  const semitones = scale[scaleIndex];
   const tonicPc = tonicToPc(key.tonic);
   return mod12(tonicPc + semitones);
 }
 
 /** Parse Roman numeral to ParsedChord */
 export function parseChord(roman: string, key: KeyContext): ParsedChord {
-  const { degree, accidental, quality, hasSeventh, inversion } = parseRoman(roman);
+  const { degree, accidental, quality, hasSeventh, inversion } =
+    parseRoman(roman);
   const rootPc = mod12(degreeToRootPc(degree, key) + accidental);
   const [r, t, f] = triadIntervals(quality);
   const root = mod12(rootPc + r);
@@ -187,6 +226,7 @@ export function parseChord(roman: string, key: KeyContext): ParsedChord {
 
   let seventhPc: number | undefined;
   let chordTones: number[];
+
   if (hasSeventh) {
     const seventh = seventhInterval(quality, hasSeventh);
     seventhPc = mod12(rootPc + seventh);
@@ -218,7 +258,6 @@ export function parseChord(roman: string, key: KeyContext): ParsedChord {
       break;
     default:
       bassPc = root;
-      break;
   }
 
   return {
@@ -230,4 +269,3 @@ export function parseChord(roman: string, key: KeyContext): ParsedChord {
     chordTones,
   };
 }
-

@@ -6,7 +6,12 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20) — **end goal, approach, steps so far, current focus / risks**
+- [Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)
+- [Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)
 - [End Goal](#end-goal)
+- [Work log — Iteration 1+2 study refinement (2026-04-18)](#wl-study-refinement-2026-04-18)
+- [Work log — Glass Box pedagogy callouts (2026-04-19)](#wl-glass-box-pedagogy-2026-04-19)
 - [Work log — Documentation, deployment, repo hygiene (2026-04-07)](#wl-docs-deploy-2026-04-07)
 - [Work log — Generate timeout mitigation (2026-04-07)](#wl-generate-timeout-2026-04-07)
 - [Work log — Symbolic intake & MusicXML markers (2026-04-07)](#wl-intake-symbolic-2026-04-07)
@@ -26,10 +31,22 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
-### Last updated (2026-04-13; sandbox exports + doc sync)
+### Last updated (2026-04-20)
+
+- **Repository hygiene & documentation (2026-04-20):** Removed legacy folders (`miscellaneous/chamber-music-fullstack/`, Azure/DO deploy scaffolding, duplicate frontend Dockerfile, root `node_modules`, Claude-flow tooling), merged iteration notes into **[iterations.md](iterations.md)**, consolidated design specs under **`docs/design/`**, added **`docs/archive/`** index, simplified **`.env.example`** (OpenAI key only), tightened **`.gitignore`**, added **`.github/workflows/ci.yml`**. Updated root / `frontend` / `miscellaneous` / `docs` READMEs; repaired stale links in `plan.md`, `Taxonomy.md`, and `context/system-map.md`. See **[Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)**.
+- **Consolidation + PDF + residual sweep (2026-04-19):** Single-deployable Next.js app; engine under `frontend/src/server/engine/*`; PDF path: client `pdfjs-dist` + Docker OMR; **plan §1.9m resolved**. INTENT → `intentRouter.ts`; IDEA_ACTIONS + `staffIndex`; ADR 003 transpose slice; `make verify` green. See **[Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)**.
+- **Canonical handover:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** (anchor `#program-narrative-2026-04-19` retained below for old links).
+- **Glass Box pedagogy (2026-04-19):** `GlassBoxPedagogyCallout` on Document (`EnsembleBuilderPanel`) and Theory Inspector — harmony generation = deterministic rules; conversational AI = Inspector only. See **[Work log — Glass Box pedagogy callouts (2026-04-19)](#wl-glass-box-pedagogy-2026-04-19)**.
+
+### Last updated (2026-04-18; Iteration 1+2 study refinement)
+
+- **Iteration 1+2 study refinement (2026-04-18):** Comprehensive pass addressing every friction point in [docs/iterations.md](iterations.md). Engine now emits proper tenor-treble clef (`G/2/-1`); harmony rhythm inherits melody onsets by default with selectable density (`chordal`/`mixed`/`flowing`); solver penalizes S==A octave doublings for voice independence; anacrusis is auto-detected from `implicit="yes"` or short measure 0 and drives implicit pickup output. Document page lifts mood/genre/instruments into a session-persistent store; Ensemble Builder adds a Harmony motion segmented control and plain-language tooltips (including SATB). Sandbox delete now replaces notes with same-duration rests (never alters neighbors); 8th+16th sequences rest-fill per beat boundary; RiffScore toolbar plugins show visible labels + shortcut hints; suggestion accept flushes pending edits first to avoid destructive overwrite. Theory Inspector gets empty-state starter prompts, a pinned Musical Goal field, an Edit-this-bar CTA that runs a region-scoped stylist pass, progressive disclosure for the rationale stack, honest INTENT-or-decline handling for action requests, and a near-bottom-guard scroll. Playback wraps Tone.start/Part creation in try/catch with a shared `useDestinationVolume` slider (default -6 dB, persisted to localStorage) on the sandbox header. Also fixed the pre-existing Next build type error on `riffscoreAdapter.toolbarPlugins` via a narrow cast so `make verify` is green.
+- **Verification (2026-04-18):** `make verify` passes (backend 104 tests + lint + engine TS build + Next production build). Frontend vitest 70/71 pass (the lone failure, `needsEnginePreviewForExtension.test.ts`, predates this pass and is a documented baseline mismatch). `npm run lint` exits 0 with four pre-existing warnings.
+
+
 
 - **Tactile Sandbox exports (2026-04-13):** All export formats in the modal now derive from the **live** score: **`getLiveScoreAfterFlush`** before reading Zustand; **`openExportModal`** snapshots **`scoreToMusicXML`** for preview + Score Review; toolbar copy/save/print/export use the same flush contract; coachmark **`setExportModalOpen(true)`** goes through the bridge so the tour sees fresh XML. **Formats shipped:** MusicXML, JSON, MIDI (**`scoreToMidi.ts`**, SMF type 1), PNG (**`html-to-image`** on export preview viewport), WAV (**`Tone.Offline`** + PCM16 in **`scoreToWav.ts`**), ZIP (**`fflate`**: XML + MID + JSON + server chord-chart), chord-chart (**`POST /api/export-chord-chart`**), PDF via **`window.print()`** + **`.hf-sandbox-print-target`** / **`.hf-print-hide`** in **`globals.css`**. **Deps:** `html-to-image`, `fflate`. **Tests:** `scoreToMidi.test.ts`. Full narrative: **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**.
-- **Current failure (unchanged primary):** **[plan §1.9m](plan.md)** — production-reliable **PDF → MusicXML / OMR**. **New build gate (2026-04-13):** `npm run build` / `tsc` can fail on **`riffscoreAdapter.ts`** — **`toolbarPlugins`** is patched into RiffScore at runtime but **not** declared on upstream **`RiffScoreConfig`** types; align types (module augmentation or narrow cast) so **`make build`** is green.
+- **PDF / OMR (2026-04-19):** **[plan §1.9m](plan.md)** is **resolved** for product purposes (client preview everywhere; full OMR on self-hosted Docker). **Residual:** Vercel serverless still has no bundled oemer — by design ([deployment.md](deployment.md)). **Build:** `riffscoreAdapter.ts` narrow cast for patch-package `toolbarPlugins` remains the typing strategy until upstream types expose the field.
 - **Symbolic intake (engine + frontend):** Broadened acceptance of **MusicXML / MIDI / MXL** when filenames lie (`.txt`, `.mxml`, extensionless, **MIDI without `.mid`**), aligned **Playground → Document** preview with **`POST /api/to-preview-musicxml`** for every extension except `.xml`/`.musicxml`, added **ZIP-as-`.xml`** handling on Document, shared **`musicXmlMarkers.ts`** (namespace-prefixed roots, inspired by **`newfiles/harmonize-core.ts`** validation), bounded UTF-8 sniff for binaries, **`extractEmbeddedMusicXml`** for prefixed close tags, **`readMelodyXml`** prefers server preview when present (reviewer arm + mislabeled ZIP). See **[Work log — Symbolic intake & MusicXML markers (2026-04-07)](#wl-intake-symbolic-2026-04-07)**.
 - **`@tonejs/midi` under `tsx`:** Named ESM `import { Midi }` crashed **`make dev`** on Node 24; **`midiParser.ts`** now loads the package via **`createRequire(join(process.cwd(), "package.json"))`** (expects **`cwd` = `backend/`** — normal for **`make dev`** / Jest). Re-run **`npm run build:engine`** after changes.
 - **Generate timeout / greedy SATB:** Document’s **120s** `AbortController` often fired while the engine had **no wall-clock cap** (`HF_SOLVER_MAX_MS` unset) and, worse, **greedy SATB only ran when N ≥ 56**, so many real scores (fewer chord slots) went **straight to backtracking** and could burn minutes. **Fix:** `auto` mode **always tries greedy first**; **generate-from-file** and **validate-from-file** default **~108s** solver `maxMs` when env is unset (set **`HF_SOLVER_MAX_MS=0`** to disable); frontend default generate timeout raised to **180s** with clearer copy (**PDF/OMR** vs symbolic file).
@@ -37,15 +54,68 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - **6-step product tour (Pencil / `newfiles`):** Replaced the 13-step minimal overlay with **portal spotlight** (`data-coachmark="step-1"`…`step-6`), **`useSandboxTourBridge`** (sandbox registers inspector/export setters), **tour bypass** on `/document` and `/sandbox` when `isActive`, **`/samples/tour_demo.xml`** seed for sandbox without prior generation, **`hf-coachmarks-v2`** persist including **`hasDismissed`**, **`completeOnboarding`** on skip/done, **`WelcomeGuideButton`** hidden when coachmarks enabled. See **[Work log — 6-step Pencil coachmark tour (2026-04-07)](#wl-coachmarks-6step-2026-04-07)**.
 - **Theory Inspector — full session write-up:** See **[Work log — Theory Inspector: split panel, idea actions, ghost labels, apply fix (2026-04-06)](#wl-inspector-split-ideas-2026-04-06)** for end goal, approach, file-level steps, and **what was broken vs fixed** (IDEA_ACTIONS `noteId` / silent apply failure). **Residual risks** are listed there and in **[Current Focus](#current-focus)**.
 - **Theory Inspector UX (shipped 2026-04-06):** Panel split (**note/recommendations** top, **chat** bottom); **`<<<IDEA_ACTIONS>>>`** JSON + Accept/Reject; **`NOTE_IDS_FOR_IDEA_ACTIONS`** in tutor evidence + **`resolveIdeaActionNoteId`** fallback + inspector debug line on failure; stylist ghost **always-visible pitch**; note-input **preview pitch** label; study log **`idea_action_accepted` / `idea_action_rejected`**.
-- **Documentation overhaul (completed):** Root [README.md](../README.md) reworked (RiffScore-first, journey diagrams, Makefile, folder map). Per-folder guides: [frontend/README.md](../frontend/README.md), [backend/README.md](../backend/README.md), [miscellaneous/README.md](../miscellaneous/README.md), [.cursor/README.md](../.cursor/README.md), [backend/engine/README.md](../backend/engine/README.md). [docs/README.md](README.md) expanded into a full index; [plan.md](plan.md) gained reader-facing **Status at a glance** + **Current snapshot** (replacing the wall-of-text blockquote); this file gained **How to read**, **Quick links** (with stable anchors), and **Last updated** stubs.
+- **Documentation overhaul (completed):** Root [README.md](../README.md) reworked (RiffScore-first, journey diagrams, Makefile, folder map). Per-folder guides: [frontend/README.md](../frontend/README.md), [miscellaneous/README.md](../miscellaneous/README.md), [.cursor/README.md](../.cursor/README.md), [docs/README.md](README.md). [plan.md](plan.md) gained reader-facing **Status at a glance** + **Current snapshot**; this file gained **How to read**, **Quick links** (with stable anchors), and **Last updated** stubs.
 - **Second README pass (visual / onboarding):** Tables, ASCII + Mermaid diagrams, “start here” paths, plain-language callouts across the same README set.
-- **Deployment playbook (new doc):** [deployment.md](deployment.md) — Vercel (**`frontend/`** root), separate backend host, **`NEXT_PUBLIC_*` vs secrets**, **`CORS_ORIGIN`** on the engine, preview-deploy caveat.
-- **Root `node_modules` hygiene:** [node_modules/README.md](../node_modules/README.md) explains non-canonical root installs; root [`.gitignore`](../.gitignore) ignores `/node_modules/*` but **keeps** `!/node_modules/README.md` so the explainer can be committed without tracking dependencies.
+- **Deployment playbook:** [deployment.md](deployment.md) — Vercel vs self-hosted Docker (single Next app; no separate API host).
+- **Root `node_modules`:** Accidental installs at repo root are ignored (see root [`.gitignore`](../.gitignore)); canonical deps live in **`frontend/node_modules/`**.
 - **Git workflow:** `origin/main` diverged from local once (remote “AI engine” description commit vs local README commit); reconciled with **`git pull --rebase origin main`** then **`git push`** — recommend `git config pull.rebase true` (or pass **`--rebase`** per pull) to avoid the “Need to specify how to reconcile” prompt.
 
-**Holistic refinement (2026-04):** see **[Holistic refinement program](#holistic-refinement-2026-04)** for the full narrative (playback + intake UX + verify-strict + inspector refresh + ADR 003 + engine tests). **Symbolic MusicXML/MIDI intake** tightened (2026-04-07) — see **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Tactile Sandbox exports** shipped (2026-04-13) — see **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**. **Sharpest remaining engineering risk:** PDF/OMR (**[plan §1.9m](plan.md)**). **Build / types:** Next **`npm run build`** may fail until **`riffscoreAdapter.ts`** **`toolbarPlugins`** is reconciled with upstream RiffScore **`RiffScoreConfig`** (runtime patch vs declared types). **Secondary:** frontend hook **warnings** (lint still exits 0), idea-action edge cases, deployment execution; **edge:** run **`node engine/dist/server.js`** only with **`cwd` = `backend/`** so MIDI `createRequire` resolves **`@tonejs/midi`**.
+**Holistic refinement (2026-04):** see **[Holistic refinement program](#holistic-refinement-2026-04)**. **Symbolic intake** — **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Sandbox exports** — **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**. **Iteration 1+2 + pedagogy:** **[Program narrative (2026-04-20)](#program-narrative-2026-04-20)**, **[Iteration 1+2](#wl-study-refinement-2026-04-18)**, **[Glass Box callouts](#wl-glass-box-pedagogy-2026-04-19)**. **Sharpest product-remaining risks:** deploy + study execution (see narrative), not a single blocking engine bug. **`@tonejs/midi`** loads via **`createRequire(import.meta.url)`** — no `cwd` requirement.
 
 For checklist and verification steps, pair this file with **[plan.md](plan.md)** and **[README.md](../README.md)**.
+
+<a id="program-narrative-2026-04-20"></a>
+<a id="program-narrative-2026-04-19"></a>
+
+## Program narrative — where we are (2026-04-20)
+
+This section is the **handover-friendly summary**: end goal, approach, what has landed (including repo hygiene), and **what we are focused on next** — not necessarily a single “broken” subsystem. Detailed file-level notes live in the dated **work logs** below. *(Anchor `#program-narrative-2026-04-19` still resolves here for older links.)*
+
+### End goal
+
+- **Product flow:** **Upload → Document** (preview + ensemble config) → **Generate Harmonies** (or **melody-only** continuation in the M5 reviewer arm) → **Sandbox** with RiffScore editing, playback, exports, and the **Theory Inspector**.
+- **Glass Box stance:** **Harmony generation** is **deterministic** — theory rules, constraints, and search over voicings — not an LLM inventing parts. **Conversational AI** is scoped to the **Theory Inspector** (explain, audit, stylistic suggestions). **In-app pedagogy:** [`GlassBoxPedagogyCallout.tsx`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) on Document and Inspector.
+- **Research objectives** ([plan.md](plan.md) § Objective): **expressive sovereignty**, **copyright-safe axiomatic theory**, **pedagogical transparency**.
+- **M5 user study:** **RQ1** / **RQ2** instrumentation in-app; optional logging — [plan.md — M5](plan.md#m5--user-study-rq1--rq2--app-instrumentation). Condensed participant feedback: [iterations.md](iterations.md).
+
+### Approach
+
+1. **Single Next.js deployable:** The **engine** lives in **`frontend/src/server/engine/`** and is imported by **`/api/*` route handlers** — no separate Express service, no `NEXT_PUBLIC_API_URL`, no CORS split. Optional **root `Dockerfile`** for self-hosted full PDF/OMR.
+2. **Prove changes with tests:** **Vitest** covers UI and engine (`frontend/src/**/*.test.ts`, `src/server/engine/**/*.test.ts`). **`make verify`** = test + lint + build.
+3. **Two PDF stories:** (a) **Browser:** `pdfjs-dist` + `useClientPdfPreview` so Document always shows a raster preview. (b) **Server:** pdfalto + Poppler + **oemer** on Docker or a equipped host; client may attach **PNG page images** for multi-page merges (`mergeParsedScores`).
+4. **Log work in dated slices:** Consolidation, symbolic intake, exports, Iteration 1+2, Glass Box copy, **repo hygiene (2026-04-20)** — each has a **work log** section so history does not depend on chat transcripts.
+5. **Risk ordering:** Symbolic paths first for reliability; PDF/OMR as **environment-dependent** capability ([plan §1.9m](plan.md) **shipped** with platform caveats).
+
+### Steps completed so far (consolidated)
+
+| Area | What it means (pointers) |
+|------|---------------------------|
+| **Monorepo consolidation (2026-04-19)** | Engine migrated into Next; proxy removed; `runtime.ts` for handlers; Jest → Vitest; root Docker + `preflight-omr`; [work log](#wl-consolidation-2026-04-19). |
+| **Logic core ([plan](plan.md) §1)** | SATB solver, constraints, `POST /api/generate-from-file`, chord inference, greedy-first + wall-clock caps, genre/mood/instruments/`rhythmDensity`, anacrusis, ADR 003 transpose slice in MusicXML. |
+| **File intake** | MusicXML / MIDI / MXL / PDF·PNG OMR paths; symbolic hardening — [work log](#wl-intake-symbolic-2026-04-07). |
+| **Tactile Sandbox ([plan](plan.md) §2)** | RiffScore-first; patch-package toolbar + scrub bridge; session persistence. |
+| **Theory Inspector ([plan](plan.md) §3)** | FACT blocks, suggest, IDEA_ACTIONS + `staffIndex`, **`<<<INTENT>>>`** → **`intentRouter.ts`** + confirmation UI → store + `router.push` — [work log](#wl-inspector-split-ideas-2026-04-06), [consolidation](#wl-consolidation-2026-04-19). |
+| **Iteration 1+2 (2026-04-18)** | Clefs, rhythm density, voice independence, config persistence, sandbox delete→rest, Inspector UX, playback volume — [work log](#wl-study-refinement-2026-04-18). |
+| **Sandbox exports (2026-04-13)** | Live flush; XML/MIDI/PNG/WAV/ZIP/chord-chart/print — [work log](#wl-sandbox-exports-2026-04-13). |
+| **Glass Box pedagogy (2026-04-19)** | Document + Inspector callouts — [work log](#wl-glass-box-pedagogy-2026-04-19). |
+| **Repository hygiene (2026-04-20)** | Removed legacy demos and duplicate deploy scaffolding; **`docs/design/`** + **`docs/archive/`**; minimal **`.env.example`**; **CI** workflow; README + link sweep — [work log](#wl-repo-hygiene-2026-04-20). |
+
+### Current failure / what we are working on now
+
+There is **no single “the app is blocked” engineering failure** at this snapshot: **`make verify`** is the green bar (tests + lint + build).
+
+**Active focus (choose by role):**
+
+| Track | Status / next move |
+|--------|---------------------|
+| **Deploy** | Runbook: [deployment.md](deployment.md) — Vercel (**root = `frontend`**) vs **Docker** for full PDF OMR. Align env secrets (e.g. `OPENAI_API_KEY`) with host docs. |
+| **PDF / OMR** | **Vercel:** preview only for PDF; generation returns **501** with actionable copy when binaries are absent — **expected**. **Docker / bare metal:** ensure pdfalto build + oemer checkpoints per deployment doc. *Note:* **`miscellaneous/pdfalto/`** may be empty until the vendored tree is populated — `make pdfalto` needs sources there. |
+| **Product / study** | **M5** execution (sessions, surveys off-repo), monitoring [iterations.md](iterations.md)-style friction in new runs. |
+| **Code health (non-blocking)** | Residual **IDEA_ACTIONS** edge cases (duplicate part names, rare `noteId` mismatch); optional **`react-hooks/exhaustive-deps`** cleanups; **ADR 003** follow-ons (deeper multi-clef, JSON score deltas) per [adr/003](adr/003-multi-clef-transposition-scope.md). |
+
+**Deprecated narrative:** “Split `backend/engine` vs Next” — the repo is **single-app**; ignore older docs that reference a separate backend process unless marked historical.
+
+---
 
 ## End Goal
 
@@ -96,6 +166,171 @@ Reorganized the monorepo into **`backend/`** (Node package: `engine/`, `scripts/
 
 ---
 
+<a id="wl-consolidation-2026-04-19"></a>
+
+## Work log — Consolidation + PDF + residuals (2026-04-19)
+
+### End goal (this thread)
+
+Merge HarmonyForge into **one deployable Next.js app**, make **PDF input truly work** (both on Vercel and self-hosted), and close every residual flagged in [plan.md](plan.md) / [progress.md](progress.md) — failing baseline test, hook-lint warnings, IDEA_ACTIONS ambiguity, tutor INTENT not wired, ADR 003 transposition slice, audio unlock, selection cursor over stems.
+
+### Approach
+
+1. Lift the Express engine into Next route handlers (same TypeScript, imported directly by `/api/*` handlers). No proxy, no CORS.
+2. Keep the engine deps Node-only (`@tonejs/midi`, `adm-zip`, `fast-xml-parser`, `musicxml-interfaces`) via `serverExternalPackages`.
+3. Two PDF stories:
+   - **Browser**: `pdfjs-dist` rasterizes every PDF to PNGs client-side so Document always renders a preview.
+   - **Server**: self-hosted Docker image bundles pdfalto + Poppler + Python/oemer; `intakeImagePagesToParsedScore` + `mergeParsedScores` close the "page 1 only" limit.
+4. Ship residual fixes in the same pass so the repo is green: strict lint, complete test suite, working build.
+
+### Steps completed (artifact map)
+
+| Area | What shipped |
+|------|--------------|
+| **Engine migration** | `frontend/src/server/engine/*` (all files from the old `backend/engine`); imports stripped of `.js` suffixes; `@tonejs/midi` resolves via `createRequire(import.meta.url)` so cwd no longer matters. |
+| **Runtime helpers** | [`frontend/src/server/engine/runtime.ts`](../frontend/src/server/engine/runtime.ts) centralizes validation + solver budgets + intake routing for every `/api/*` handler. |
+| **Inline routes** | [`/api/generate-from-file`](../frontend/src/app/api/generate-from-file/route.ts), [`/api/to-preview-musicxml`](../frontend/src/app/api/to-preview-musicxml/route.ts), [`/api/validate-from-file`](../frontend/src/app/api/validate-from-file/route.ts), [`/api/validate-satb-trace`](../frontend/src/app/api/validate-satb-trace/route.ts), [`/api/export-chord-chart`](../frontend/src/app/api/export-chord-chart/route.ts), plus new [`/api/health`](../frontend/src/app/api/health/route.ts). All use `runtime: "nodejs"` + `maxDuration: 300`. |
+| **Proxy retirement** | Deleted `frontend/src/lib/server/engineForward.ts`; removed the entire `backend/` folder (CLI moved to `frontend/scripts/run-engine-cli.ts`); dropped `backend/Dockerfile` + `backend/requirements.txt` (latter relocated to repo root). |
+| **Makefile + env** | Single-process `make dev` (no `dev:backend`); removed `NEXT_PUBLIC_API_URL` / `CORS_ORIGIN` from [`.env.example`](../.env.example) and [`frontend/.env.example`](../frontend/.env.example); new `make docker-build` / `make docker-run` / `make preflight-omr` targets. |
+| **Client PDF preview** | New [`useClientPdfPreview`](../frontend/src/hooks/useClientPdfPreview.ts) (lazy `pdfjs-dist`, worker copied to `public/pdfjs/` by postinstall). `ScorePreviewPanel` renders page 1 + caption when no MusicXML preview yet. |
+| **Server PNG intake** | [`fileIntake.ts`](../frontend/src/server/engine/parsers/fileIntake.ts) — `isProbablyRasterImage`, `intakeImagePagesToParsedScore`, `runOemerOnImage` (direct PNG → oemer, no pdftoppm). `mergeParsedScores` stitches N pages. |
+| **Form handling** | `readFormFile` + new `readFormFiles` in runtime.ts so routes accept `pages[]` alongside `file`. Document `/document` generates PDF uploads with rasterized pages attached. |
+| **Self-hosted image** | Root [`Dockerfile`](../Dockerfile) (3-stage: pdfalto-builder → next-builder → runtime with Poppler + Python 3.11 venv + oemer). [`docker-compose.yml`](../docker-compose.yml) references it and persists oemer checkpoints via a named volume. [`preflight-omr.sh`](../frontend/scripts/preflight-omr.sh) warms the checkpoint cache on first boot. |
+| **Error UX** | [`intakeErrorHints.ts`](../frontend/src/lib/ui/intakeErrorHints.ts) now classifies PDF failures (tooling missing, checkpoints missing, no staves) and emits matching copy. |
+| **Baseline test fix** | `needsEnginePreviewForExtension.test.ts` updated to match the canonical "always server intake" contract. 190/190 Vitest tests pass. |
+| **Lint warnings** | Fixed the remaining four `react-hooks/exhaustive-deps` + `prefer-const` warnings. ESLint exits 0 with **0 warnings**. `public/pdfjs/**` and `.next/**` excluded from lint globs. |
+| **IDEA_ACTIONS resolver** | [`ideaActionResolve.ts`](../frontend/src/lib/music/ideaActionResolve.ts) adds `staffIndex` hint (serialized by the tutor when present), and a nearest-in-measure fallback so ambiguous summaries still land somewhere plausible. [`ideaActionSchema.ts`](../frontend/src/lib/ai/ideaActionSchema.ts) extended with the optional field; `noteExplainContext.ts` emits `STAFF_HINT=<n>` on each `NOTE_ID` FACT line; `NOTE_EXPLAIN_TUTOR_BRIEF` instructs the tutor to copy the hint verbatim. New vitest covers both paths. |
+| **Tutor INTENT auto-wiring** | New [`intentRouter.ts`](../frontend/src/lib/ai/intentRouter.ts) parses `<<<INTENT>>>{…}` JSON with a Zod discriminated union (set_mood / set_genre / set_rhythm_density / set_pickup_beats / regenerate / open_document_page / open_sandbox_page). `useTheoryInspector` strips the block from the rendered body and stores the parsed intent on the chat message. `TheoryInspectorPanel` renders an `IntentConfirmationBubble`; sandbox wires Apply/Dismiss to `useGenerationConfigStore` setters and `router.push`. New study log events `intent_applied` / `intent_dismissed`. |
+| **Generation config store** | Added `pickupBeats` field (+ `setPickupBeats`) so INTENT JSON can request pickup-measure fixes. |
+| **ADR 003 slice** | [`satbToMusicXML.ts`](../frontend/src/server/engine/satbToMusicXML.ts) — `resolveInstrumentTranspose` + `<transpose>` XML for Bb clarinet / Bb trumpet / soprano sax / A clarinet / Eb alto sax / F horn. Solver stays in concert pitch; MusicXML carries the written-pitch mapping. New [`transpose.test.ts`](../frontend/src/server/engine/transpose.test.ts). ADR status flipped to **Accepted**. |
+| **Notehead over stems** | Extended [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) CSS so SVG `<line>` elements (stems/beams) have `pointer-events: none` except for playback/cursor/measure lines. Complements the existing `cursor: grab/grabbing` rules from Iter1 §1. |
+| **Audio unlock** | New [`AudioUnlockBanner`](../frontend/src/components/molecules/AudioUnlockBanner.tsx) detects a suspended `AudioContext` on Sandbox mount and offers a one-click unlock with a silent pre-roll. `usePlayback` now also exposes `audioUnlocked` + `unlockAudio`. |
+| **Test migration** | Backend Jest → frontend Vitest. `vitest.config.ts` enables `globals: true`; tsconfig includes `vitest/globals` types so Jest-style tests compile. `fileIntake.test.ts` rewrote `jest.mock`/`jest.fn` to `vi.mock`/`vi.fn`. `musicxml-interfaces` in `musicxmlParser.ts` converted to lazy `createRequire` load so Node runs do not hit XSLTProcessor. |
+| **Docs** | [`docs/deployment.md`](deployment.md) rewritten for the two supported paths (Vercel vs Docker); [`docs/plan.md`](plan.md) §1.9m marked resolved; [`docs/adr/003-multi-clef-transposition-scope.md`](adr/003-multi-clef-transposition-scope.md) status flipped to Accepted with a 2026-04-19 update block; repo-root and `frontend/README.md` updated to describe the single-deployable topology. |
+
+### Verification
+
+- `cd frontend && npm test` → **190 tests pass** across 35 files (UI + engine + new intent + transpose + intakeErrorHints).
+- `cd frontend && npm run lint` → exit 0, **0 warnings**.
+- `cd frontend && npm run build` → production build succeeds; every `/api/*` handler lists under the manifest; `/api/health` returns `{ status: "ok" }`.
+- Manual: MusicXML upload → Document preview → Generate → Sandbox (unchanged, faster without the HTTP proxy hop). PDF upload on local dev → Document shows the client-rendered page; Generate succeeds when pdfalto + oemer are installed (Docker path). Theory Inspector INTENT confirmation: ask "switch mood to minor and regenerate" → tutor reply includes an Apply button that jumps to `/document` with `mood=minor`.
+
+### Residual / not fixed here
+
+- Vercel-only hosts still cannot run Python-backed OMR; that's a fundamental platform limitation, documented in [deployment.md](deployment.md) Path A.
+- `intent_applied` / `intent_dismissed` event payload is intentionally minimal (action name only) to keep the M5 study log PII-free.
+- Multi-clef writer beyond transposing instruments (alto clef, soprano clef) remains scheduled as the next ADR 003 slice; not blocking this pass.
+
+---
+
+<a id="wl-repo-hygiene-2026-04-20"></a>
+
+## Work log — Repository hygiene & docs consolidation (2026-04-20)
+
+### End goal (this thread)
+
+Reduce repository noise, align documentation with the **single Next.js** architecture, and make onboarding predictable (one env template, one CI gate, clear doc map).
+
+### Approach
+
+1. Delete or relocate **legacy** trees that are not part of the shipping app (reference demos, unused cloud scaffolding, accidental root `node_modules`, editor-only automation folders).
+2. **Merge** overlapping docs (iteration notes → [iterations.md](iterations.md); design specs → [design/README.md](design/README.md)).
+3. **Fix** broken links after moves (`plan.md`, `Taxonomy.md`, `context/system-map.md`, [progress.md](progress.md) pointers).
+4. Keep **`.env.example`** minimal: **`OPENAI_API_KEY` only**; document optional tuning in [deployment.md](deployment.md), not in the template.
+
+### Steps completed
+
+| Item | Detail |
+|------|--------|
+| **Removed** | `miscellaneous/chamber-music-fullstack/`, `.azure/`, `.do/`, old `deploy-azure.yml` / `deploy-do.yml`, root `node_modules`, `frontend/Dockerfile` (duplicate of root), `frontend/.claude*`, stray logs, empty `frontend/src/layouts/`, miscellaneous `.playwright-mcp` |
+| **Docs merged / relocated** | `Iteration1.txt` + `Iteration2.txt` → [iterations.md](iterations.md); `frontend/design-system/` + `frontend/docs/` → [docs/design/](design/README.md) + [docs/archive/](archive/README.md); removed duplicate `system.md` (folded into `MASTER.md`) |
+| **Deleted one-off prompts** | `PROMPT.md`, `verification-prompt.md`, `MVP-Last-Four-Roadmap.md`, `Engine-Test-Run-Log.md`, `Theory-Inspector-Prep.md` (superseded by plan/progress or archive) |
+| **Env** | [`.env.example`](../.env.example), [`frontend/.env.example`](../frontend/.env.example) — API key line only |
+| **Git** | [`.gitignore`](../.gitignore) — `/node_modules/`, `.env` / `.env*.local`, `.DS_Store` |
+| **CI** | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — `npm ci`, test, lint, build in `frontend/` |
+| **READMEs** | Root, `frontend/`, `miscellaneous/`, `docs/`, `docs/design/`, `docs/archive/`, `.cursor/` |
+
+### Verification
+
+- `make verify` after hygiene passes (same gate as before).
+- Manual: follow [docs/README.md](README.md) links; no references to removed `backend/README` or chamber-music paths in index files.
+
+### Residual
+
+- **Historical paragraphs** deeper in [progress.md](progress.md) may still mention `backend/` or old test counts — search when editing.
+- **`miscellaneous/pdfalto/`** may be an empty checkout until the vendored pdfalto tree is restored — document in [miscellaneous/README.md](../miscellaneous/README.md).
+
+---
+
+<a id="wl-glass-box-pedagogy-2026-04-19"></a>
+
+## Work log — Glass Box pedagogy callouts (2026-04-19)
+
+### Shipped
+
+| Area | Detail |
+|------|--------|
+| **Molecule** | [`GlassBoxPedagogyCallout.tsx`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) — three variants: `ensemble-generate`, `ensemble-reviewer`, `inspector`; plain-language separation of deterministic harmony vs LLM. |
+| **Document** | [`EnsembleBuilderPanel.tsx`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) — callout under the panel subtitle; reviewer study arm uses the melody-only copy. |
+| **Sandbox** | [`TheoryInspectorPanel.tsx`](../frontend/src/components/organisms/TheoryInspectorPanel.tsx) — callout below **My musical goal**, above the note/chat split. |
+
+**Verification:** `cd frontend && npm run lint` + `npm run build` (spot-check after edit).
+
+---
+
+<a id="wl-study-refinement-2026-04-18"></a>
+
+## Work log — Iteration 1+2 study refinement (2026-04-18)
+
+### End goal (this thread)
+
+Close every ticket raised in [docs/iterations.md](iterations.md) — user-study participants flagged a wide array of friction across the engine (clefs, rhythm, voice independence), sandbox UX (selection, delete, labels), Theory Inspector (verbosity, starter prompts, missed goals, scroll), and audio (crashes, inaudibility). Ship a single refinement pass that raises the baseline before further user studies.
+
+### Approach
+
+Phased plan ordered by risk (engine correctness first, then Document UX, Sandbox, Inspector, Playback, verification). Every phase paired with unit tests so the baseline stays green.
+
+### Steps completed (artifact map)
+
+| Area | What shipped |
+|------|--------------|
+| **A1. Tenor clef** | [`satbToMusicXML.ts`](../frontend/src/server/engine/satbToMusicXML.ts) `clefXmlForPart` now emits `G/2/-1` (tenor treble clef) for the Tenor voice and explicit "tenor voice" part names; no more mezzo-soprano C-clef surprise. Regression test added to [`filePipeline.test.ts`](../frontend/src/server/engine/filePipeline.test.ts). |
+| **A2. Rhythm density** | New `RhythmDensity = "chordal" \| "mixed" \| "flowing"` on `GenerationConfig`; `satbToMusicXML` subdivides slot spans on melody onsets (mixed default) or the smallest melodic value (flowing). Server route accepts `rhythmDensity` in the multipart config. Three new tests. |
+| **A3. Voice independence** | [`solver.ts`](../frontend/src/server/engine/solver.ts) `candidateMotionScore` penalizes S-A unison (80) and S-A pitch-class doubling (18) and same-direction/same-distance S-A motion (6); bias visible to both greedy and backtracking passes. Guard test added. |
+| **A4. Anacrusis** | Partwise + timewise parsers detect `@implicit="yes"` / `number="0"` / short measure 0 and record `pickupBeats` on `ParsedScore`. `chordInference` starts chord placement at the first downbeat; `satbToMusicXML` builds a variable-length layout that emits measure 0 with `implicit="yes"` + leading rests in harmony staves so downbeats stay aligned. New [`parsers/anacrusis.test.ts`](../frontend/src/server/engine/parsers/anacrusis.test.ts) + pipeline test. |
+| **B1. Config persistence** | New [`useGenerationConfigStore`](../frontend/src/store/useGenerationConfigStore.ts) (sessionStorage-backed) holds mood, genre, rhythm density, instruments, and detected key. `EnsembleBuilderPanel` reads from the store; `DocumentPage` rehydrates + seeds detected key from the uploaded score. Five vitest cases. |
+| **B2. Harmony motion UI** | Ensemble Builder adds a segmented "Harmony motion" control (Chordal / Mixed / Flowing) with live-hint copy; threaded through `GenerationConfig` → `/api/generate-from-file` → engine. |
+| **B3. Plain-language tooltips** | New [`HoverTooltip`](../frontend/src/components/atoms/HoverTooltip.tsx) wraps the existing Tooltip atom with hover/focus state + info-icon trigger. Mood, Genre, Harmony motion, SATB voices now each render an `ℹ︎` tooltip button (e.g. "SATB = Soprano, Alto, Tenor, Bass"). Mood/genre/density buttons also carry `title` attributes. |
+| **C1. Selection cursor** | Inline RiffScore CSS override: `cursor: grab` on the score canvas, `cursor: grabbing` while dragging, notehead path/text priority over stem lines (`pointer-events: stroke` on SVG `line`s). |
+| **C2. Delete → rest** | New `deleteNotesAsRests` in [`scoreUtils.ts`](../frontend/src/lib/music/scoreUtils.ts) swaps selected events for same-duration rests (keeps IDs, strips articulations/dynamics/tie). `useScoreStore.deleteSelection` now uses it so Delete never alters neighbor durations. New vitest. |
+| **C3. 8+16 alignment** | `makeBeatAwareRestNotes` + `normalizeScoreRests` update fill gaps beat-by-beat inside one quarter boundary before crossing into the next. Test covers a measure with `q q 8 16` + ensures the filler starts with a 16th, not a quarter that spans beats. |
+| **C4. Labeled toolbar** | RiffScoreEditor toolbar plugins now set `showLabel: true` on every item with plain-language labels + shortcut hints ("Undo ⌘Z", "+ Semitone ↑", "Dotted (.)", "Piano", "Export XML"). |
+| **C5. Non-destructive apply** | `handleAcceptCorrection` / `handleAcceptAll` in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) flush RiffScore edits to Zustand first, then read the live score — fixes the "feels like undo" regression when accepting a suggestion with unsynced edits. |
+| **D1. Starter prompts** | New [`starterPrompts.ts`](../frontend/src/lib/ai/starterPrompts.ts) exports context-specific chip sets (default vs measure vs part vs note). The panel shows a "Suggested starts" card when the chat is empty; clicking a chip sends the verbatim prompt via `sendMessage`. New vitest. |
+| **D2. Progressive disclosure** | `useTheoryInspectorStore` gains `showInspectorRationale` (persisted off by default). The three rationale blocks (engine origin, what this click means, verifiable export) now live behind a "Show rationale" toggle so the panel leads with the action-oriented tutor summary + ideas. |
+| **D3. Musical goal** | Store adds `musicalGoal`; panel header has a pinned text field ("My musical goal"). Goal is sent on every `sendMessage`, rendered verbatim in the system prompt via `musicalGoalBlock`, so tutor/auditor/stylist align instead of silently contradicting. |
+| **D4. Edit this bar** | Measure/part focus card shows an "Edit this bar" CTA that triggers a scoped `requestSuggestion` — the hook filters `scoreContext` to the focused measure (or part) before POSTing to `/api/theory-inspector/suggest`. Ghost corrections apply only to that region. |
+| **D5. Honest INTENT** | New `COMMAND_INTENT_BLOCK` in prompts instructs every persona to emit `<<<INTENT>>>{...}` for actions the tutor cannot perform (pickup, key/mood changes, regenerate) or explicitly decline and point at the Document page — never silently refuse. Covered by [`prompts.test.ts`](../frontend/src/lib/ai/prompts.test.ts). |
+| **D6. Scroll guard** | Inspector chat `useLayoutEffect` now only auto-scrolls when the user is within 120px of the bottom (or during active streaming). Reading older context no longer snaps back to the latest message. |
+| **E1. Playback resilience** | `usePlayback` wraps Tone.start / Part construction / trigger calls in try/catch, exposes `lastError` + `clearError`, resumes AudioContext and applies persisted volume even when RiffScore is the active player. |
+| **E2. Volume slider** | New [`useDestinationVolume`](../frontend/src/hooks/useDestinationVolume.ts) hook (lazy-init from localStorage, -6 dB default) + [`VolumeSlider`](../frontend/src/components/molecules/VolumeSlider.tsx) molecule. Rendered in `SandboxHeader` so both RiffScore's internal sampler and the Tone.js fallback (shared `Tone.getDestination()`) pass through the same user-controlled gain. |
+| **Build unblock** | `riffscoreAdapter.ts` narrow cast on `ui` object so `toolbarPlugins` (runtime-patched into RiffScore) type-checks cleanly; `make verify` + `make build` both green. |
+
+### Verification
+
+- `make verify` → backend 104 tests + backend lint + engine TS build + Next production build all pass.
+- `cd frontend && npm run test` → 70 pass, 1 pre-existing failure (`needsEnginePreviewForExtension.test.ts`; see baseline note above).
+- `cd frontend && npm run lint` → exit 0 with 4 pre-existing warnings (matches baseline).
+- Manual walkthrough: upload a piece with a pickup → confirm harmony starts on the downbeat; toggle Harmony motion between Chordal/Mixed/Flowing and re-generate; re-navigate Playground ⇄ Document to confirm mood/genre/instruments persist; delete a note in the sandbox → get a rest of the same duration; open the Inspector empty and click a starter chip; state a musical goal and send "can you reharmonize this bar?" → reply should acknowledge goal; click "Edit this bar" on a measure focus card → scoped suggestion arrives; change playback volume via header slider and reload → slider restores.
+
+### Residual / known limitations (unchanged by this pass)
+
+- [`plan.md §1.9m`](plan.md) — PDF→MusicXML / oemer OMR still the main pipeline risk.
+- Inspector INTENT block is advisory: the app does not yet auto-route the JSON to a specific handler (e.g. open Document page automatically). Follow-up work can wire the JSON payload into `router.push` / store setters once product picks the mapping.
+- RiffScore CSS hit-priority tweak is best-effort; a definitive stem-vs-notehead fix still requires patch-package internals once the library exposes the necessary hooks.
+
+---
+
 <a id="wl-sandbox-exports-2026-04-13"></a>
 
 ## Work log — Tactile Sandbox exports (2026-04-13)
@@ -136,7 +371,7 @@ Users edit in the **Tactile Sandbox** (RiffScore + Zustand **`EditableScore`**) 
 - **PNG:** Captures the **export preview viewport** only, not full vertical stitch for very tall scores.
 - **MP3:** Not implemented (WAV only).
 - **`POST /api/validate-from-file`:** Still validates engine-reconstructed SATB from uploaded XML, not “user-edited score as authoritative.”
-- **Production build:** **`toolbarPlugins`** type error in **`riffscoreAdapter.ts`** — fix separately (see **Current failure** above).
+- **Production build:** **`toolbarPlugins`** — **mitigated (2026-04-18)** via narrow `ui` cast in **`riffscoreAdapter.ts`**; re-check **`npm run build`** if RiffScore types or patch drift.
 
 ---
 
@@ -245,13 +480,13 @@ Users with **valid symbolic scores** (MusicXML, MXL, MIDI) should get **working 
 
 ### Approach
 
-1. **Single intake truth on the engine** — Extend [`backend/engine/parsers/fileIntake.ts`](../backend/engine/parsers/fileIntake.ts): keep **ZIP-first** and **PDF** routing; add **`MThd`** sniff for MIDI; treat **`.mxml`** like MusicXML; use **content sniff** (`looksLikeMusicXml`) for unknown extensions; **fallback** MIDI then MusicXML before **400**; **bounded UTF-8 peek** (256 KiB) for sniff-only paths to avoid huge string allocations on random binaries; **empty/whitespace** XML short-circuit in `tryIntakeMusicXmlString`.
+1. **Single intake truth on the engine** — Extend [`fileIntake.ts`](../frontend/src/server/engine/parsers/fileIntake.ts): keep **ZIP-first** and **PDF** routing; add **`MThd`** sniff for MIDI; treat **`.mxml`** like MusicXML; use **content sniff** (`looksLikeMusicXml`) for unknown extensions; **fallback** MIDI then MusicXML before **400**; **bounded UTF-8 peek** (256 KiB) for sniff-only paths to avoid huge string allocations on random binaries; **empty/whitespace** XML short-circuit in `tryIntakeMusicXmlString`.
 2. **Playground preview parity** — Any extension **other than** `.xml` / `.musicxml` calls **`POST /api/to-preview-musicxml`** ([`needsEnginePreviewForExtension.ts`](../frontend/src/lib/ui/needsEnginePreviewForExtension.ts)) so the engine sniffs **ZIP/MIDI/text** consistently; [`page.tsx`](../frontend/src/app/page.tsx), [`HomeViewOnboarding.tsx`](../frontend/src/components/organisms/HomeViewOnboarding.tsx); [`DropzoneCopy`](../frontend/src/components/organisms/DropzoneCopy.tsx) `accept` includes `.mxml`, `.txt`; [`intakeErrorHints.ts`](../frontend/src/lib/ui/intakeErrorHints.ts) broadened for non-PDF engine failures.
 3. **Document edge cases** — Prefer **`previewMusicXML`** from the store when set; for `.xml`/`.musicxml` **without** store, read first bytes — if **ZIP**, call the same preview API and **`setPreviewMusicXML`** ([`isProbablyZipBytes.ts`](../frontend/src/lib/music/isProbablyZipBytes.ts)); async cleanup on unmount/file change; clear stale preview while resolving.
 4. **Reviewer melody source** — [`readMelodyXml.ts`](../frontend/src/lib/study/readMelodyXml.ts): if **`storePreviewXml`** is non-empty, use it **before** FileReader (covers server-built preview for `.xml` including ZIP mislabel); still FileReader-first when no store.
-5. **Markers aligned with `newfiles/harmonize-core.ts`** — Shared root detection via regex for **optional namespace prefixes** on `<score-partwise>` / `<score-timewise>`; used by engine [`musicXmlMarkers.ts`](../backend/engine/parsers/musicXmlMarkers.ts), [`musicxmlParser.ts`](../backend/engine/parsers/musicxmlParser.ts), and frontend [`musicXmlMarkers.ts`](../frontend/src/lib/music/musicXmlMarkers.ts) + early reject in client [`musicxmlParser.ts`](../frontend/src/lib/music/musicxmlParser.ts); **`extractEmbeddedMusicXml`** matches **prefixed closing tags**.
-6. **Dev / ESM interop** — [`midiParser.ts`](../backend/engine/parsers/midiParser.ts): **`@tonejs/midi`** is CommonJS; **`import { Midi }`** breaks under **`tsx`** + Node ESM → **`createRequire`** from **`backend/package.json`** (see **Current failure** below for `cwd` caveat).
-7. **Docs / plan** — [`docs/plan.md`](plan.md) **`make test-engine`** verification uses **`tour_demo.xml`**; [`backend/README.md`](../backend/README.md) documents intake + OMR checkpoints pointer.
+5. **Markers aligned with `newfiles/harmonize-core.ts`** — Shared root detection via regex for **optional namespace prefixes** on `<score-partwise>` / `<score-timewise>`; used by engine [`musicXmlMarkers.ts`](../frontend/src/server/engine/parsers/musicXmlMarkers.ts), [`musicxmlParser.ts`](../frontend/src/server/engine/parsers/musicxmlParser.ts), and frontend [`musicXmlMarkers.ts`](../frontend/src/lib/music/musicXmlMarkers.ts) + early reject in client [`musicxmlParser.ts`](../frontend/src/lib/music/musicxmlParser.ts); **`extractEmbeddedMusicXml`** matches **prefixed closing tags**.
+6. **Dev / ESM interop** — [`midiParser.ts`](../frontend/src/server/engine/parsers/midiParser.ts): **`@tonejs/midi`** is CommonJS; **`import { Midi }`** breaks under **`tsx`** + Node ESM → **`createRequire(import.meta.url)`** anchors resolution reliably.
+7. **Docs / plan** — [`docs/plan.md`](plan.md) **`make test-engine`** verification uses **`tour_demo.xml`**; see [deployment.md](deployment.md) and [frontend/README.md](../frontend/README.md) for intake + OMR notes.
 
 ### Steps completed (artifact map)
 
@@ -369,7 +604,9 @@ Underlying product end goal (unchanged): **Upload → Document → Generate → 
 
 <a id="consolidated-status-2026-04"></a>
 
-## Consolidated status (2026-04) — end goal, approach, done work, active gaps
+## Consolidated status (2026-04, updated through 2026-04-20) — end goal, approach, done work, active gaps
+
+> **Prefer the short summary first:** [Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20).
 
 ### End goal (unchanged + clarified)
 
@@ -400,6 +637,8 @@ Underlying product end goal (unchanged): **Upload → Document → Generate → 
 | **Playback scrub** | `PlaybackScrubOverlay` + `playbackScrub.ts` + `riffscorePlaybackBridge.ts`; **`patch-package`** aligns RiffScore **toolbar Play**, **Space**, **P** with scrub via **`__HF_RIFFSCORE_PLAY_FROM`**; **manual QA** for regressions still advised — see **Playback scrub** subsection below. |
 | **Docs & deploy (2026-04-07)** | Root + folder READMEs (two passes: accuracy then visual/onboarding); **docs/README.md** index; **plan.md** reader header; **progress.md** navigation; **[deployment.md](deployment.md)** (Vercel `frontend/` root, engine host, env/CORS); **[node_modules/README.md](../node_modules/README.md)** + root **`.gitignore`** negation; GitHub **rebase** workflow note. |
 | **Sandbox exports (2026-04-13)** | Live-score flush (**`liveScoreExport.ts`**); modal XML snapshot + **`openExportModal`**; MIDI/PNG/WAV/ZIP + print CSS; **`html-to-image`**, **`fflate`**; Vitest **`scoreToMidi`**. See **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. |
+| **Iteration 1+2 study refinement (2026-04-18)** | Engine + Document + Sandbox + Inspector + playback pass from [iterations.md](iterations.md) — see **[Work log — Iteration 1+2…](#wl-study-refinement-2026-04-18)**. |
+| **Glass Box pedagogy UI (2026-04-19)** | In-app callouts: deterministic harmony vs Inspector LLM — see **[Work log — Glass Box pedagogy…](#wl-glass-box-pedagogy-2026-04-19)**. |
 
 ### Playback scrub — draggable playhead & “Play starts where I dropped” (2026-04)
 
@@ -461,7 +700,7 @@ Same as **End Goal** above: full **Upload → Document → Sandbox** flow; addit
 **B. Approach taken**
 
 1. **Ground claims in real sources** — Used **NotebookLM** on the **HF LitReview** notebook to sanity-check paraphrases for Fux (*Gradus*, Mann ed.), Aldwell & Schachter (*Harmony and Voice Leading*), Caplin (*Classical Form*), and **Open Music Theory** (Gotham et al.).
-2. **Document what code actually does** — Added a **source spine and engine mapping** in `Taxonomy.md`: hard constraints ↔ `engine/constraints.ts` / `validate-satb-trace`; motion heuristic ↔ `engine/solver.ts` (L1 MIDI sum = **parsimony proxy**, not species counterpoint); Caplin vocabulary ↔ honesty (primary `engine/` path does **not** run full segmentation); chamber-only `planStructuralHierarchy` labeled a **heuristic sketch** in `miscellaneous/chamber-music-fullstack/backend/src/harmonize-core.ts`.
+2. **Document what code actually does** — Added a **source spine and engine mapping** in `Taxonomy.md`: hard constraints ↔ `engine/constraints.ts` / `validate-satb-trace`; motion heuristic ↔ `engine/solver.ts` (L1 MIDI sum = **parsimony proxy**, not species counterpoint); Caplin vocabulary ↔ honesty (primary `engine/` path does **not** run full segmentation); legacy chamber-only `planStructuralHierarchy` sketches (external demo, not shipped) labeled heuristic.
 3. **Sync RAG strings** — `frontend/src/lib/ai/taxonomyIndex.ts` classical section mirrors the spine; violation entries cite **A&S / OMT / engine files** for range and spacing.
 4. **LLM behavior** — `frontend/src/lib/ai/prompts.ts`: shared **`CITATION_AND_BREVITY`**; Auditor/Tutor/Stylist tuned for **brief source tags** when stating rules, **plain language first**, **no citation stacking**, default **3–8 sentences** for typical replies; note modes updated; Caplin guardrails retained.
 5. **LLM honesty** — Same file: **`HONESTY_NO_SYCOPHANCY`** injected into all personas—no flattery; **constraint-satisfied ≠ musically ideal**; state when context/facts are **thin** or reference is **incomplete**; **gray areas** and **tradeoffs** (esp. Stylist); **correct wrong theory** from evidence, not agreeableness.
@@ -848,7 +1087,7 @@ Work was **ordered by impact and risk** (same structure as the internal holistic
 2. **Phase 2 — Quality bar:** `verify-strict`, ESLint triage on hot paths, narrow ignores for `patches/`; Turbopack/env handled via **`loadEnvConfig(appDir)`** in `frontend/next.config.ts` (avoid `turbopack.root` breaking Tailwind).
 3. **Phase 3 — Inspector:** Live evidence refresh on **`sendMessage`**; **`buildLiveNoteExplainInsight`** shared with note explain; **`ideaActionResolve`** longest-name disambiguation + tests.
 4. **Phase 4 — Backlog:** **[ADR 003](adr/003-multi-clef-transposition-scope.md)** — vertical slice for transposition; tab deferred; JSON deltas require design + ADR before code.
-5. **Phase 5 — Backend:** Extra **`fileIntake`** tests (namespaced XML plain + MXL); **`backend/docker/oemer-omr.Dockerfile`**; pointers in **`backend/README.md`**, **[deployment.md](deployment.md)**.
+5. **Phase 5 — Intake:** Extra **`fileIntake`** tests (namespaced XML plain + MXL); Docker/OEMR in root **`Dockerfile`**; see **[deployment.md](deployment.md)**.
 6. **Phase 6 — Symbolic intake (2026-04-07):** Engine sniffing (MIDI magic, `looksLikeMusicXml`, `.mxml`, bounded UTF-8 peek); **`musicXmlMarkers`** + prefixed embedded XML; frontend **`needsEnginePreviewForExtension`**, Document ZIP-as-`.xml` + **`readMelodyXml`** store-first; **`@tonejs/midi`** via **`createRequire`** for **`tsx`**. Full narrative: **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**.
 
 Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**, **`make lint`**, **`make build`** (and frontend lint where relevant).
@@ -874,7 +1113,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 **Primary engineering risk (unchanged):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
 
-**Build / TypeScript (2026-04-13):** **`npm run build`** (Next typecheck) may fail on **`frontend/src/lib/music/riffscoreAdapter.ts`** — **`toolbarPlugins`** is supplied via **`patch-package`** but is **not** in the published **`RiffScoreConfig`** type. Fix with **module augmentation**, a **local extended interface**, or a **narrow assertion** so production build passes without weakening runtime behavior.
+**Build / TypeScript (resolved 2026-04-18):** **`riffscoreAdapter.ts`** uses a **narrow cast** on the `ui` config so **`toolbarPlugins`** (patch-package) satisfies `tsc`; **`make build`** / **`npm run build`** stay green. **Long-term:** module augmentation if upstream **`RiffScoreConfig`** exposes the field.
 
 **Secondary (non-blocking but real):**
 
@@ -1095,13 +1334,9 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 - Validation ordering documented in constraints.ts (hard checks first).
 - Solver parsimony: candidateMotionScore prefers smaller motion.
 - 6 explicit chord progression tests: ii–V–I, I–vi–IV–V, i–iv–V–i, I–V–vi–IV, V7–I, ii7–V7–I.
-- `docs/Engine-Test-Run-Log.md` — test matrix + future recommendations.
-
 **Genre preset + Milestone 3:**
 - **Genre preset**: Added to EnsembleBuilderPanel (Classical, Jazz, Pop). Affects harmony theory only: chord inference (triads vs 7ths vs cyclical), voice-leading strictness (strict vs relaxed). Instruments unchanged.
 - **Engine**: `GenerationConfig.genre`, `inferChords(parsed, mood, genre)`, `ensureChords(parsed, mood, genre)`, `generateSATB(leadSheet, { genre })`. Jazz: 7th chords, ii–V–I transitions, relaxed first. Pop: bVII/bVI, cyclical schemas, relaxed first.
-- **Theory Inspector prep**: `docs/Theory-Inspector-Prep.md` — genre→Taxonomy mapping, future RAG integration points. No AI wired.
-
 **Next steps + Sandbox + Export:**
 - **#75**: Closed on GitHub (salt-family/harmonyforge).
 - **Score Preview in Export**: ScorePreviewPane now receives `musicXML` and renders via OSMDPreview; ExportModal passes score/generated MusicXML.
@@ -1454,9 +1689,10 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-04):**
-- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, **multi-format export from the live canvas**, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
-- **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`flushToZustand`** before any export/copy/save/read of store score (**`getLiveScoreAfterFlush`**). **`patch-package`** on `riffscore` for `ui.toolbarPlugins` + playback scrub. **Exports:** client MIDI/PNG/WAV/ZIP + server chord-chart + print CSS — see **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. Theory Inspector: deterministic engine + taxonomy context; **harmony-only** in-score UX; optional OpenAI via `.env.local`. **Intake:** `engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity.
-- **Current status / failures:** (1) **PDF→MusicXML / oemer unresolved** — OMR env fragile (Python version, checkpoint download, PATH); wiring done, reliability not. (2) **`npm run build`** may fail on **`riffscoreAdapter.ts`** until **`toolbarPlugins`** is reconciled with RiffScore’s published **`RiffScoreConfig`** types. (3) RiffScore piano **404** — **mitigated** via Salamander CDN in **`patch-package`** (watch regressions). (4) LLM off until `OPENAI_API_KEY` + restart. (5) Turbopack multi-lockfile warning. (6) **Tutor text grounding** — mitigated by follow-up chat + text export; residual model/stale-focus risk. (7) **`make lint-frontend`** exits 0 with hook **warnings**. (8) Older bullets may still describe OSMD/VexFlow-first sandbox — use **Consolidated status (2026-04)** + **Multi-format intake & PDF → Document preview** + **Tactile Sandbox exports** work log as source of truth.
-- **Key files:** `engine/parsers/fileIntake.ts`, `engine/satbToMusicXML.ts` (`parsedScoreToPartwiseMelodyMusicXML`), `engine/server.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `sandbox/page.tsx`, `liveScoreExport.ts`, `scoreToMidi.ts`, `scoreToWav.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, `requirements.txt`, `package.json` (`dev:backend` PATH).
-- **Run:** `make dev-clean && make dev` → http://localhost:3000 (Next) + engine on :8000. `make test-engine` for CLI. **`make pdfalto`** + **`make install`** (Python) for PDF path.
+**Handover template (2026-04, refreshed 2026-04-20):**
+- **Canonical summary:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** — end goal, approach, shipped work (including repo hygiene), **current focus** (deploy / study / residual risks — not one blocking bug).
+- **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, **multi-format export from the live canvas**, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **Glass Box product framing:** harmony generation = deterministic engine; **Theory Inspector** = LLM explain/critique/suggest — see **`GlassBoxPedagogyCallout`** + [work log](#wl-glass-box-pedagogy-2026-04-19). **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
+- **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`flushToZustand`** before any export/copy/save/read of store score (**`getLiveScoreAfterFlush`**). **`patch-package`** on `riffscore` for `ui.toolbarPlugins` + playback scrub (`riffscoreAdapter` narrow `ui` cast for `tsc`). **Exports:** client MIDI/PNG/WAV/ZIP + server chord-chart + print CSS — see **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. Theory Inspector: deterministic engine + taxonomy context; optional OpenAI via `frontend/.env.local`. **Intake:** `frontend/src/server/engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity. **Recent study-driven pass:** [Iteration 1+2 refinement](#wl-study-refinement-2026-04-18).
+- **Current status / focus:** (1) **PDF OMR** — product path **shipped**; Vercel vs Docker trade-offs in **[plan §1.9m](plan.md)** and [deployment.md](deployment.md). (2) **`riffscoreAdapter` / `toolbarPlugins`:** narrow cast — watch upstream types. (3) Piano samples — see [public/audio/piano/README.md](../frontend/public/audio/piano/README.md). (4) LLM — optional `OPENAI_API_KEY`. (5) **Tutor** — residual model variance; mitigated by FACT blocks. (6) Lint — optional hook-warning cleanup. (7) Legacy paragraphs in this file may mention `:8000` / `backend/` — use **[Program narrative (2026-04-20)](#program-narrative-2026-04-20)**.
+- **Key files:** `frontend/src/server/engine/parsers/fileIntake.ts`, `frontend/src/server/engine/satbToMusicXML.ts`, `frontend/src/app/api/*/route.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `sandbox/page.tsx`, `liveScoreExport.ts`, `scoreToMidi.ts`, `scoreToWav.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, root `requirements.txt`, `frontend/package.json`.
+- **Run:** `make dev-clean && make dev` → http://localhost:3000 (single process). `make test-engine` for CLI. **`make docker-build`** / **`make install`** for full PDF OMR; **`make pdfalto`** when vendored pdfalto sources exist under `miscellaneous/pdfalto/`.

@@ -22,6 +22,8 @@ export type StudyEventName =
   | "suggest_fix"
   | "idea_action_accepted"
   | "idea_action_rejected"
+  | "intent_applied"
+  | "intent_dismissed"
   | "study_logging_opt_in"
   | "study_logging_opt_out";
 

@@ -178,7 +178,7 @@ export function PlaybackScrubOverlay({
         clearRiffScoreInternalPlaybackAnchor();
       }
     },
-    [apiRef, applyLineX, spans],
+    [apiRef, applyLineX],
   );
 
   const clientToContentX = (clientX: number) => {

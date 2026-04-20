@@ -26,6 +26,13 @@ interface PromptContext {
   theoryInspectorNoteMode?: TheoryInspectorMode;
   /** Audience depth; required for live LLM calls from the app */
   explanationLevel?: ExplanationLevel;
+  /**
+   * User-stated musical goal for this session (Iter1 §3). When present, every
+   * persona must align recommendations to this goal or flag conflicts, rather
+   * than silently contradicting it (e.g. suggesting a dissonant A when the
+   * user asked for a stable C major cadence).
+   */
+  musicalGoal?: string;
 }
 
 /** Facts the user focused in the score (note / measure / part); ground LLM replies. */
@@ -44,6 +51,37 @@ ${focus}
 
 Anchor your answer to this focus when it is relevant. If the focus is a single note and "Note explain mode" applies, follow that mode. The focus may include **SCORE_DIGEST** (one-line pitch + duration + meter) and **FULL BAR** (every staff’s events in that measure)—that **is** embedded notation, not a hint that data is missing. Treat the focus as a **unified notation snapshot**: combine pitch, rhythm (durations, beats, dots, ties, meter), vertical sonority, intervals, and motion in one explanation. If you see **FACT: AUTHORITATIVE NOTATION**, **FACT: Clicked event**, or **SCORE_DIGEST**, the **notated duration is there**—state it for rhythm questions; never claim duration is absent. If the focus is a **measure** or **whole part** (no single-note engine origin in the facts), describe patterns, sonorities, and voice-leading using only what appears in the focus lines—do not invent Roman numerals or generator intent.`;
 }
+
+/**
+ * Musical-goal alignment (Iter1 §3). When the user has stated what they want,
+ * the tutor must respect that goal rather than contradict it. If recommending
+ * something that would conflict with the goal, name the tradeoff explicitly.
+ */
+function musicalGoalBlock(ctx: PromptContext): string {
+  const goal = ctx.musicalGoal?.trim();
+  if (!goal) return "";
+  return `
+
+User-stated musical goal (align to this; if you disagree, explain why **in one sentence** rather than silently ignoring it):
+> ${goal}`;
+}
+
+/**
+ * Honest command-intent handling (Iter2 §3). When the user asks the chat to
+ * perform a system action the tutor cannot itself execute (e.g. "fix the
+ * pickup measure", "change the key", "regenerate with minor"), either:
+ *   - emit a <<<INTENT>>> JSON block the app can route to the correct UI,
+ *   - OR explicitly say what cannot be done from chat and where to do it.
+ * Never silently refuse or tell the user their premise is wrong.
+ */
+const COMMAND_INTENT_BLOCK = `Actionable-command handling:
+- When the user asks you to **perform an action** that changes generation or app state (e.g. "fix the pickup", "change key to G major", "switch mood to minor", "regenerate"), do **one** of these:
+  1. Add a final line exactly <<<INTENT>>> followed by a single JSON object on the next line describing the action, e.g.
+     {"action":"open_document_page","reason":"pickup setting lives on the Document page"}
+     or
+     {"action":"set_mood","value":"minor","reason":"mood control is on the Document page"}.
+  2. Or, if the action is impossible from chat, say so in one sentence and point to the right screen (e.g. "I can’t change the pickup from chat — update it on the Document page before regenerating.").
+- Do NOT silently refuse and do NOT tell the user their request is wrong. If the user's premise contradicts the facts, correct the premise **and** still answer the underlying intent.`;
 
 /** Shared voice: transparent sources, scannable length */
 const CITATION_AND_BREVITY = `Citation and length (apply in every reply):
@@ -129,10 +167,12 @@ Genre context: ${ctx.genre}
 
 Reference material:
 ${ctx.taxonomySection}
-
+${musicalGoalBlock(ctx)}
 ${CITATION_AND_BREVITY}
 
 ${HONESTY_NO_SYCOPHANCY}
+
+${COMMAND_INTENT_BLOCK}
 ${appendExplanationLevel(ctx)}
 Rules:
 - Be transparent: only explain rules present in the provided reference material and deterministic engine checks.
@@ -157,9 +197,12 @@ Genre context: ${ctx.genre}
 Reference material:
 ${ctx.taxonomySection}
 ${modeBlock}
+${musicalGoalBlock(ctx)}
 ${CITATION_AND_BREVITY}
 
 ${HONESTY_NO_SYCOPHANCY}
+
+${COMMAND_INTENT_BLOCK}
 ${appendExplanationLevel(ctx)}
 Rules:
 - **Sources:** Whenever you explain **why** a rule exists or what tradition it comes from, add **one** short citation (prefer **Open Music Theory** for how topics are grouped; **Aldwell & Schachter** for strict SATB prohibitions and spacing; **Fux** only when smooth motion or independence is the point). Do **not** stack multiple authors for the same sentence.
@@ -226,7 +269,7 @@ ${violationLine}
 
 Reference material:
 ${ctx.taxonomySection}
-
+${musicalGoalBlock(ctx)}
 Score context (notes available for correction):
 ${noteList}
 
@@ -255,7 +298,7 @@ ${violationLine}
 
 Reference material:
 ${ctx.taxonomySection}
-
+${musicalGoalBlock(ctx)}
 ${HONESTY_NO_SYCOPHANCY}
 ${appendExplanationLevel(ctx)}
 Rules:

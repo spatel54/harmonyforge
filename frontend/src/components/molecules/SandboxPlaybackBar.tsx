@@ -10,6 +10,8 @@ import {
   SkipForward,
   ChevronLeft,
   ChevronRight,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,10 @@ export interface SandboxPlaybackBarProps extends React.HTMLAttributes<HTMLDivEle
   onPrevPage?: () => void;
   onNextPage?: () => void;
   canPlay?: boolean;
+  /** Current playback gain in dB (−48..6). */
+  volumeDb?: number;
+  /** Setter wired to usePlayback.setVolumeDb (Iter2 §4 — audible by default). */
+  onVolumeDbChange?: (value: number) => void;
 }
 
 /**
@@ -68,6 +74,8 @@ export const SandboxPlaybackBar = React.forwardRef<
       onPrevPage,
       onNextPage,
       canPlay = true,
+      volumeDb,
+      onVolumeDbChange,
       className,
       ...props
     },
@@ -204,6 +212,51 @@ export const SandboxPlaybackBar = React.forwardRef<
             />
           </button>
         </div>
+
+        {/* ── Volume slider (Iter2 §4) ──────────────────────── */}
+        {onVolumeDbChange !== undefined && volumeDb !== undefined && (
+          <div
+            className="flex items-center gap-[6px] shrink-0"
+            role="group"
+            aria-label="Playback volume"
+            title="Playback volume (persists across sessions)"
+          >
+            {volumeDb <= -40 ? (
+              <VolumeX
+                className="w-[14px] h-[14px]"
+                strokeWidth={1.75}
+                aria-hidden="true"
+                style={{ color: "var(--hf-text-secondary)" }}
+              />
+            ) : (
+              <Volume2
+                className="w-[14px] h-[14px]"
+                strokeWidth={1.75}
+                aria-hidden="true"
+                style={{ color: "var(--hf-text-secondary)" }}
+              />
+            )}
+            <input
+              type="range"
+              min={-40}
+              max={6}
+              step={1}
+              value={volumeDb}
+              onChange={(e) => onVolumeDbChange(Number.parseFloat(e.target.value))}
+              className="w-[80px] accent-[var(--hf-accent)]"
+              aria-label="Playback volume (decibels)"
+              aria-valuemin={-40}
+              aria-valuemax={6}
+              aria-valuenow={volumeDb}
+            />
+            <span
+              className="font-mono text-[10px] tabular-nums min-w-[32px] text-right"
+              style={{ color: "var(--hf-text-secondary)" }}
+            >
+              {volumeDb > 0 ? `+${Math.round(volumeDb)}` : Math.round(volumeDb)} dB
+            </span>
+          </div>
+        )}
 
         {/* ── Right: Pagination ── Node Rfau3 ──────────────── */}
         <div

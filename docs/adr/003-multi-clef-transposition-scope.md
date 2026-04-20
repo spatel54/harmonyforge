@@ -2,7 +2,8 @@
 
 ## Status
 
-Proposed (2026-04-06)
+Accepted (2026-04-19) — vertical slice shipped. See `frontend/src/server/engine/satbToMusicXML.ts`
+(`resolveInstrumentTranspose`) and `frontend/src/server/engine/transpose.test.ts`.
 
 ## Context
 
@@ -19,3 +20,13 @@ Proposed (2026-04-06)
 - Parser and `EditableScore` changes stay reviewable and testable per slice.
 - Avoids half-finished transposition that breaks inspector, playback, or export.
 - JSON sync remains a deliberate architecture step, not a drive-by feature.
+
+## 2026-04-19 update — first slice landed
+
+- `satbToMusicXML.ts` emits `<transpose><diatonic/><chromatic/></transpose>` per part for
+  Bb clarinet / Bb trumpet / Bb soprano sax / A clarinet / Eb alto sax / F horn.
+- Solver keeps operating in concert pitch; the `<transpose>` element drives
+  written-pitch display in MuseScore / OSMD while playback uses the sounding notes.
+- `transpose.test.ts` covers detection + XML output. Concert-pitch instruments
+  (flute, cello, violin) remain untransposed.
+- Next slice candidates: multi-clef writer (soprano clef, alto clef), written↔concert toggle in the Ensemble Builder.
