@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { structuredCompletion } from "@/lib/ai/llmClient";
+import { getServerOpenAIEnv, structuredCompletion } from "@/lib/ai/llmClient";
 import { buildStylistStructuredPrompt } from "@/lib/ai/prompts";
 import {
   getTaxonomyContext,
@@ -56,8 +56,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const { apiKey, model } = getServerOpenAIEnv();
 
   if (!apiKey) {
     return NextResponse.json(
