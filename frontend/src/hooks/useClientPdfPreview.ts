@@ -47,7 +47,7 @@ export async function rasterizePdf(
   const scale = options.scale ?? DEFAULT_RENDER_SCALE;
   const maxPages = Math.max(1, options.maxPages ?? 16);
 
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await import("pdfjs-dist");
   // Serve pdf.worker.mjs from /public/pdfjs (copied by postinstall). Fallback to
   // fake-worker mode is automatic when the file 404s — slower but still functional.
   const globalOpts = pdfjs.GlobalWorkerOptions as { workerSrc?: string };
