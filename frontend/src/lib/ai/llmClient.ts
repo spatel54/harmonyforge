@@ -30,12 +30,25 @@ function normalizeOpenAIBaseURL(raw: string): string {
   return t;
 }
 
-function resolveOpenAIBaseURL(): string | undefined {
+export function resolveOpenAIBaseURL(): string | undefined {
   const fromBase = process.env.OPENAI_BASE_URL?.trim();
   const fromUrl = process.env.OPENAI_URL?.trim();
   const chosen = fromBase || fromUrl;
   if (!chosen) return undefined;
   return normalizeOpenAIBaseURL(chosen);
+}
+
+/** Server-only: API key, model, and OpenAI-compatible base URL from the same env as `createModel`. */
+export function getServerOpenAIEnv(): {
+  apiKey: string | undefined;
+  model: string;
+  baseURL: string | undefined;
+} {
+  const apiKey = process.env.OPENAI_API_KEY?.trim() || undefined;
+  const rawModel = process.env.OPENAI_MODEL?.trim();
+  const model = rawModel || "gpt-4o-mini";
+  const baseURL = resolveOpenAIBaseURL();
+  return { apiKey, model, baseURL };
 }
 
 function createModel(apiKey: string, model: string): ChatOpenAI {

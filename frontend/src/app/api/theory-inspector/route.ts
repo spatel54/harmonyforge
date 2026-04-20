@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { streamChat } from "@/lib/ai/llmClient";
+import { getServerOpenAIEnv, streamChat } from "@/lib/ai/llmClient";
 import { buildSystemPrompt } from "@/lib/ai/prompts";
 import type { Persona } from "@/lib/ai/prompts";
 import {
@@ -56,8 +56,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const { apiKey, model } = getServerOpenAIEnv();
   const explanationLevel = resolveExplanationLevel(body.explanationLevel);
 
   // --- Fallback mode: no API key ---
@@ -142,8 +141,10 @@ export const dynamic = "force-dynamic";
  * Health check — also tells the client whether an API key is configured.
  */
 export async function GET() {
+  const { apiKey, baseURL } = getServerOpenAIEnv();
   return NextResponse.json({
     status: "ok",
-    hasApiKey: !!process.env.OPENAI_API_KEY,
+    hasApiKey: !!apiKey,
+    hasCustomBaseUrl: !!baseURL,
   });
 }
