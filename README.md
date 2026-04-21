@@ -2,6 +2,8 @@
 
 > Upload a melody, get rule-based harmonies you can **edit**, **hear**, and **ask questions about** — with a transparent engine, not a black-box model.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/salt-family/harmonyforge&root-directory=frontend)
+
 ---
 
 ## Start here
