@@ -4,6 +4,7 @@ import React from "react";
 import { Play, Pause, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { MusicEditorAPI } from "riffscore";
 import { getPlaybackDestinationDb } from "@/hooks/usePlayback";
@@ -58,6 +59,8 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
     },
     ref,
   ) => {
+    const showNoteNameLabels = useScoreDisplayStore((s) => s.showNoteNameLabels);
+    const setShowNoteNameLabels = useScoreDisplayStore((s) => s.setShowNoteNameLabels);
     const [editorApi, setEditorApi] = React.useState<MusicEditorAPI | null>(null);
     const [riffInstanceId, setRiffInstanceId] = React.useState<string | null>(null);
     const [playing, setPlaying] = React.useState(false);
@@ -180,6 +183,21 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
             </div>
           ) : null}
 
+          {score ? (
+            <label className="flex items-center justify-center gap-2 mt-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="rounded border-[var(--hf-detail)]"
+                checked={showNoteNameLabels}
+                onChange={(e) => setShowNoteNameLabels(e.target.checked)}
+                aria-label="Show note names above each notehead in the preview"
+              />
+              <span className="font-mono text-[11px]" style={{ color: "var(--hf-text-secondary)" }}>
+                Show note names (C, F#, Bb, …) above each note
+              </span>
+            </label>
+          ) : null}
+
           {onReupload ? (
             <div className="flex justify-end w-full mt-2">
               <button
@@ -208,7 +226,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
 
         <div
           className={cn(
-            "flex-1 min-h-[280px] w-full rounded-[8px] overflow-hidden relative isolate",
+            "flex-1 min-h-[280px] w-full rounded-[8px] relative isolate overflow-hidden",
             "border border-[var(--hf-detail)] score-canvas-container",
           )}
           aria-label="Score preview — read only"
@@ -221,6 +239,8 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
                 score={score}
                 className="relative z-0 w-full h-full min-h-[280px]"
                 presentation
+                showNoteNameLabels={showNoteNameLabels}
+                allowNoteNameLabelsInPresentation
                 onEditorApiReady={handleApiReady}
                 onRiffInstanceId={setRiffInstanceId}
               />

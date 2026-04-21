@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 import {
   convertRestToPitch,
   deleteNotesAsRests,
+  extractMelodyOnlyScore,
   normalizeScoreRests,
+  replaceHarmonyMeasuresRange,
   restsToNotes,
   setPitchByLetter,
   transposeNotes,
@@ -234,5 +236,83 @@ describe("restsToNotes (MuseScore repitch)", () => {
     expect(note.isRest).toBeFalsy();
     expect(note.pitch).toBe("A3");
     expect(note.duration).toBe("h");
+  });
+});
+
+describe("extractMelodyOnlyScore / replaceHarmonyMeasuresRange", () => {
+  it("keeps only the first part for melody export", () => {
+    const score: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "m1", notes: [{ id: "n1", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "H",
+          clef: "treble",
+          measures: [{ id: "m2", notes: [{ id: "n2", pitch: "E4", duration: "q" }] }],
+        },
+      ],
+    };
+    const m = extractMelodyOnlyScore(score);
+    expect(m.parts.length).toBe(1);
+    expect(m.parts[0]!.name).toBe("M");
+  });
+
+  it("splices generated harmony measures into the live score", () => {
+    const live: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [
+            { id: "m0", notes: [{ id: "a0", pitch: "C5", duration: "q" }] },
+            { id: "m1", notes: [{ id: "a1", pitch: "D5", duration: "q" }] },
+          ],
+        },
+        {
+          id: "b",
+          name: "H",
+          clef: "treble",
+          measures: [
+            { id: "m0", notes: [{ id: "h0", pitch: "E4", duration: "q" }] },
+            { id: "m1", notes: [{ id: "h1", pitch: "F4", duration: "q" }] },
+          ],
+        },
+      ],
+    };
+    const gen: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [
+            { id: "x0", notes: [{ id: "x0", pitch: "C5", duration: "q" }] },
+            { id: "x1", notes: [{ id: "x1", pitch: "D5", duration: "q" }] },
+          ],
+        },
+        {
+          id: "b",
+          name: "H",
+          clef: "treble",
+          measures: [
+            { id: "y0", notes: [{ id: "y0", pitch: "G4", duration: "q" }] },
+            { id: "y1", notes: [{ id: "y1", pitch: "A4", duration: "q" }] },
+          ],
+        },
+      ],
+    };
+    const out = replaceHarmonyMeasuresRange(live, gen, 0, 0);
+    expect(out.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("G4");
+    expect(out.parts[1]!.measures[0]!.notes[0]!.id).not.toBe("h0");
+    expect(out.parts[1]!.measures[1]!.notes[0]!.pitch).toBe("F4");
   });
 });

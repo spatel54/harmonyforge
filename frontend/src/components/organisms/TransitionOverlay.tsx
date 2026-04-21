@@ -24,16 +24,16 @@ export interface TransitionOverlayProps {
 
 const LABELS: Record<TransitionVariant, { headline: string; sub: string }> = {
   parsing: {
-    headline: "Parsing Score",
-    sub: "Reading symbolic notation…",
+    headline: "Reading your file",
+    sub: "Turning notation into an editable score…",
   },
   generating: {
-    headline: "Generating Harmonies",
-    sub: "Applying voice-leading rules…",
+    headline: "Generating harmonies",
+    sub: "SATB search and voice-leading rules…",
   },
   melody_only: {
-    headline: "Opening sandbox",
-    sub: "Loading your melody (no auto-harmonies)…",
+    headline: "Opening the sandbox",
+    sub: "Melody only—you’ll add harmonies in the editor.",
   },
 };
 

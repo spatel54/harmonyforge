@@ -56,20 +56,19 @@ export function StudyConsentGate({ children }: { children: React.ReactNode }) {
           className="font-body text-sm leading-relaxed mb-4"
           style={{ color: "var(--hf-text-secondary)" }}
         >
-          This build may record anonymous interaction events (e.g. button
-          clicks, suggestion accept/reject, tutor idea actions) on this device
-          only, for research.
-          No score contents or audio are uploaded by this log. You can export
-          or discard the log at the end of the session.
+          This build can log anonymous interactions on this device only (for example
+          button clicks, suggestion accept or reject, tutor actions). Your score
+          and audio are not uploaded. You can copy or clear the log at any time
+          from the sandbox.
         </p>
         {declined && (
           <p
             className="font-mono text-[11px] mb-3 text-amber-200/90"
             role="status"
           >
-            Continuing without logging. The app works normally; researchers will
-            not receive interaction data from this browser unless you opt in
-            later from the sandbox.
+            Continuing without logging. The app works as usual; researchers won’t
+            receive interaction data from this browser unless you opt in later
+            from the sandbox.
           </p>
         )}
         <div className="flex flex-wrap gap-3 justify-end">

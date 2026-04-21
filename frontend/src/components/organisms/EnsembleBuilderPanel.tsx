@@ -30,6 +30,8 @@ export interface GenerationConfig {
   genre?: Genre;
   rhythmDensity?: RhythmDensity;
   instruments: Record<VoiceType, string[]>;
+  /** When true, infer harmony from melody + mood/genre (ignore chord symbols in file). */
+  preferInferredChords?: boolean;
 }
 
 const RHYTHM_DENSITY_LABELS: Record<RhythmDensity, { title: string; hint: string }> = {
@@ -71,11 +73,9 @@ export const EnsembleBuilderPanel = React.forwardRef<
   EnsembleBuilderPanelProps
 >(({ onGenerateHarmonies, isGenerating = false, studyPrimaryVariant = "generate", studyPanelSubtitle, className, ...props }, ref) => {
   const mood = useGenerationConfigStore((s) => s.mood);
-  const genre = useGenerationConfigStore((s) => s.genre);
   const rhythmDensity = useGenerationConfigStore((s) => s.rhythmDensity);
   const selections = useGenerationConfigStore((s) => s.instruments);
   const setMood = useGenerationConfigStore((s) => s.setMood);
-  const setGenre = useGenerationConfigStore((s) => s.setGenre);
   const setRhythmDensity = useGenerationConfigStore((s) => s.setRhythmDensity);
   const toggleInstrument = useGenerationConfigStore((s) => s.toggleInstrument);
   const removeInstrument = useGenerationConfigStore((s) => s.removeInstrument);
@@ -103,8 +103,8 @@ export const EnsembleBuilderPanel = React.forwardRef<
       ref={ref}
       data-coachmark="step-2"
       className={cn(
-        "flex flex-col gap-[24px] flex-1 h-full overflow-y-auto",
-        "px-[48px] pt-[32px] pb-[32px]",
+        "flex flex-col gap-5 flex-1 h-full overflow-y-auto",
+        "px-[40px] pt-[28px] pb-[32px]",
         className,
       )}
       style={{
@@ -128,7 +128,26 @@ export const EnsembleBuilderPanel = React.forwardRef<
           {studyPanelSubtitle ??
             (studyPrimaryVariant === "reviewer_melody"
               ? "Set context for the assistant; you will add harmonies in the editor."
-              : "Select mood, genre, and instruments for your arrangement")}
+              : "Choose mood, backing density, and instruments for this arrangement.")}
+        </p>
+        <p
+          className="font-body text-[11px] leading-snug m-0 mt-[10px] max-w-prose"
+          style={{ color: "var(--hf-text-secondary)" }}
+        >
+          {studyPrimaryVariant === "reviewer_melody" ? (
+            <>
+              Harmonies are not written by generative AI in this flow. Chat-style AI—for explanations and
+              suggestions—lives in <span style={{ color: "var(--hf-text-primary)" }}>Theory Inspector</span> on the
+              next screen.
+            </>
+          ) : (
+            <>
+              Generated harmonies come from the engine&apos;s{" "}
+              <span style={{ color: "var(--hf-text-primary)" }}>algorithms</span> (theory rules and search), not from
+              generative AI. <span style={{ color: "var(--hf-text-primary)" }}>AI</span> appears only in{" "}
+              <span style={{ color: "var(--hf-text-primary)" }}>Theory Inspector</span> on the next screen.
+            </>
+          )}
         </p>
       </div>
 
@@ -136,146 +155,134 @@ export const EnsembleBuilderPanel = React.forwardRef<
         variant={studyPrimaryVariant === "reviewer_melody" ? "ensemble-reviewer" : "ensemble-generate"}
       />
 
-      {/* Mood selector */}
-      <div className="flex flex-col gap-[8px]">
-        <span
-          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+      {/* Sound & style — mood + backing density */}
+      <section
+        className="rounded-[8px] border p-4 flex flex-col gap-4"
+        style={{
+          borderColor: "color-mix(in srgb, var(--hf-detail) 65%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--hf-surface) 7%, transparent)",
+        }}
+        aria-labelledby="ensemble-sound-style-heading"
+      >
+        <h3
+          id="ensemble-sound-style-heading"
+          className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] m-0"
           style={{ color: "var(--hf-text-secondary)" }}
         >
-          Mood
-          <HoverTooltip
-            ariaLabel="About mood"
-            content={
-              "Major vs minor: brighter vs darker overall mood (the key’s character).\nNot the same as tempo or how fast notes go by."
-            }
-          />
-        </span>
-        <div className="flex gap-[8px]">
-          {(["major", "minor"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMood(m)}
-              title={
-                m === "major"
-                  ? "Often brighter or more uplifting (major key)"
-                  : "Often darker or more serious (minor key)"
-              }
-              className={cn(
-                "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
-                "transition-opacity hover:opacity-90",
-                mood === m
-                  ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                  : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
-              )}
-            >
-              {m === "major" ? "Major" : "Minor"}
-            </button>
-          ))}
-        </div>
-      </div>
+          Sound & style
+        </h3>
 
-      {/* Genre preset — affects harmony theory only (chord inference, voice-leading) */}
-      <div className="flex flex-col gap-[8px]">
-        <span
-          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
-          style={{ color: "var(--hf-text-secondary)" }}
-        >
-          Genre
-          <HoverTooltip
-            ariaLabel="About genre"
-            content={
-              "Which chord style the engine leans toward (classical, jazz, pop).\nDoesn’t change tempo or groove—only harmony choices."
-            }
-          />
-        </span>
-        <div className="flex flex-wrap gap-[8px]">
-          {(["classical", "jazz", "pop"] as const).map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => setGenre(g)}
-              title={
-                g === "classical"
-                  ? "Classical-style: triads and smooth voice-leading"
-                  : g === "jazz"
-                    ? "Jazz-style: sevenths and ii–V-type movement"
-                    : "Pop-style: repeating progressions and borrowed color"
+        <div className="flex flex-col gap-[8px]">
+          <span
+            className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Mood
+            <HoverTooltip
+              ariaLabel="About mood"
+              content={
+                "Major vs minor: brighter vs darker overall mood (the key’s character).\nNot the same as tempo or how fast notes go by."
               }
-              className={cn(
-                "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
-                "transition-opacity hover:opacity-90",
-                genre === g
-                  ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                  : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
-              )}
-            >
-              {g === "classical" ? "Classical" : g === "jazz" ? "Jazz" : "Pop"}
-            </button>
-          ))}
+            />
+          </span>
+          <div className="flex gap-[8px] flex-wrap">
+            {(["major", "minor"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMood(m)}
+                title={
+                  m === "major"
+                    ? "Often brighter or more uplifting (major key)"
+                    : "Often darker or more serious (minor key)"
+                }
+                className={cn(
+                  "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
+                  "transition-opacity hover:opacity-90",
+                  mood === m
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                    : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
+                )}
+              >
+                {m === "major" ? "Major" : "Minor"}
+              </button>
+            ))}
+          </div>
         </div>
-        <span className="font-mono text-[10px] opacity-60" style={{ color: "var(--hf-text-secondary)" }}>
-          {genre === "classical" &&
-            "Careful part-writing and familiar triads in the key (common-practice style)."}
-          {genre === "jazz" &&
-            "Seventh chords and jazz progressions; inner parts can move more freely."}
-          {genre === "pop" &&
-            "Catchy repeating chord loops and occasional borrowed chords for color."}
-        </span>
-      </div>
 
-      {/* Harmony motion (rhythm density) — Iter2 §2 */}
-      <div className="flex flex-col gap-[8px]">
-        <span
-          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
-          style={{ color: "var(--hf-text-secondary)" }}
-        >
-          Harmony motion
-          <HoverTooltip
-            ariaLabel="About harmony motion"
-            content={
-              "How dense the backing is under your tune.\n\n• Held — long chords\n• Mixed — hits with the melody\n• Flowing — busier fills"
-            }
-          />
-        </span>
-        <div className="flex flex-wrap gap-[8px]">
-          {(["chordal", "mixed", "flowing"] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setRhythmDensity(d)}
-              title={RHYTHM_DENSITY_LABELS[d].hint}
-              className={cn(
-                "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
-                "transition-opacity hover:opacity-90",
-                rhythmDensity === d
-                  ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                  : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
-              )}
-            >
-              {RHYTHM_DENSITY_LABELS[d].title}
-            </button>
-          ))}
+        <div className="flex flex-col gap-[8px]">
+          <span
+            className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Harmony motion
+            <HoverTooltip
+              ariaLabel="About harmony motion"
+              content={
+                "How often the harmony refreshes under your tune.\n\n• Chordal — long, slow-changing chords\n• Mixed — aligns with melody attacks\n• Flowing — busier motion between melody notes"
+              }
+            />
+          </span>
+          <div className="flex flex-wrap gap-[8px]">
+            {(["chordal", "mixed", "flowing"] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setRhythmDensity(d)}
+                title={RHYTHM_DENSITY_LABELS[d].hint}
+                className={cn(
+                  "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
+                  "transition-opacity hover:opacity-90",
+                  rhythmDensity === d
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                    : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]"
+                )}
+              >
+                {RHYTHM_DENSITY_LABELS[d].title}
+              </button>
+            ))}
+          </div>
+          <span className="font-mono text-[10px] opacity-70" style={{ color: "var(--hf-text-secondary)" }}>
+            {RHYTHM_DENSITY_LABELS[rhythmDensity].hint}
+          </span>
         </div>
-        <span className="font-mono text-[10px] opacity-60" style={{ color: "var(--hf-text-secondary)" }}>
-          {RHYTHM_DENSITY_LABELS[rhythmDensity].hint}
-        </span>
-      </div>
+
+        {studyPrimaryVariant !== "reviewer_melody" && (
+          <p
+            className="m-0 text-[10px] leading-snug pt-2 border-t"
+            style={{
+              color: "var(--hf-text-secondary)",
+              borderColor: "color-mix(in srgb, var(--hf-detail) 45%, transparent)",
+            }}
+          >
+            <strong style={{ color: "var(--hf-text-primary)", fontWeight: 600 }}>Classical-style</strong> triads and
+            voice-leading in the current key. Jazz, pop, and other styles are not available yet.
+          </p>
+        )}
+      </section>
 
       {/* Voice List — Node iVLue */}
-      <div className="flex flex-col gap-[8px] w-full">
-        <span
-          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+      <section
+        className="rounded-[8px] border p-4 flex flex-col gap-3 w-full"
+        style={{
+          borderColor: "color-mix(in srgb, var(--hf-detail) 65%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--hf-surface) 7%, transparent)",
+        }}
+        aria-labelledby="ensemble-instruments-heading"
+      >
+        <h3
+          id="ensemble-instruments-heading"
+          className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px] m-0"
           style={{ color: "var(--hf-text-secondary)" }}
         >
-          SATB voices
+          Instruments (SATB)
           <HoverTooltip
             ariaLabel="What SATB means"
             content={
               "Four ranges, high to low: soprano, alto, tenor, bass.\nPick any instruments per line—mix freely."
             }
           />
-        </span>
+        </h3>
         <div className="flex flex-col gap-[10px] w-full">
           {VOICE_ORDER.map((voice) => (
             <VoiceDropdown
@@ -287,7 +294,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
             />
           ))}
         </div>
-      </div>
+      </section>
 
       {/* Divider — Node IPbv5 */}
       <div
@@ -314,9 +321,10 @@ export const EnsembleBuilderPanel = React.forwardRef<
           onClick={() =>
             onGenerateHarmonies?.({
               mood,
-              genre,
+              genre: "classical",
               rhythmDensity,
               instruments: selections,
+              preferInferredChords: false,
             })
           }
           className={cn(

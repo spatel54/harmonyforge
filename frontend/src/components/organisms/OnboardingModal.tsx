@@ -4,38 +4,38 @@ import React from "react";
 
 const SLIDES = [
   {
-    label: "Import a Score · Screenshot placeholder",
+    label: "Step 1 · Import",
     gradientFrom: "#FDF5E6",
     gradientTo: "#E8DCDA",
     heading: "Import a Score",
-    body: "Drop a MusicXML, MIDI, or PDF file to open it in the Tactile Sandbox.",
+    body: "Bring MusicXML, MXL, MIDI, or PDF—we’ll open it in the editor on the next screens.",
     cta: "Next →",
     ctaStyle: "primary" as const,
   },
   {
-    label: "Build Your Ensemble · Screenshot placeholder",
+    label: "Step 2 · Ensemble",
     gradientFrom: "#FDF5E6",
     gradientTo: "#E0D5D3",
     heading: "Build Your Ensemble",
-    body: "Choose voices and instruments before the constraint engine begins its analysis.",
+    body: "Set mood, harmony motion, and instruments so the engine can fill in SATB parts you can still edit.",
     cta: "Next →",
     ctaStyle: "primary" as const,
   },
   {
-    label: "Edit with Authority · Screenshot placeholder",
+    label: "Step 3 · Edit",
     gradientFrom: "#FDF5E6",
     gradientTo: "#DDD0CE",
     heading: "Edit with Authority",
-    body: "Drag notes, trigger real-time theory feedback, and override any constraint.",
+    body: "Change notes on the staff, listen back, and open Theory Inspector when you want coaching—not a hidden generator.",
     cta: "Next →",
     ctaStyle: "primary" as const,
   },
   {
-    label: "Export Your Work · Screenshot placeholder",
+    label: "Step 4 · Export",
     gradientFrom: "#FDF5E6",
     gradientTo: "#D9CBCA",
     heading: "Export Your Work",
-    body: "Download as MusicXML, MIDI, or PDF — ready for notation software or performance.",
+    body: "Export MusicXML, MIDI, PNG, print, and more—for lessons, your DAW, or the stage.",
     cta: "Get Started",
     ctaStyle: "accent" as const,
   },
@@ -248,7 +248,7 @@ export function OnboardingModal({ onDismiss }: OnboardingModalProps) {
                 maxWidth: 340,
               }}
             >
-              Your Glass Box is ready. Drop a score to begin.
+              You’re all set—upload a score whenever you’re ready.
             </p>
           </div>
         </div>

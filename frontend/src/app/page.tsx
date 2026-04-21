@@ -17,6 +17,7 @@ import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
+import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 
 /**
  * Playground Screen (Step 1: Upload)
@@ -66,7 +67,7 @@ export default function Home() {
     } catch (e) {
       setFile(null);
       setPreviewMusicXML(null);
-      const raw = e instanceof Error ? e.message : "Could not prepare preview";
+      const raw = e instanceof Error ? e.message : "We couldn’t prepare a preview.";
       setUploadError(
         needsServerPreview ? enrichIntakePreviewError(raw, ext) : raw,
       );
@@ -77,7 +78,7 @@ export default function Home() {
 
   return (
     <>
-      <PlaygroundBackground className="flex flex-col">
+      <PlaygroundBackground className="flex flex-col min-h-full">
         {/* Header with StepBar set to Step 1 (Playground) */}
         <DocumentHeader currentStep={1} />
 
@@ -119,6 +120,7 @@ export default function Home() {
             />
           </div>
         </main>
+        <AppFooterStrip />
         {showOnboarding && !COACHMARKS_ENABLED && (
           <OnboardingModal
             onDismiss={() => {

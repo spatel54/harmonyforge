@@ -5,7 +5,7 @@ import { RiffScoreEditor } from "../score/RiffScoreEditor";
 import { extractMusicXMLMetadata, parseMusicXML } from "@/lib/music/musicxmlParser";
 
 export interface ScorePreviewPaneProps {
-  /** Raw MusicXML — when provided, renders actual score via OSMD */
+  /** Raw MusicXML — when provided, renders preview via RiffScoreEditor */
   musicXML?: string | null;
   /** Ref to the scrollable preview region (PNG export) */
   previewRootRef?: React.RefObject<HTMLDivElement | null>;
@@ -38,7 +38,7 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
         </h2>
       </div>
 
-      {/* Preview Area — OSMD when musicXML provided, else placeholder */}
+      {/* Preview Area — RiffScoreEditor when musicXML provided, else placeholder */}
       <div className="flex-1 relative overflow-hidden bg-[#F8F3EA] dark:bg-[#1A1110] min-h-0">
         {score ? (
           <div ref={previewRootRef} className="absolute inset-0 overflow-auto">
@@ -57,7 +57,7 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
                 className="w-16 h-16 text-[var(--hf-text-primary)] mb-4"
               />
               <p className="font-mono text-xs text-[var(--hf-text-primary)]">
-                No score to preview
+                Nothing to preview yet—upload or generate on the previous steps
               </p>
             </div>
           </>

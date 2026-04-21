@@ -692,7 +692,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                     Tutor summary
                   </div>
                   <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Wrap-up after the facts above—tie together what you’re hearing, why it matters musically, and how that connects to HarmonyForge’s rules when relevant.
+                    Short wrap-up after the facts—what you’re hearing, why it matters, and how it connects to the engine’s rules when useful.
                   </div>
                   <div>
                     {isStreaming ? (
@@ -710,8 +710,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                           className="font-body text-[13px]"
                           style={{ color: "var(--hf-text-primary)" }}
                         >
-                          No summary yet. The sections above still describe the score; wait for the
-                          response or check your connection.
+                          No summary yet. The panels above still describe the score—wait for the
+                          reply or check your connection.
                         </span>
                       )
                     ) : (
@@ -719,9 +719,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        Add OPENAI_API_KEY to your environment (.env.local locally or Vercel Project
-                        Settings in production) for an AI summary. The sections above still explain
-                        the score without the tutor.
+                        Add OPENAI_API_KEY (e.g. in .env.local or Vercel project env) for an AI summary.
+                        Everything above still works without it—facts and export stay the same.
                       </span>
                     )}
                   </div>
@@ -739,7 +738,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                     Ideas to try next
                   </div>
                   <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    After the summary: concrete tries—each bullet should name what to do and why (because / so that), tied to the facts and export.
+                    After the summary: practical next tries—each line should say what to change and why, grounded in the facts and export.
                   </div>
                   <div>
                     {!tutorEnabled ? (
@@ -747,8 +746,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        Enable the AI tutor by setting OPENAI_API_KEY in your environment to get
-                        suggestions here.
+                        Set OPENAI_API_KEY to generate suggestion bullets here; deterministic panels
+                        above still work without it.
                       </span>
                     ) : isStreaming ? (
                       <span
@@ -764,7 +763,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                         className="font-body text-[13px]"
                         style={{ color: "var(--hf-text-primary)" }}
                       >
-                        No suggestions in this reply yet.
+                        No suggestion bullets in this reply yet.
                       </span>
                     )}
                     {noteInsight.ideaActions &&

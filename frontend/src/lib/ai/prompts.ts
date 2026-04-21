@@ -108,6 +108,14 @@ function appendExplanationLevel(ctx: PromptContext): string {
   return `\n\n${explanationAudienceBlock(ctx.explanationLevel)}\n`;
 }
 
+/**
+ * Iteration 3: harmonic explanation must treat progressions as sequences, not isolated verticals.
+ */
+const PROGRESSION_CONTEXT_RULES = `Progression-first analysis (when FACT lines include **PROGRESSION** or **PROGRESSION WINDOW**):
+- Give **at least one sentence** on **voice motion from the previous chord moment to this one** and, when the facts list a next moment, **what happens next**—not only the vertical at the clicked beat.
+- Do **not** justify a chord solely by “pleasantness,” generic consonance, or a vague study citation; tie the moment to **sequential** role when facts support it (approach, prolongation, preparation/resolution, standard bass or melody motion between moments).
+- If Roman numerals or harmonic labels are **not** in the facts, describe motion using **the listed pitches** and progression FACTs only—do not invent a full Roman analysis.`;
+
 /** No flattery; acknowledge limits of engine, context, and textbook rules */
 const HONESTY_NO_SYCOPHANCY = `Honesty and tone (not sycophantic):
 - **No praise theater:** Avoid flattery ("great ear", "beautiful choice"), cheerleading, or agreeing just to be nice. Stay neutral and professional—like a clinician, not a fan.
@@ -182,7 +190,8 @@ Rules:
 - Report violation counts and locations when available.
 - Do not suggest fixes (that is the Stylist's role).
 - **Caplin / sentence vs period:** Do not claim formal segmentation unless the user message includes explicit structural FACTs or metadata. Otherwise call large-scale form **aspirational** for the current engine path.
-- If the genre is jazz or pop, add **one bullet** on which classical rules are often relaxed (cite OMT or genre section if you name a rule).${editorFocusPromptBlock(ctx)}`;
+- If the genre is jazz or pop, add **one bullet** on which classical rules are often relaxed (cite OMT or genre section if you name a rule).
+${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }
 
 function buildTutorPrompt(ctx: PromptContext): string {
@@ -216,7 +225,8 @@ Rules:
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
 - **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation.
-- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap). **Each suggestion bullet must state both what to try and why** (tie the reason to FACT lines—use “because” / “so that” / “reason:”).${editorFocusPromptBlock(ctx)}`;
+- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap). **Each suggestion bullet must state both what to try and why** (tie the reason to FACT lines—use “because” / “so that” / “reason:”).
+${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }
 
 interface StructuredPromptContext extends PromptContext {
@@ -283,7 +293,8 @@ Rules:
 - ${rationaleRuleLine}
 - Do not fabricate notes/rules; if no valid correction is supported by provided context, return zero corrections with a clear summary—state honestly if the fix is **one option** or could **trade off** another voice.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
-- Be concise and practical.${editorFocusPromptBlock(ctx)}`;
+- Be concise and practical.
+${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }
 
 function buildStylistPrompt(ctx: PromptContext): string {
@@ -307,5 +318,6 @@ Rules:
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
 - Format suggestions as actionable steps the user can apply in the score editor.
 - If a suggestion is **not** the only musically valid fix, say so in one phrase (e.g. "one common fix").
-- Be concise and practical—no lecture.${editorFocusPromptBlock(ctx)}`;
+- Be concise and practical—no lecture.
+${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }

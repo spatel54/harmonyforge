@@ -10,6 +10,7 @@ export default defineConfig({
     environmentMatchGlobs: [
       ["**/musicxmlParser.test.ts", "happy-dom"],
       ["**/useGenerationConfigStore.test.ts", "happy-dom"],
+      ["**/riffscorePositions.test.ts", "happy-dom"],
     ],
     include: ["src/**/*.test.ts"],
   },

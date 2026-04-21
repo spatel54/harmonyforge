@@ -24,6 +24,11 @@ export interface GenerationConfigShape {
   detectedMode: GenerationMood | null;
   /** Anacrusis / pickup beats the user wants the engine to honor (Iter2 §1). */
   pickupBeats: number | null;
+  /**
+   * When true, engine infers chords from melody + mood/genre instead of using
+   * chord symbols embedded in the uploaded file (Iteration 3).
+   */
+  preferInferredChords: boolean;
 }
 
 export interface GenerationConfigState extends GenerationConfigShape {
@@ -35,6 +40,7 @@ export interface GenerationConfigState extends GenerationConfigShape {
   removeInstrument: (instrument: string) => void;
   setDetectedKey: (tonic: string | null, mode: GenerationMood | null) => void;
   setPickupBeats: (beats: number | null) => void;
+  setPreferInferredChords: (value: boolean) => void;
   /** Wipe all config back to defaults (used after Upload → change source). */
   reset: () => void;
   /** Hydrate from sessionStorage; safe to call from effects. */
@@ -51,6 +57,7 @@ const DEFAULT_STATE: GenerationConfigShape = {
   detectedTonic: null,
   detectedMode: null,
   pickupBeats: null,
+  preferInferredChords: false,
 };
 
 function loadFromStorage(): GenerationConfigShape {
@@ -85,6 +92,7 @@ function loadFromStorage(): GenerationConfigShape {
         typeof parsed.pickupBeats === "number" && Number.isFinite(parsed.pickupBeats)
           ? parsed.pickupBeats
           : null,
+      preferInferredChords: parsed.preferInferredChords === true,
     };
   } catch {
     return { ...DEFAULT_STATE };
@@ -104,6 +112,7 @@ function saveToStorage(state: GenerationConfigShape): void {
         detectedTonic: state.detectedTonic,
         detectedMode: state.detectedMode,
         pickupBeats: state.pickupBeats,
+        preferInferredChords: state.preferInferredChords,
       }),
     );
   } catch {
@@ -127,6 +136,7 @@ function persistingUpdate(
       detectedTonic: s.detectedTonic,
       detectedMode: s.detectedMode,
       pickupBeats: s.pickupBeats,
+      preferInferredChords: s.preferInferredChords,
     });
   });
 }
@@ -162,6 +172,8 @@ export const useGenerationConfigStore = create<GenerationConfigState>((set, get)
     persistingUpdate(set, get, { detectedTonic: tonic, detectedMode: mode }),
   setPickupBeats: (beats) =>
     persistingUpdate(set, get, { pickupBeats: beats }),
+  setPreferInferredChords: (preferInferredChords) =>
+    persistingUpdate(set, get, { preferInferredChords }),
   reset: () => {
     set(() => ({ ...DEFAULT_STATE }));
     if (typeof window !== "undefined") {

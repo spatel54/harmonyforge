@@ -1,0 +1,16 @@
+Product Improvements for HarmonyForge
+The transcript data highlights several areas where the HarmonyForge prototype currently fails to meet user expectations regarding usability, musical context, and interactive affordances.
+1. Musical Context and Anacrusis Handling
+The system currently fails to recognize pickup measures (anacrusis), causing the generated accompaniment to start prematurely and misalign the harmonic rhythm for the entire piece. You must introduce a pre-generation setting that allows the user to explicitly define pickup measures or shift the accompaniment globally.
+When navigating between screens, the system drops user parameters (such as the musical key), forcing the user to repeatedly re-enter their setup information. State persistence must be implemented across all views.
+Avoid assuming classical notation literacy; the participant did not know the acronym "SATB". Implement plain-language tooltips for all domain-specific terminology.
+2. Interactive Sandbox Mechanics
+The participant noted that deleting a note left the measure visually incomplete or unexpectedly altered the duration of surrounding notes. You should implement "rest placeholders" when notes are deleted so the user retains a clear visual representation of a complete measure.
+The process for applying the Theory Inspector's suggested edits directly to the score was described as "very clunky" and occasionally acted as a destructive undo rather than a precise edit. This integration requires significant front-end refinement.
+The user requested more granular control over the rhythmic complexity of the generated accompaniment, specifically asking for a parameter to choose between static "whole notes" and active "running notes" before generation.
+3. Theory Inspector and LLM Behavior
+The Theory Inspector suffers from severe information density, presenting a "wall of text" detailing the system's rule-based decision tree that the user found "overwhelming at first". The interface should default to simplified, actionable suggestions, allowing users to optionally expand the view if they wish to read the underlying theoretical rationale.
+The LLM chat agent failed to execute actionable feedback. When the user attempted to use the chat to instruct the system to correct the pickup measure, the AI ignored the command and simply told the user they were wrong. The LLM must be re-prompted to either map user commands to system functions or politely explain its limitations.
+The Inspector's interface suffered from basic scrolling bugs, forcing the user to expand their browser to full screen just to view the output.
+4. Performance and Stability
+The MIDI playback engine crashed repeatedly and played at an inaudible volume, severely hindering the user's ability to evaluate the generated harmonies. Audio playback stability is paramount and must be patched.

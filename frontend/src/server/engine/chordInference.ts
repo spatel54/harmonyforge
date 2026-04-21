@@ -217,23 +217,37 @@ export function downsampleChordSlotsToMax(chords: ChordSlot[], maxSlots: number)
     .map((i) => sorted[i]!);
 }
 
+export interface EnsureChordsOptions {
+  /** Infer from melody instead of using chord symbols from the file. */
+  preferInferredChords?: boolean;
+}
+
 /** Ensure ParsedScore has chords (use inferred if missing). Mood and genre affect inference. */
 export function ensureChords(
   parsed: ParsedScore,
   mood?: "major" | "minor",
-  genre?: Genre
+  genre?: Genre,
+  opts?: EnsureChordsOptions,
 ): ParsedScore & { chords: ChordSlot[] } {
-  if (parsed.chords && parsed.chords.length > 0) {
+  const hasFileChords = !!(parsed.chords && parsed.chords.length > 0);
+  const modeConflict =
+    mood !== undefined && parsed.key.mode !== mood;
+  const reinferFromMelody =
+    !hasFileChords ||
+    opts?.preferInferredChords === true ||
+    modeConflict;
+
+  if (!reinferFromMelody && hasFileChords) {
     const maxSlots = resolveMaxChordSlots();
     const chords =
-      parsed.chords.length > maxSlots
-        ? downsampleChordSlotsToMax(parsed.chords, maxSlots)
-        : parsed.chords;
+      parsed.chords!.length > maxSlots
+        ? downsampleChordSlotsToMax(parsed.chords!, maxSlots)
+        : parsed.chords!;
     return { ...parsed, chords } as ParsedScore & { chords: ChordSlot[] };
   }
+
   const chords = inferChords(parsed, mood, genre);
-  const key = mood !== undefined
-    ? { ...parsed.key, mode: mood }
-    : parsed.key;
+  const key =
+    mood !== undefined ? { ...parsed.key, mode: mood } : parsed.key;
   return { ...parsed, key, chords };
 }

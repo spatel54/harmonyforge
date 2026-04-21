@@ -18,10 +18,12 @@ interface UseRiffScoreSyncReturn {
   pullFromRiffScore: () => void;
   /** Same as pullFromRiffScore — call before inspector, export, or navigation. */
   flushToZustand: () => void;
-  /** Current HF->RS ID map */
+  /** Current HF->RS ID map (may be stale on the React render that follows `pushToRiffScore`). */
   hfToRs: IdMap;
-  /** Current RS->HF ID map */
+  /** Current RS->HF ID map (same caveat — prefer `getRsToHf` in effects and async callbacks). */
   rsToHf: IdMap;
+  /** Always returns the latest RS->HF map after load/pull (refs do not trigger re-renders). */
+  getRsToHf: () => IdMap;
 }
 
 /**
@@ -61,6 +63,8 @@ export function useRiffScoreSync(
     }
   }, [apiRef, score]);
 
+  const getRsToHf = useCallback(() => rsToHfRef.current, []);
+
   const pullFromRiffScore = useCallback(() => {
     const api = apiRef.current;
     if (!api || isPushingRef.current) return;
@@ -87,5 +91,6 @@ export function useRiffScoreSync(
     flushToZustand: pullFromRiffScore,
     hfToRs: hfToRsRef.current,
     rsToHf: rsToHfRef.current,
+    getRsToHf,
   };
 }

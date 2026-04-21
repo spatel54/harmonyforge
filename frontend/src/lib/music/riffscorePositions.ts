@@ -12,12 +12,30 @@ import type { IdMap } from "./riffscoreAdapter";
 import { pitchFromStaffGeometry } from "./staffPreviewPitch";
 
 /**
+ * Map a RiffScore note id (`rs-…` from `editableScoreToRsScore`) back to HarmonyForge `Note.id`.
+ */
+export function resolveRsNoteIdToHfNoteId(
+  rsNoteId: string,
+  rsToHf: IdMap,
+  score: EditableScore,
+): string | null {
+  const mapped = rsToHf.get(rsNoteId);
+  if (mapped && findNoteSelection(score, mapped)) return mapped;
+  if (rsNoteId.startsWith("rs-")) {
+    const raw = rsNoteId.slice(3);
+    if (findNoteSelection(score, raw)) return raw;
+  }
+  return null;
+}
+
+/**
  * Extract note positions from the RiffScore rendered SVG.
  *
  * Strategy priority:
  * 1. data-note-id attributes (if RiffScore adds them — future-proof)
- * 2. Staff-grouped NoteHead class matching (RiffScore-specific, most reliable)
- * 3. Flat NoteHead/SMuFL walk (fallback if staff groups aren't found)
+ * 2. Per `g.note-group-container`: `text.NoteHead` bbox + `rect[data-testid^="note-"]` → HF id (accurate; DOM order can differ from score order for chords/beams)
+ * 3. Staff-grouped NoteHead walk (legacy order-based fallback / fills gaps)
+ * 4. Flat NoteHead walk (fallback if staff groups aren't found)
  */
 export function extractNotePositions(
   container: HTMLElement,
@@ -44,7 +62,7 @@ export function extractNotePositions(
       const rsNoteId = el.getAttribute("data-note-id");
       if (!rsNoteId) return;
 
-      const hfNoteId = rsToHf.get(rsNoteId);
+      const hfNoteId = resolveRsNoteIdToHfNoteId(rsNoteId, rsToHf, score);
       if (!hfNoteId) return;
 
       const sel = findNoteSelection(score, hfNoteId);
@@ -60,52 +78,41 @@ export function extractNotePositions(
       });
     });
 
-    return positions;
+    // If the DOM has data-note-id nodes but none map into our score (stale map /
+    // partial render), fall through to staff / flat strategies instead of [].
+    if (positions.length > 0) {
+      return positions;
+    }
   }
 
-  // ── Strategy 2: Staff-grouped NoteHead walk ──────────────────────────────
-  // RiffScore wraps each staff in <g className="staff">.  Within each staff,
-  // NoteHead text elements appear in document order matching measure → event.
+  // ── Strategy 2+: staff groups ────────────────────────────────────────────
   const staffGroups = svg.querySelectorAll("g.staff");
 
   if (staffGroups.length > 0 && staffGroups.length >= score.parts.length) {
-    for (let si = 0; si < score.parts.length; si++) {
-      const part = score.parts[si];
-      const staffGroup = staffGroups[si];
-      if (!staffGroup) continue;
+    const byTestId = extractPositionsFromNoteGroupsPerStaff(
+      staffGroups,
+      score,
+      rsToHf,
+      containerRect,
+    );
+    const legacyOrdered = extractLegacyStaffOrderedPositions(staffGroups, score, containerRect);
 
-      const noteheads = collectStaffNoteheads(staffGroup);
-      let nhIdx = 0;
-
-      for (let mi = 0; mi < part.measures.length; mi++) {
-        const measure = part.measures[mi];
-        for (let ni = 0; ni < measure.notes.length; ni++) {
-          const note = measure.notes[ni];
-          const el = noteheads[nhIdx];
-          nhIdx++;
-
-          if (!el) continue;
-
-          const rect = el.getBoundingClientRect();
-          if (rect.width === 0 && rect.height === 0) continue;
-
-          positions.push({
-            x: rect.left - containerRect.left,
-            y: rect.top - containerRect.top,
-            w: Math.max(rect.width, 12),
-            h: Math.max(rect.height, 12),
-            selection: {
-              partId: part.id,
-              measureIndex: mi,
-              noteIndex: ni,
-              noteId: note.id,
-            },
-          });
+    if (byTestId.length > 0) {
+      const byNoteId = new Map<string, NotePosition>();
+      for (const p of byTestId) {
+        byNoteId.set(p.selection.noteId, p);
+      }
+      for (const p of legacyOrdered) {
+        if (!byNoteId.has(p.selection.noteId)) {
+          byNoteId.set(p.selection.noteId, p);
         }
       }
+      return [...byNoteId.values()];
     }
 
-    return positions;
+    if (legacyOrdered.length > 0) {
+      return legacyOrdered;
+    }
   }
 
   // ── Strategy 3: Flat NoteHead walk (no staff grouping) ───────────────────
@@ -118,8 +125,114 @@ export function extractNotePositions(
       const measure = part.measures[mi];
       for (let ni = 0; ni < measure.notes.length; ni++) {
         const note = measure.notes[ni];
+        if (note.isRest || !note.pitch?.trim()) continue;
+
         const el = noteElements[noteIdx];
         noteIdx++;
+
+        if (!el) continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) continue;
+
+        positions.push({
+          x: rect.left - containerRect.left,
+          y: rect.top - containerRect.top,
+          w: Math.max(rect.width, 12),
+          h: Math.max(rect.height, 12),
+          selection: {
+            partId: part.id,
+            measureIndex: mi,
+            noteIndex: ni,
+            noteId: note.id,
+          },
+        });
+      }
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * RiffScore puts `data-testid="note-{rsNoteId}"` on each note hit rect; pair with the sibling NoteHead glyph.
+ */
+function extractPositionsFromNoteGroupsPerStaff(
+  staffGroups: NodeListOf<Element>,
+  score: EditableScore,
+  rsToHf: IdMap,
+  containerRect: DOMRectReadOnly,
+): NotePosition[] {
+  const out: NotePosition[] = [];
+
+  for (let si = 0; si < score.parts.length; si++) {
+    const part = score.parts[si];
+    const staffGroup = staffGroups[si];
+    if (!part || !staffGroup) continue;
+
+    const groups = staffGroup.querySelectorAll("g.note-group-container");
+    groups.forEach((group) => {
+      if (group.closest(".chord-group--ghost")) return;
+
+      const head = group.querySelector("text.NoteHead");
+      if (!head || isPreviewNotehead(head)) return;
+
+      const hit = group.querySelector<SVGRectElement>('rect[data-testid^="note-"]');
+      let hfNoteId: string | null = null;
+      if (hit) {
+        const tid = hit.getAttribute("data-testid");
+        if (tid?.startsWith("note-")) {
+          const rsId = tid.slice("note-".length);
+          hfNoteId = resolveRsNoteIdToHfNoteId(rsId, rsToHf, score);
+        }
+      }
+
+      if (!hfNoteId) return;
+
+      const sel = findNoteSelection(score, hfNoteId);
+      if (!sel) return;
+
+      const rect = head.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+
+      out.push({
+        x: rect.left - containerRect.left,
+        y: rect.top - containerRect.top,
+        w: Math.max(rect.width, 12),
+        h: Math.max(rect.height, 12),
+        selection: sel,
+      });
+    });
+  }
+
+  return out;
+}
+
+/** Legacy: assume NoteHead DOM order matches `measure.notes` order per staff (often wrong for chords; used as fallback). */
+function extractLegacyStaffOrderedPositions(
+  staffGroups: NodeListOf<Element>,
+  score: EditableScore,
+  containerRect: DOMRectReadOnly,
+): NotePosition[] {
+  const positions: NotePosition[] = [];
+
+  for (let si = 0; si < score.parts.length; si++) {
+    const part = score.parts[si];
+    const staffGroup = staffGroups[si];
+    if (!staffGroup) continue;
+
+    const noteheads = collectStaffNoteheads(staffGroup);
+    let nhIdx = 0;
+
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni];
+        // RiffScore does not render SMuFL noteheads for rests; skipping keeps nhIdx aligned with NoteHead list.
+        if (note.isRest || !note.pitch?.trim()) continue;
+
+        const el = noteheads[nhIdx];
+        nhIdx++;
 
         if (!el) continue;
 
@@ -222,16 +335,12 @@ function findNoteSelection(
   return null;
 }
 
-/** Check if an element is a preview/phantom notehead (RiffScore input cursor). */
+/**
+ * True for RiffScore’s input ghost / preview noteheads only.
+ * Real notes sit under `<g class="note-group-container">`; ghosts omit that wrapper (see riffscore `Note14`).
+ */
 export function isPreviewNotehead(el: Element): boolean {
-  // RiffScore wraps preview noteheads in a <g style="pointerEvents: none">
-  const parent = el.parentElement;
-  if (parent && (parent as HTMLElement).style?.pointerEvents === "none") {
-    return true;
-  }
-  // Also exclude if inside a preview-related group
-  if (el.closest('[id*="preview"]')) return true;
-  return false;
+  return !el.closest("g.note-group-container");
 }
 
 /** Check if a text element contains a SMuFL notehead glyph. */

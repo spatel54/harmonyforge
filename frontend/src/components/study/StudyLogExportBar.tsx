@@ -37,10 +37,8 @@ export function StudyLogExportBar() {
 
   return (
     <div
-      className="hf-print-hide flex flex-wrap items-center gap-2 px-3 py-2 border-t font-mono text-[10px]"
+      className="hf-print-hide flex flex-wrap items-center gap-2 font-mono text-[10px]"
       style={{
-        borderColor: "var(--hf-detail)",
-        backgroundColor: "color-mix(in srgb, var(--hf-panel-bg) 80%, transparent)",
         color: "var(--hf-text-secondary)",
       }}
     >

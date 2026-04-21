@@ -25,7 +25,7 @@ const PDF_NO_STAVES_HINT =
   "upright, high-contrast, and contains a single-line melody.";
 
 const GENERIC_NON_XML_HINT =
-  "Non-XML previews are built by the app at POST /api/to-preview-musicxml — ensure the app server is running.";
+  "The app converts these files on the server (POST /api/to-preview-musicxml). If you’re local, confirm `npm run dev` is running; use plain .xml/.musicxml for the fastest path.";
 
 /** Stable anchor in-repo (for contributors); shown in Playground error panel. */
 export const INTAKE_TROUBLESHOOTING_PATH = "docs/progress.md#multi-format-pdf-intake";
@@ -49,7 +49,7 @@ function classifyPdfError(message: string): string {
 
 export function enrichIntakePreviewError(message: string, fileExt: string): string {
   const ext = fileExt.toLowerCase().replace(/^\./, "");
-  const base = message.trim() || "Preview failed";
+  const base = message.trim() || "We couldn’t prepare a preview.";
   if (ext === "xml" || ext === "musicxml") {
     return base;
   }

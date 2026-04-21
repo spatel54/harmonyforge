@@ -84,6 +84,41 @@ describe("downsampleChordSlotsToMax", () => {
   });
 });
 
+describe("ensureChords preferInferredChords and mode conflict", () => {
+  it("keeps file chords when embedded, mode matches, and preferInferredChords is false", () => {
+    const parsed = minimalParsed({
+      key: { tonic: "C", mode: "major" },
+      chords: [{ roman: "I", beat: 0 }],
+      melody: [{ pitch: "C4", beat: 0, duration: 4 }],
+    });
+    const ec = ensureChords(parsed, "major", "classical");
+    expect(ec.chords).toEqual([{ roman: "I", beat: 0 }]);
+  });
+
+  it("reinfers when preferInferredChords is true even if file has chords", () => {
+    const parsed = minimalParsed({
+      key: { tonic: "C", mode: "major" },
+      chords: [{ roman: "vi", beat: 0 }],
+      melody: [{ pitch: "C4", beat: 0, duration: 4 }],
+    });
+    const keepFile = ensureChords(parsed, "major", "jazz");
+    const reinfer = ensureChords(parsed, "major", "jazz", { preferInferredChords: true });
+    expect(keepFile.chords[0]!.roman).toBe("vi");
+    expect(reinfer.chords[0]!.roman).not.toBe("vi");
+  });
+
+  it("reinfers when user mood conflicts with parsed key mode", () => {
+    const parsed = minimalParsed({
+      key: { tonic: "C", mode: "major" },
+      chords: [{ roman: "I", beat: 0 }],
+      melody: [{ pitch: "C4", beat: 0, duration: 4 }],
+    });
+    const ec = ensureChords(parsed, "minor", "classical");
+    expect(ec.key.mode).toBe("minor");
+    expect(ec.chords.length).toBeGreaterThan(0);
+  });
+});
+
 describe("ensureChords embedded chords cap", () => {
   it("downsamples when parsed.chords exceed HF_MAX_CHORD_SLOTS", () => {
     const many = Array.from({ length: 250 }, (_, i) => ({

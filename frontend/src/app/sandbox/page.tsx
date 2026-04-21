@@ -66,6 +66,7 @@ import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore";
 import { useSandboxTourBridge } from "@/store/useSandboxTourBridge";
 import { StudyLogExportBar } from "@/components/study/StudyLogExportBar";
+import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
@@ -79,6 +80,7 @@ import {
 } from "@/context/RiffScoreSessionContext";
 
 const ENGINE_URL = "";
+
 const DURATION_TOOL_ORDER = [
   "duration-32nd",
   "duration-16th",
@@ -329,6 +331,11 @@ function TactileSandboxPageInner({
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
   const exportPreviewRef = React.useRef<HTMLDivElement | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
+  const [showExpressiveSovereigntyCallout, setShowExpressiveSovereigntyCallout] = React.useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem("hf-dismiss-expressive-sovereignty") !== "1",
+  );
 
   const openExportModal = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
@@ -1546,6 +1553,34 @@ function TactileSandboxPageInner({
       <SandboxHeader onExportClick={openExportModal} />
       <AudioUnlockBanner />
 
+      {!reviewerStudyArm && score && score.parts.length > 1 && showExpressiveSovereigntyCallout && (
+        <div
+          className="hf-print-hide flex flex-wrap items-start justify-between gap-2 px-4 py-2 border-b border-[var(--hf-detail)]"
+          style={{ backgroundColor: "var(--hf-surface)" }}
+        >
+          <p className="font-mono text-[11px] max-w-[52rem] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+            <strong style={{ color: "var(--hf-text-primary)" }}>Expressive sovereignty:</strong> HarmonyForge fills in{" "}
+            <strong>chord framework</strong> only—phrasing, dynamics, and articulation stay yours. Use the{" "}
+            <strong>Notation</strong> panel (F9) to layer expression after harmony.
+          </p>
+          <button
+            type="button"
+            className="shrink-0 font-mono text-[11px] underline opacity-80 hover:opacity-100"
+            style={{ color: "var(--hf-text-primary)" }}
+            onClick={() => {
+              try {
+                localStorage.setItem("hf-dismiss-expressive-sovereignty", "1");
+              } catch {
+                // ignore
+              }
+              setShowExpressiveSovereigntyCallout(false);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Body */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left column */}
@@ -1620,7 +1655,7 @@ function TactileSandboxPageInner({
 
             {/* ChatFAB — shown only when inspector is closed */}
             {!isInspectorOpen && (
-              <div className="hf-print-hide absolute bottom-[28px] right-[28px] z-10">
+              <div className="hf-print-hide absolute bottom-[28px] right-[28px] z-50">
                 <ChatFAB onClick={() => setIsInspectorOpen(true)} />
               </div>
             )}
@@ -1631,7 +1666,7 @@ function TactileSandboxPageInner({
                 onClick={() => setIsPaletteOpen(true)}
                 title="Show notation panel (F9)"
                 aria-label="Show notation panel"
-                className="hf-print-hide absolute top-[72px] right-[16px] z-10 flex items-center gap-1.5 h-[32px] px-3 rounded-[6px] border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)] hover:border-[var(--hf-accent)] transition-colors"
+                className="hf-print-hide absolute top-[72px] right-[16px] z-50 flex items-center gap-1.5 h-[32px] px-3 rounded-[6px] border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)] hover:border-[var(--hf-accent)] transition-colors"
               >
                 <PaletteIcon className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
                 <span className="font-mono text-[11px]" style={{ color: "var(--hf-text-primary)" }}>
@@ -1718,7 +1753,7 @@ function TactileSandboxPageInner({
         )}
       </div>
 
-      <StudyLogExportBar />
+      <AppFooterStrip end={<StudyLogExportBar />} />
 
       {showOnboarding && !COACHMARKS_ENABLED && (
         <OnboardingCoachmark

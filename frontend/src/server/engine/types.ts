@@ -37,6 +37,11 @@ export interface GenerationConfig {
   instruments?: Record<Voice, string[]>;
   /** Optional harmony rhythm density; default "mixed". */
   rhythmDensity?: RhythmDensity;
+  /**
+   * When true, infer chords from the melody (genre/mood) instead of using chord symbols
+   * embedded in the uploaded file.
+   */
+  preferInferredChords?: boolean;
 }
 
 export interface KeyContext {

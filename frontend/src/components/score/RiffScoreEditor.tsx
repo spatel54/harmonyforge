@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import dynamic from "next/dynamic";
 import { useTheme as useNextTheme } from "next-themes";
 import "riffscore/styles.css";
@@ -11,6 +19,7 @@ import type { NoteSelection } from "@/store/useScoreStore";
 import { useScoreStore } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import { editableScoreToRiffConfig, shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
+import { cn } from "@/lib/utils";
 import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
@@ -21,6 +30,7 @@ import {
   getRiffScoreScrollRoots,
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
+import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
@@ -58,6 +68,13 @@ export interface RiffScoreEditorProps {
   onSessionReady?: (session: RiffScoreSessionHandles) => void;
   /** Show scientific pitch next to RiffScore’s note-input preview ghost */
   noteInputPitchLabelEnabled?: boolean;
+  /** Show letter + accidental (e.g. C, F#, Bb) above each notehead — learner aid; off for export when parent passes false. */
+  showNoteNameLabels?: boolean;
+  /**
+   * When `presentation` is true, pitch labels are hidden unless this is true (Document preview only).
+   * Never set on export/print roots.
+   */
+  allowNoteNameLabelsInPresentation?: boolean;
   /** Present-only flag: hide editor chrome (toolbar, bars strip, fabs) for export/print capture. */
   presentation?: boolean;
   /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
@@ -85,6 +102,8 @@ export function RiffScoreEditor({
   onInspectorInferredRegion,
   onSessionReady,
   noteInputPitchLabelEnabled = false,
+  showNoteNameLabels = false,
+  allowNoteNameLabelsInPresentation = false,
   presentation = false,
   onPaletteSymbolDrop,
   onEditorApiReady,
@@ -102,13 +121,15 @@ export function RiffScoreEditor({
     left: number;
     top: number;
   } | null>(null);
+  /** Pixels to clip from the top of the learner overlay so labels never paint over `.riff-Toolbar`. */
+  const [learnerClipTopPx, setLearnerClipTopPx] = useState(0);
   const prevScoreRef = useRef<EditableScore | null>(null);
 
   const { resolvedTheme } = useNextTheme();
   const rsTheme = resolvedTheme === "dark" ? "DARK" as const : "LIGHT" as const;
   const applyScore = useScoreStore((s) => s.applyScore);
 
-  const { pushToRiffScore, rsToHf, flushToZustand } = useRiffScoreSync(apiRef, score);
+  const { pushToRiffScore, getRsToHf, flushToZustand } = useRiffScoreSync(apiRef, score);
   const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
   const hasSelection = selectedNoteIds.size > 0;
   const focusHighlightSet = useMemo(
@@ -418,7 +439,7 @@ export function RiffScoreEditor({
     let scrollRaf = 0;
     const updatePositions = () => {
       if (!containerRef.current) return;
-      const positions = extractNotePositions(containerRef.current, score, rsToHf);
+      const positions = extractNotePositions(containerRef.current, score, getRsToHf());
       setNotePositions(positions);
       const layouts = extractStaffLabelLayout(containerRef.current, score.parts.length);
       const overlayOk =
@@ -457,7 +478,34 @@ export function RiffScoreEditor({
         el.removeEventListener("scroll", scheduleFromScroll);
       }
     };
-  }, [isReady, score, rsToHf]);
+  }, [isReady, score, getRsToHf, showNoteNameLabels]);
+
+  useLayoutEffect(() => {
+    if (!showNoteNameLabels || presentation) {
+      setLearnerClipTopPx(0);
+      return;
+    }
+    const root = containerRef.current;
+    if (!root) return;
+
+    const measure = () => {
+      const tb = root.querySelector(".riff-Toolbar");
+      if (!tb) {
+        setLearnerClipTopPx(0);
+        return;
+      }
+      const cr = root.getBoundingClientRect();
+      const br = tb.getBoundingClientRect();
+      setLearnerClipTopPx(Math.max(0, Math.round(br.bottom - cr.top)));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    const tbEl = root.querySelector(".riff-Toolbar");
+    if (tbEl) ro.observe(tbEl);
+    return () => ro.disconnect();
+  }, [showNoteNameLabels, presentation, isReady, instanceId, score]);
 
   useEffect(() => {
     if (!noteInputPitchLabelEnabled || !isReady || !score) {
@@ -527,7 +575,7 @@ export function RiffScoreEditor({
       if (!first.noteId) return;
 
       // Map RiffScore selection back to HF NoteSelection
-      const hfNoteId = rsToHf.get(first.noteId) ?? first.noteId;
+      const hfNoteId = getRsToHf().get(first.noteId) ?? first.noteId;
       const found = getNoteById(score, hfNoteId);
       if (found) {
         onNoteClick(
@@ -569,7 +617,7 @@ export function RiffScoreEditor({
     onInspectorInferredRegion,
     onNoteClick,
     score,
-    rsToHf,
+    getRsToHf,
   ]);
 
   // Subscribe to errors
@@ -621,7 +669,11 @@ export function RiffScoreEditor({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full min-h-[200px] riffscore-hf-wrapper ${className ?? ""}`}
+      className={cn(
+        "relative w-full h-full min-h-[200px] riffscore-hf-wrapper",
+        showNoteNameLabels && (!presentation || allowNoteNameLabelsInPresentation) && "pt-5",
+        className,
+      )}
       data-hf-chord-ui={chordUiOn ? "1" : "0"}
       style={{ position: "relative" }}
       onDragOverCapture={onPaletteSymbolDrop ? onPaletteDragOverCapture : undefined}
@@ -1072,6 +1124,46 @@ export function RiffScoreEditor({
             ))}
         </div>
       )}
+
+      {/* Learner overlay: letter + accidental above each notehead (centered). */}
+      {showNoteNameLabels &&
+        notePositions.length > 0 &&
+        (!presentation || allowNoteNameLabelsInPresentation) && (
+          <div
+            className="absolute inset-0 pointer-events-none z-[3]"
+            style={
+              learnerClipTopPx > 0
+                ? { clipPath: `inset(${learnerClipTopPx}px 0 0 0)` }
+                : undefined
+            }
+            aria-hidden="true"
+          >
+            {notePositions.map((pos) => {
+              const hit = getNoteById(score, pos.selection.noteId);
+              const pitch = hit?.note.pitch?.trim();
+              if (!hit || hit.note.isRest || !pitch) return null;
+              const label = formatLearnerLetterName(pitch);
+              if (!label) return null;
+              const labelAnchorY = pos.y + pos.h * 0.49 - 5;
+              return (
+                <div
+                  key={`pitch-label-${pos.selection.noteId}`}
+                  className="absolute font-mono text-[12px] font-semibold leading-none whitespace-nowrap"
+                  style={{
+                    left: pos.x + pos.w / 2,
+                    top: labelAnchorY,
+                    transform: "translate(-50%, -100%)",
+                    color: "var(--hf-text-primary)",
+                    textShadow:
+                      "0 0 4px var(--hf-bg), 0 0 8px var(--hf-bg), 0 1px 2px var(--hf-bg)",
+                  }}
+                >
+                  {label}
+                </div>
+              );
+            })}
+          </div>
+        )}
     </div>
   );
 }

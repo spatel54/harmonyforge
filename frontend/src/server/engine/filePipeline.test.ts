@@ -33,6 +33,8 @@ describe("File pipeline", () => {
     expect(xml).toContain("<measure");
     expect(xml).toContain("<pitch>");
     expect(xml).toContain("<measure number=\"2\">");
+    expect(xml.toLowerCase()).not.toContain("<dynamics");
+    expect(xml.toLowerCase()).not.toContain("<articulations");
   });
 
   it("ensureChords with mood=minor uses minor progressions", () => {

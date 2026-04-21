@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAdditiveNoteContextLines,
   buildCrossPartIntervalFacts,
+  buildProgressionWindowFacts,
   buildSatbNoteContextLines,
   buildScorePartRosterLines,
   formatAuthoritativeDurationFact,
@@ -161,6 +162,77 @@ describe("buildAdditiveNoteContextLines", () => {
     expect(lines.some((l) => l.includes("AUTHORITATIVE NOTATION") && l.includes("A3"))).toBe(
       true,
     );
+  });
+});
+
+describe("buildProgressionWindowFacts", () => {
+  it("labels PROGRESSION WINDOW and bass/soprano motion between moments", () => {
+    const slots = [
+      {
+        voices: {
+          soprano: "D4",
+          alto: "F4",
+          tenor: "A3",
+          bass: "D3",
+        },
+      },
+      {
+        voices: {
+          soprano: "C5",
+          alto: "E4",
+          tenor: "G3",
+          bass: "C3",
+        },
+      },
+      {
+        voices: {
+          soprano: "B4",
+          alto: "D4",
+          tenor: "F3",
+          bass: "B2",
+        },
+      },
+    ];
+    const lines = buildProgressionWindowFacts(slots, 1);
+    expect(lines.some((l) => l.includes("PROGRESSION WINDOW"))).toBe(true);
+    expect(lines.some((l) => l.includes("PROGRESSION —") && l.includes("bass"))).toBe(
+      true,
+    );
+    expect(lines.some((l) => l.includes("PROGRESSION —") && l.includes("soprano"))).toBe(
+      true,
+    );
+  });
+
+  it("adds a conservative hint when bass descends by fifth twice", () => {
+    const slots = [
+      {
+        voices: {
+          soprano: "C5",
+          alto: "E4",
+          tenor: "G3",
+          bass: "C3",
+        },
+      },
+      {
+        voices: {
+          soprano: "B4",
+          alto: "D4",
+          tenor: "F3",
+          bass: "F2",
+        },
+      },
+      {
+        voices: {
+          soprano: "A4",
+          alto: "C4",
+          tenor: "E3",
+          bass: "Bb1",
+        },
+      },
+    ];
+    const lines = buildProgressionWindowFacts(slots, 1);
+    expect(lines.some((l) => l.includes("PROGRESSION HINT"))).toBe(true);
+    expect(lines.some((l) => l.includes("ii–V–I"))).toBe(true);
   });
 });
 

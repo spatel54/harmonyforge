@@ -104,6 +104,7 @@ export function parseConfig(body: unknown): GenerationConfig | null {
     }
     if (Object.keys(valid).length > 0) config.instruments = valid as Record<Voice, string[]>;
   }
+  if (o.preferInferredChords === true) config.preferInferredChords = true;
   return Object.keys(config).length > 0 ? config : null;
 }
 
@@ -184,7 +185,9 @@ export function runGenerateFromFile(
   const resolved = resolveParsedScore(file, pageImages, true);
   if (!resolved.ok) return resolved;
   const parsed = resolved.parsed;
-  const withChords = ensureChords(parsed, config?.mood, config?.genre);
+  const withChords = ensureChords(parsed, config?.mood, config?.genre, {
+    preferInferredChords: config?.preferInferredChords === true,
+  });
   const leadSheet: LeadSheet = {
     key: withChords.key,
     chords: withChords.chords,

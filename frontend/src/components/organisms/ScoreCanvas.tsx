@@ -7,6 +7,7 @@ import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
@@ -68,6 +69,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
     },
     ref,
   ) => {
+    const showNoteNameLabels = useScoreDisplayStore((s) => s.showNoteNameLabels);
     const [riffScoreCrashed, setRiffScoreCrashed] = React.useState(false);
     const [riffRetryNonce, setRiffRetryNonce] = React.useState(0);
 
@@ -111,7 +113,10 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
     return (
       <div
         ref={ref}
-        className={cn("relative flex-1 min-h-[280px] overflow-hidden score-canvas-container", className)}
+        className={cn(
+          "relative flex-1 min-h-[280px] score-canvas-container overflow-hidden",
+          className,
+        )}
         role="img"
         aria-label="Score canvas — SATB grand staff"
         onClick={(e) => {
@@ -370,7 +375,9 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
 
             {/* "No score loaded" message */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="font-body text-sm">No score loaded. Upload and generate to edit.</span>
+              <span className="font-body text-sm">
+                No score here yet. Upload on step 1, then generate to open the editor.
+              </span>
             </div>
           </>
         )}
@@ -425,6 +432,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onInspectorInferredRegion={onInspectorInferredRegion}
               onSessionReady={onRiffScoreSessionReady}
               noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
+              showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}
             />
           </div>

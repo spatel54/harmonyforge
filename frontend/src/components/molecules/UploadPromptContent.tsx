@@ -35,7 +35,7 @@ export const UploadPromptContent = React.forwardRef<
           className="font-mono text-3xl lg:text-5xl font-medium leading-none text-center whitespace-nowrap"
           style={{ color: primaryColor }}
         >
-          Upload Score
+          Upload a score
         </h2>
       </div>
 
@@ -44,7 +44,7 @@ export const UploadPromptContent = React.forwardRef<
         className="font-mono text-xl lg:text-3xl font-normal leading-none text-center whitespace-nowrap"
         style={{ color: secondaryColor }}
       >
-        MusicXML / MXL / MIDI / PDF
+        MusicXML, MXL, MIDI, or PDF
       </p>
     </div>
   );

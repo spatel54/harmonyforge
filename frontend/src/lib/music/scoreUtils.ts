@@ -798,3 +798,55 @@ export function setScoreBpm(score: EditableScore, bpm: number): EditableScore {
   next.bpm = bpm;
   return next;
 }
+
+function cloneMeasureWithNewNoteIds(measure: Measure): Measure {
+  return {
+    ...measure,
+    id: generateId("m"),
+    notes: measure.notes.map((n) => ({
+      ...n,
+      id: generateId("n"),
+    })),
+  };
+}
+
+/** Melody line only (part 0) for full-score regeneration intake. */
+export function extractMelodyOnlyScore(score: EditableScore): EditableScore {
+  if (score.parts.length === 0) return score;
+  return {
+    divisions: score.divisions,
+    bpm: score.bpm,
+    chords: score.chords,
+    parts: [score.parts[0]!],
+  };
+}
+
+/**
+ * Replace harmony staves’ measures in [startIdx, endIdx] with measures from a
+ * freshly generated full score (same part ordering: melody + harmonies).
+ */
+export function replaceHarmonyMeasuresRange(
+  score: EditableScore,
+  generated: EditableScore,
+  startIdx: number,
+  endIdx: number,
+): EditableScore {
+  if (score.parts.length <= 1) return score;
+  const maxIndex = Math.min(
+    ...score.parts.map((p) => Math.max(0, p.measures.length - 1)),
+  );
+  const start = Math.max(0, Math.min(Math.min(startIdx, endIdx), maxIndex));
+  const end = Math.max(start, Math.min(Math.max(startIdx, endIdx), maxIndex));
+
+  const next = cloneScore(score);
+  for (let pi = 1; pi < next.parts.length; pi++) {
+    const genPart = generated.parts[pi];
+    if (!genPart) continue;
+    const part = next.parts[pi]!;
+    for (let m = start; m <= end; m++) {
+      if (m >= part.measures.length || m >= genPart.measures.length) continue;
+      part.measures[m] = cloneMeasureWithNewNoteIds(genPart.measures[m]!);
+    }
+  }
+  return next;
+}

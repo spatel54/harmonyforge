@@ -24,6 +24,7 @@ import { logStudyEvent } from "@/lib/study/studyEventLog";
 import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
 import { useClientPdfPreview } from "@/hooks/useClientPdfPreview";
 import { AudioUnlockBanner } from "@/components/molecules/AudioUnlockBanner";
+import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 
 const GENERATE_TIMEOUT_MS = (() => {
   const raw = process.env.NEXT_PUBLIC_GENERATE_TIMEOUT_MS;
@@ -333,7 +334,7 @@ export default function DocumentPage() {
       if (reviewerArm) {
         logStudyEvent("skipped_generation_reviewer_arm", {
           mood: config.mood,
-          genre: config.genre,
+          genre: "classical",
         });
         const musicXML = await readMelodyXmlForReviewer(file, storePreviewXml);
         setGeneratedMusicXML(musicXML);
@@ -344,7 +345,7 @@ export default function DocumentPage() {
 
       logStudyEvent("generate_harmonies_clicked", {
         mood: config.mood,
-        genre: config.genre,
+        genre: "classical",
       });
       const formData = new FormData();
       const normalizedSource =
@@ -374,7 +375,7 @@ export default function DocumentPage() {
         "config",
         JSON.stringify({
           mood: config.mood,
-          genre: config.genre,
+          genre: "classical",
           rhythmDensity: config.rhythmDensity,
           instruments: config.instruments,
         })
@@ -451,6 +452,7 @@ export default function DocumentPage() {
             }
           />
         </div>
+        <AppFooterStrip />
         {error && (
           <div
             className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg font-mono text-sm bg-red-500/20 text-red-200 border border-red-500/50"

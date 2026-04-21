@@ -4,7 +4,7 @@
 
 Pair this with **[progress.md](progress.md)** (current status) and **[plan.md](plan.md)** (checklist).
 
-**Local secrets template:** [`frontend/.env.example`](../frontend/.env.example) only lists `OPENAI_API_KEY`. The tables below are for **production tuning** (optional overrides); you do not need to copy every variable into `.env.local` for development.
+**Local secrets template:** [`frontend/.env.example`](../frontend/.env.example) lists **`OPENAI_API_KEY`** and optional **`OPENAI_BASE_URL`** (OpenAI-compatible gateway). The tables below add **production tuning** (optional overrides such as **`OPENAI_MODEL`**); you do not need every variable in `.env.local` for development.
 
 ---
 

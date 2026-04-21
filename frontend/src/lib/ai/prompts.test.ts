@@ -38,4 +38,13 @@ describe("buildSystemPrompt", () => {
     });
     expect(stylist).toContain("keep bass line stepwise");
   });
+
+  it("includes progression-first rules for tutor, auditor, and stylist", () => {
+    for (const persona of ["tutor", "auditor", "stylist"] as const) {
+      const p = buildSystemPrompt(persona, baseCtx);
+      expect(p).toContain("Progression-first analysis");
+      expect(p).toContain("PROGRESSION WINDOW");
+      expect(p).toContain("pleasantness");
+    }
+  });
 });

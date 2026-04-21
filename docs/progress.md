@@ -7,8 +7,12 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 ### Quick links
 
 - [Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20) — **end goal, approach, steps so far, current focus / risks**
+- [Work log — LLM env & Theory Inspector gateway (2026-04-20)](#wl-llm-env-2026-04-20)
 - [Work log — Palettes, rest repitch, clean export (2026-04-20)](#wl-palettes-repitch-2026-04-20)
 - [Work log — Document UX: chord gating, playback, pedagogy & tooltips (2026-04-20)](#wl-document-ux-2026-04-20)
+- [Work log — Ensemble Builder UI: collapsible pedagogy & grouped sections (2026-04-21)](#wl-ensemble-builder-ui-2026-04-21)
+- [Work log — Learner note names, classical-only scope, bar-regenerate removal (2026-04-20)](#wl-learner-notes-scope-2026-04-20)
+- [Work log — Learner pitch labels refinement: letter+accidental, DOM sync, stacking (2026-04-20)](#wl-learner-pitch-labels-refine-2026-04-20)
 - [Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)
 - [Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)
 - [End Goal](#end-goal)
@@ -33,11 +37,19 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
+### Last updated (2026-04-21)
+
+- **Ensemble Builder UI polish (2026-04-21):** [`GlassBoxPedagogyCallout`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) is a **collapsible disclosure** (chevron + short summary label); **collapsed by default** on Document ensemble flows, **expanded by default** on Theory Inspector. [`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) groups **Mood + Harmony motion** into a **Sound & style** card and **SATB dropdowns** into an **Instruments (SATB)** card; the classical-only scope line is **one concise footer** inside the first card (not a separate callout block). Slightly tighter panel padding and vertical rhythm. **Always-visible Glass Box line (Document):** a **brief paragraph under the Ensemble Builder subtitle** states that **harmony generation is algorithmic** (rules + search), **not** generative AI, and that **AI appears only in Theory Inspector** on the next screen (reviewer arm: no generative harmony AI; chat-style AI in Inspector). This stays visible even when the collapsible pedagogy is closed. See **[Work log — Ensemble Builder UI…](#wl-ensemble-builder-ui-2026-04-21)**.
+- **Current engineering failure (2026-04-21):** **`npm run lint`** fails on **`frontend/src/components/score/RiffScoreEditor.tsx`** — ESLint **`react-hooks/rules-of-hooks`**: **`useCallback`** hooks at ~lines **640–665** are declared **after** an early return (`if (!score || !config) return null`), so hooks run in a different order when the score is loading. **Fix direction:** move those callbacks **above** the guard, or extract the post-guard subtree into a child component that owns the hooks. **`npm run test`** / **`npm run build`** status unchanged by this doc update — verify locally after the fix.
+
 ### Last updated (2026-04-20)
 
+- **Learner pitch labels — refinement (2026-04-20):** Labels show **letter + accidental only** (e.g. **C**, **F#**, **Bb**) for beginners — not scientific pitch with octave. **`formatLearnerLetterName()`** in [`learnerPitchLabel.ts`](../frontend/src/lib/music/learnerPitchLabel.ts) (Vitest). **Correct placement / every note:** [`riffscorePositions.ts`](../frontend/src/lib/music/riffscorePositions.ts) maps RiffScore **`rect[data-testid^="note-"]`** inside **`g.note-group-container`** to HarmonyForge note ids (`resolveRsNoteIdToHfNoteId`); legacy staff / flat walks **skip rests** so indices align with pitched **`NoteHead`** lists; **`isPreviewNotehead`** treats only heads **outside** `note-group-container` as preview (the old `pointer-events: none` ancestor check hid all real heads). **`useRiffScoreSync`** exposes **`getRsToHf()`** so selection and extraction read a **fresh** map without waiting on rerenders. **Stacking:** learner overlay **`z-[3]`**; **Notation** chip + **Ask Theory Inspector** FAB raised to **`z-50`** in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx); **`useLayoutEffect`** + **`ResizeObserver`** drive **`clip-path: inset(...)`** under **`.riff-Toolbar`** so labels do not paint on the internal toolbar; **`pt-5`** when labels on; **`ScoreCanvas`** / **`ScorePreviewPanel`** use **`overflow-hidden`** (no `overflow-visible` escape). See **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**. **`npm test`:** **223** Vitest tests (frontend).
+- **Learner note names + product scope (2026-04-20 — late):** First slice: optional pitch help by noteheads — persisted in **`useScoreDisplayStore`**, toggles in **Sandbox** header and **Document** preview; **`extractNotePositions`** fix (strategy 1 no longer returns **[]** when `data-note-id` exists but maps fail — fall through to staff/flat walk). **Document / Generate:** removed **Genre** (Classical/Jazz/Pop) and **“Infer harmony from melody…”** UI; replaced with an in-panel **disclaimer** that the product currently generates **basic classical-style** harmonies only; **`POST /api/generate-from-file`** config is forced to **`genre: "classical"`** without **`preferInferredChords`**. **Sandbox:** removed **“Regenerate harmony in bar N”** bar (localized `generate-from-file` + `replaceHarmonyMeasuresRange` merge) and study event **`regenerate_harmony_bar`**. See **[Work log — Learner note names…](#wl-learner-notes-scope-2026-04-20)**. Label **format** and **DOM sync** details are in the **refinement** work log above.
+- **Theory Inspector — OpenAI-compatible env wiring (2026-04-20):** Server-side LLM config is centralized in **`getServerOpenAIEnv()`** in [`frontend/src/lib/ai/llmClient.ts`](../frontend/src/lib/ai/llmClient.ts): trimmed **`OPENAI_API_KEY`**, model default **`gpt-4o-mini`** when **`OPENAI_MODEL`** is unset, and **`resolveOpenAIBaseURL()`** from **`OPENAI_BASE_URL`** or **`OPENAI_URL`** (with **`normalizeOpenAIBaseURL`** for accidental double-pasted URLs). **`POST /api/theory-inspector`** and **`POST /api/theory-inspector/suggest`** use that helper; **`GET /api/theory-inspector`** returns **`hasApiKey`** and **`hasCustomBaseUrl`**. Templates: **[`frontend/.env.example`](../frontend/.env.example)** and **[`.env.example`](../.env.example)** document **`OPENAI_API_KEY`** + **`OPENAI_BASE_URL`**; **`OPENAI_MODEL`** was **removed** from templates (optional override remains for Docker / `process.env` only). **[`frontend/next.config.ts`](../frontend/next.config.ts)** **`loadEnvConfig(appDir)`** loads all **`OPENAI_*`** from **`frontend/.env.local`**. **Troubleshooting:** a bare **`BASE_URL`** variable is **ignored** — the app only reads **`OPENAI_BASE_URL`** / **`OPENAI_URL`**. **Verification:** health JSON + streaming **`POST`** through a compatible gateway. **Current product gap (Iteration 3):** see **[Work log — LLM env…](#wl-llm-env-2026-04-20)** and **[Iteration3.txt](Iteration3.txt)** — progression-aware Inspector, localized voicing, genre/mode fidelity, expressive markings boundary — not blocked by env wiring. See also **[Program narrative — current failure / focus](#program-narrative-2026-04-20)**.
 - **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20):** RiffScore **chord track / chord symbols** are shown and synced only when the score has **≥ 3 parts** (`shouldShowChordNotation` in [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts), gated `chord` config / `chordTrack` / pull merge; [`RiffScoreEditor`](../frontend/src/components/score/RiffScoreEditor.tsx) `data-hf-chord-ui` + CSS hides `g.riff-ChordTrack` when off — avoids RiffScore’s misleading default chord hover on 1–2 staves). **Document** preview: [`AudioUnlockBanner`](../frontend/src/components/molecules/AudioUnlockBanner.tsx) under the header; **Play/Pause** as a floating control on the preview canvas with **`Tone.start()`** before RiffScore `play`; removed the old bordered footer (**bars · BPM** + play); **Re-upload** moved into the title block. [`GlassBoxPedagogyCallout`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) copy tightened (baseline harmony = **algorithms**, AI = **Theory Inspector** explainer/critic only). [`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) **(i)** tooltips shortened for musicians + non-musicians; [`Tooltip`](../frontend/src/components/atoms/Tooltip.tsx) uses an **explicit width** so shrink-to-fit inside the 16px trigger no longer produces a tall, narrow popover. Vitest [`riffscoreAdapter.test.ts`](../frontend/src/lib/music/riffscoreAdapter.test.ts) covers 1/2/3-part chord behavior. See **[Work log — Document UX…](#wl-document-ux-2026-04-20)**. **`make test`:** **204** Vitest tests pass (as of this update).
 - **Rest re-pitch, palette panel, PDF verification, export cleanup (2026-04-20 — evening):** MuseScore/Noteflight parity pass. Selecting a rest and typing **A–G** (or typing on a rest at the cursor) now restores a pitched note at the rest's **same duration**, octave inferred from neighbors — see [Work log — Palettes, rest repitch, clean export (2026-04-20)](#wl-palettes-repitch-2026-04-20). A new **SandboxPalettePanel** renders the full MuseScore taxonomy (Clefs, Key/Time, Barlines, Accidentals, Articulations & Ornaments, Dynamics, Lines, Repeats & Jumps, Tempo, Text, Tuplets, Breaths) wired through the existing `handleToolSelect` dispatcher; **F9** toggles the panel. `ExportPrintRoot` + `body.hf-printing-score` replace the blanket print CSS so PDF/Print output contains only the score (no toolbar, palette, bars strip, inspector). `ScorePreviewPane` now renders in `presentation` mode — PNG/export previews are score-only. `rasterizePdf` gained a unit test; `useClientPdfPreview` pages are now posted to `/api/to-preview-musicxml` as well, so PDF previews on Document get a parsed melody whenever the server can run OMR. **Verification:** 204/204 vitests pass (current suite; includes chord-gating adapter tests); `npm run lint` clean; `npm run build` green.
-- **Repository hygiene & documentation (2026-04-20):** Removed legacy folders (`miscellaneous/chamber-music-fullstack/`, Azure/DO deploy scaffolding, duplicate frontend Dockerfile, root `node_modules`, Claude-flow tooling), merged iteration notes into **[iterations.md](iterations.md)**, consolidated design specs under **`docs/design/`**, added **`docs/archive/`** index, simplified **`.env.example`** (OpenAI key only), tightened **`.gitignore`**, added **`.github/workflows/ci.yml`**. Updated root / `frontend` / `miscellaneous` / `docs` READMEs; repaired stale links in `plan.md`, `Taxonomy.md`, and `context/system-map.md`. See **[Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)**.
+- **Repository hygiene & documentation (2026-04-20):** Removed legacy folders (`miscellaneous/chamber-music-fullstack/`, Azure/DO deploy scaffolding, duplicate frontend Dockerfile, root `node_modules`, Claude-flow tooling), consolidated design specs under **`docs/design/`**, added **`docs/archive/`** index, simplified **`.env.example`** (later extended: **`OPENAI_API_KEY`** + **`OPENAI_BASE_URL`** — see **[LLM env work log](#wl-llm-env-2026-04-20)**), tightened **`.gitignore`**, added **`.github/workflows/ci.yml`**. Updated root / `frontend` / `miscellaneous` / `docs` READMEs; repaired stale links in `plan.md`, `Taxonomy.md`, and `context/system-map.md`. See **[Work log — Repository hygiene & docs consolidation (2026-04-20)](#wl-repo-hygiene-2026-04-20)**.
 - **Consolidation + PDF + residual sweep (2026-04-19):** Single-deployable Next.js app; engine under `frontend/src/server/engine/*`; PDF path: client `pdfjs-dist` + Docker OMR; **plan §1.9m resolved**. INTENT → `intentRouter.ts`; IDEA_ACTIONS + `staffIndex`; ADR 003 transpose slice; `make verify` green. See **[Work log — Consolidation + PDF + residuals (2026-04-19)](#wl-consolidation-2026-04-19)**.
 - **Canonical handover:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** (anchor `#program-narrative-2026-04-19` retained below for old links).
 - **Glass Box pedagogy (2026-04-19):** `GlassBoxPedagogyCallout` on Document (`EnsembleBuilderPanel`) and Theory Inspector — harmony generation = deterministic rules; conversational AI = Inspector only. See **[Work log — Glass Box pedagogy callouts (2026-04-19)](#wl-glass-box-pedagogy-2026-04-19)**.
@@ -78,7 +90,7 @@ This section is the **handover-friendly summary**: end goal, approach, what has 
 ### End goal
 
 - **Product flow:** **Upload → Document** (preview + ensemble config) → **Generate Harmonies** (or **melody-only** continuation in the M5 reviewer arm) → **Sandbox** with RiffScore editing, playback, exports, and the **Theory Inspector**.
-- **Glass Box stance:** **Harmony generation** is **deterministic** — theory rules, constraints, and search over voicings — not an LLM inventing parts. **Conversational AI** is scoped to the **Theory Inspector** (explain, audit, stylistic suggestions). **In-app pedagogy:** [`GlassBoxPedagogyCallout.tsx`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) on Document and Inspector.
+- **Glass Box stance:** **Harmony generation** is **deterministic** — theory rules, constraints, and search over voicings — not an LLM inventing parts. **Conversational AI** is scoped to the **Theory Inspector** (explain, audit, stylistic suggestions). **In-app pedagogy:** [`GlassBoxPedagogyCallout.tsx`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) on Document and Inspector, plus an **always-visible** one-line disclosure on **Document** under the Ensemble Builder heading (algorithms vs AI; Inspector-only AI) so the stance is not hidden when the collapsible callout is collapsed.
 - **Research objectives** ([plan.md](plan.md) § Objective): **expressive sovereignty**, **copyright-safe axiomatic theory**, **pedagogical transparency**.
 - **M5 user study:** **RQ1** / **RQ2** instrumentation in-app; optional logging — [plan.md — M5](plan.md#m5--user-study-rq1--rq2--app-instrumentation). Condensed participant feedback: [iterations.md](iterations.md).
 
@@ -105,6 +117,8 @@ This section is the **handover-friendly summary**: end goal, approach, what has 
 | **Repository hygiene (2026-04-20)** | Removed legacy demos and duplicate deploy scaffolding; **`docs/design/`** + **`docs/archive/`**; minimal **`.env.example`**; **CI** workflow; README + link sweep — [work log](#wl-repo-hygiene-2026-04-20). |
 | **Sandbox parity — palettes, rest repitch, clean export (2026-04-20)** | MuseScore/Noteflight-style **palette panel** (F9); **rest → note re-pitch** (`restsToNotes`, A–G on selected rest); **export/print score-only** (`ExportPrintRoot`, `presentation` RiffScore, `body.hf-printing-score`); Document **PDF preview** posts `pages[]` to `/api/to-preview-musicxml`; Vitest **`rasterizePdf`** tests — [work log](#wl-palettes-repitch-2026-04-20). |
 | **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20)** | **Chord track gated** to 3+ parts; Document **audio unlock** + floating **play**; **Glass Box** + **(i)** copy; **tooltip width** fix — [work log](#wl-document-ux-2026-04-20). |
+| **Ensemble Builder UI (2026-04-21)** | **Collapsible** Glass Box pedagogy; **always-visible** algorithms-vs-AI + Theory Inspector sentence under the heading; **Sound & style** + **Instruments (SATB)** section cards; concise classical-scope line — [work log](#wl-ensemble-builder-ui-2026-04-21). |
+| **Learner note names + classical-only scope + bar-regenerate removal (2026-04-20)** | Optional **letter+accidental** labels **above** noteheads (exports stay clean); RiffScore **testid → HF id** mapping + rest-aware walks; **toolbar clip** + z-order vs FAB/palette; **Genre / infer-chords** UI removed with **classical disclaimer**; **forced classical** on generate API; **sandbox bar regeneration** removed — [scope work log](#wl-learner-notes-scope-2026-04-20), [label refinement](#wl-learner-pitch-labels-refine-2026-04-20). |
 
 ### Approach (this program, in one paragraph)
 
@@ -112,7 +126,20 @@ Ship a **single Next.js app** with a **deterministic engine** under `frontend/sr
 
 ### Current failure / what we are working on now
 
-There is **no single “the app is blocked” engineering failure** at this snapshot: **`make verify`** is the green bar (**204** Vitest tests + lint + Next build as of 2026-04-20; includes `riffscoreAdapter` chord-gating cases).
+**Active lint failure (2026-04-21):** **`npm run lint`** reports **`react-hooks/rules-of-hooks`** in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — two **`useCallback`** hooks (**palette drag/drop** handlers) are declared **after** `if (!score || !config) return null`, violating the rules of hooks. **Remediation:** move those hooks **before** the early return, or move the drag handlers into a **child component** rendered only when `score` and `config` exist. See **[Work log — Ensemble Builder UI…](#wl-ensemble-builder-ui-2026-04-21)**.
+
+**Tests / build:** **`npm run build`** and **`npm test`** (Vitest — **223** frontend tests as of 2026-04-20) were **green** before this lint regression was recorded; **`make verify`** includes lint — treat **ESLint** as part of the gate until fixed.
+
+**No single “the app is blocked” runtime failure** beyond the above CI hygiene issue. **LLM gateway env** (API key + **`OPENAI_BASE_URL`**) is wired and health-checked; misnamed env vars (e.g. **`BASE_URL`** instead of **`OPENAI_BASE_URL`**) were a **configuration** pitfall, not an engine bug — see **[Work log — LLM env & Theory Inspector gateway (2026-04-20)](#wl-llm-env-2026-04-20)**.
+
+**Study / product feedback — “Iteration 3” (current problem framing):** Condensed notes in **[Iteration3.txt](Iteration3.txt)** (from participant sessions) describe the **next wave of product risk**, not a deploy blocker. **2026-04-20 update:** we **removed** the experimental **“Regenerate harmony in bar”** sandbox control and **narrowed the Document UI** to **basic classical** harmony only (see **[Work log — Learner note names…](#wl-learner-notes-scope-2026-04-20)**), so the **localized regenerate** row below is **de-scoped in the product** until a future design; **genre** in the engine remains for future use, but **generate** is **classical-only** from the client.
+
+| Theme | Issue | Direction |
+|-------|--------|-----------|
+| **Theory Inspector** | Chords analyzed **in isolation**; weak sequential / voice-leading context (e.g. ii–V–I, jazz substitutions). | Prompt + evidence architecture should emphasize **progressions** and transitions, not per-chord trivia. |
+| **Sandbox scope** | *(Historical)* Participant asked for **localized** “regenerate voicing **here**.” **(2026-04-20)** That **bar-level regenerate** prototype was **removed** from the UI; full-score generate from **Document** remains. Revisit **region-scoped** harmony only when scope and quality bar are clear. |
+| **Expressive sovereignty** | Harmony = framework; **phrasing / dynamics / articulation** should stay human-led. | Ensure deterministic output and UI do not **auto-flood** expressive markings; prompt user to layer expression after harmony. |
+| **Parameters** | *(Historical)* genre/mode sometimes **failed to drive** expected behavior. **(2026-04-20)** **Document** no longer exposes **genre** or **infer-from-melody**; **generate** sends **`genre: classical`** only. **Engine** still supports `genre` / `preferInferredChords` for future routes; **audit** remains when multi-style generation returns. |
 
 **Recently fixed UX issue (not a server failure):** Info **(i)** tooltips beside Mood / Genre / etc. rendered in a **tall, narrow column** because the absolutely positioned tooltip was shrink-to-fit inside the **~16px-wide** trigger; **`Tooltip`** now sets an explicit **`w-[min(20rem,…)]`** so copy wraps at a readable width.
 
@@ -130,12 +157,88 @@ There is **no single “the app is blocked” engineering failure** at this snap
 
 | Track | Status / next move |
 |--------|---------------------|
-| **Deploy** | Runbook: [deployment.md](deployment.md) — Vercel (**root = `frontend`**) vs **Docker** for full PDF OMR. Align env secrets (e.g. `OPENAI_API_KEY`) with host docs. |
+| **Deploy** | Runbook: [deployment.md](deployment.md) — Vercel (**root = `frontend`**) vs **Docker** for full PDF OMR. Align env secrets (**`OPENAI_API_KEY`**, optional **`OPENAI_BASE_URL`**) with host docs. |
 | **PDF / OMR** | **Vercel:** preview raster + optional melody XML when server can OMR; generation may return **501** without tooling — **expected**. **Docker / bare metal:** ensure pdfalto build + oemer checkpoints per deployment doc. *Note:* **`miscellaneous/pdfalto/`** may be empty until the vendored tree is populated — `make pdfalto` needs sources there. |
-| **Product / study** | **M5** execution (sessions, surveys off-repo), monitoring [iterations.md](iterations.md)-style friction in new runs. |
-| **Code health (non-blocking)** | Residual **IDEA_ACTIONS** edge cases (duplicate part names, rare `noteId` mismatch); optional **`react-hooks/exhaustive-deps`** cleanups; **ADR 003** follow-ons (deeper multi-clef, JSON score deltas) per [adr/003](adr/003-multi-clef-transposition-scope.md). |
+| **Product / study** | **M5** execution (sessions, surveys off-repo); participant feedback notes in **[Iteration3.txt](Iteration3.txt)** (progression-aware Inspector, localized voicing, parameter fidelity). |
+| **Code health** | **ESLint `react-hooks/rules-of-hooks`** in **`RiffScoreEditor.tsx`** (palette **`useCallback`** after early return) — **blocks `npm run lint`** until fixed; see [Ensemble Builder UI work log](#wl-ensemble-builder-ui-2026-04-21). Residual **IDEA_ACTIONS** edge cases; optional **`react-hooks/exhaustive-deps`** cleanups; **ADR 003** follow-ons per [adr/003](adr/003-multi-clef-transposition-scope.md). |
 
 **Deprecated narrative:** “Split `backend/engine` vs Next” — the repo is **single-app**; ignore older docs that reference a separate backend process unless marked historical.
+
+---
+
+<a id="wl-llm-env-2026-04-20"></a>
+
+## Work log — LLM env & Theory Inspector gateway (2026-04-20)
+
+### End goal (this thread)
+
+**Theory Inspector** and **Stylist suggest** must call an **OpenAI-compatible** HTTP API reliably in dev and deploy: **`OPENAI_API_KEY`** plus an optional **custom base URL** (corporate gateway, Azure OpenAI–compatible proxy, etc.), with one code path and clear templates so contributors do not misconfigure env vars.
+
+### Approach
+
+1. **Single resolver** — [`getServerOpenAIEnv()`](../frontend/src/lib/ai/llmClient.ts) returns trimmed **`apiKey`**, **`model`** (default **`gpt-4o-mini`**), and **`baseURL`** via **`resolveOpenAIBaseURL()`** (**`OPENAI_BASE_URL`** ?? **`OPENAI_URL`**), reusing the same options passed into LangChain **`ChatOpenAI`** (`configuration.apiKey` + optional `baseURL`).
+2. **Next loads `frontend/.env.local`** — [`loadEnvConfig(appDir)`](../frontend/next.config.ts) from the **`frontend/`** package root so Turbopack/monorepo layout does not skip **`OPENAI_*`** vars.
+3. **Templates stay minimal** — **[`frontend/.env.example`](../frontend/.env.example)** lists **`OPENAI_API_KEY`** and **`OPENAI_BASE_URL`** only; **`OPENAI_MODEL`** was removed from templates (runtime default suffices; Docker/Makefile may still inject **`OPENAI_MODEL`**).
+4. **Observability** — **`GET /api/theory-inspector`** exposes **`hasApiKey`** and **`hasCustomBaseUrl`** (no secrets).
+
+### Steps completed
+
+| Step | Detail |
+|------|--------|
+| Centralize env | **`getServerOpenAIEnv()`** + export **`resolveOpenAIBaseURL()`**; **`POST /api/theory-inspector`** and **`POST /api/theory-inspector/suggest`** use the helper instead of ad hoc **`process.env`** reads. |
+| Health | **`GET /api/theory-inspector`** adds **`hasCustomBaseUrl`**. |
+| Templates | Root **[`.env.example`](../.env.example)** and **`frontend/.env.example`** document **`OPENAI_BASE_URL`**; **`OPENAI_MODEL`** lines removed from examples. |
+| **`next.config.ts`** | Comment documents loading **`OPENAI_*`** (not only the API key). |
+| **Ops** | **`make dev`** / **`make dev-clean`** for local server lifecycle; port **3000** default. |
+
+### Pitfall encountered (configuration, not code bug)
+
+Using a variable named **`BASE_URL`** for the OpenAI gateway **does not work** — only **`OPENAI_BASE_URL`** / **`OPENAI_URL`** are read. Duplicated URLs in one line (e.g. two `https://…` pasted together) are partially mitigated by **`normalizeOpenAIBaseURL()`**; prefer a single clean origin + path (typically ending in **`/v1`** for OpenAI-compatible servers).
+
+### Verification performed
+
+- **`curl http://localhost:3000/api/theory-inspector`** → **`hasApiKey: true`**, **`hasCustomBaseUrl: true`** when both are set in **`frontend/.env.local`**.
+- **`POST /api/theory-inspector`** with a minimal prompt returns a streamed response through the configured gateway (smoke test).
+
+### Current failure / focus (what we are working on *next*)
+
+Env wiring is **done**. The **open problems** are **product / research**, summarized in **[Iteration3.txt](Iteration3.txt)** and the [Program narrative — Iteration 3 table](#program-narrative-2026-04-20): **progression-aware** Inspector (not chord-in-isolation), **localized** voicing/regenerate, **parameter** fidelity (genre/mode), and **expressive** markings staying human-owned. **CI:** fix **`RiffScoreEditor`** hook ordering so **`npm run lint`** is green — see **[Work log — Ensemble Builder UI…](#wl-ensemble-builder-ui-2026-04-21)**.
+
+---
+
+<a id="wl-ensemble-builder-ui-2026-04-21"></a>
+
+## Work log — Ensemble Builder UI: collapsible pedagogy & grouped sections (2026-04-21)
+
+### End goal (this thread)
+
+1. **Readable Document column:** The **Ensemble Builder** strip on **`/document`** should feel like a **form**, not a wall of equal-weight callouts — clearer **hierarchy**, less vertical noise, same semantics (Glass Box stance + classical-only honesty).
+2. **Pedagogy without clutter:** Long **“how we use / don’t use AI”** copy remains available but **does not dominate** the first screen; users who need it can expand.
+3. **Non-negotiable transparency:** Even when the collapsible is **closed**, users must still see that **harmonies are produced by algorithms** (rules + search), **not** by generative AI, and that **conversational AI** appears only in **Theory Inspector** on the next screen (with a **reviewer-arm** variant when melody-only flow applies).
+4. **Grouped controls:** **Mood**, **Harmony motion**, and the **classical-style** scope note belong together; **SATB instrument** pickers read as a distinct step.
+
+### Approach
+
+| Topic | Decision |
+|-------|----------|
+| **Glass Box callout** | [`GlassBoxPedagogyCallout`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) — **toggle button** (chevron + **summary** label), **`aria-expanded`**, **`role="region"`** for the expanded body. **Default:** `defaultOpen === undefined` → **collapsed** for **`ensemble-generate`** / **`ensemble-reviewer`**, **open** for **`inspector`** (Theory Inspector keeps the explanation visible). Optional **`defaultOpen`** override. |
+| **Always-visible disclosure** | [`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) — **`font-body`** paragraph **under the subtitle**, before the collapsible: **generate** flow = harmonies from engine **algorithms**, not generative AI; **AI** only in **Theory Inspector** next screen. **Reviewer** flow = no generative harmony AI; chat-style AI in **Theory Inspector** next screen. |
+| **Ensemble layout** | Same file — **`<section>`** cards with shared border/background tokens; **“Sound & style”** groups mood + rhythm density + **one-line** classical disclaimer (generate flow only); **“Instruments (SATB)”** groups four **`VoiceDropdown`**s. Tighter **`gap-5`** and horizontal padding **`px-[40px]`**. |
+| **Copy** | Full pedagogy **title + body** unchanged inside the expanded region; summary labels: **“How HarmonyForge uses AI”** (ensemble), **“Conversational AI in this panel”** (inspector). |
+
+### Steps completed (files)
+
+- [`frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx`](../frontend/src/components/molecules/GlassBoxPedagogyCallout.tsx) — collapsible UI, **`summaryLabel`** per variant, **`defaultOpen`** / variant defaults, **`lucide-react`** **`ChevronDown`**.
+- [`frontend/src/components/organisms/EnsembleBuilderPanel.tsx`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx) — section cards, heading ids + **`aria-labelledby`**, consolidated classical disclaimer line, **always-visible** algorithms / Theory Inspector disclosure (generate vs **`reviewer_melody`** copy).
+
+### Verification
+
+- Manual: **`/document`** — with Glass Box **collapsed**, the **subtitle paragraph** still states **algorithms vs generative AI** and **Theory Inspector**; expand for full pedagogy; confirm Mood + Harmony motion + classical line in **Sound & style**; SATB in **Instruments** card.
+- **`npm run lint`**: **fails** until **`RiffScoreEditor.tsx`** hook order is fixed (not introduced by these two files; see **Current failure** below).
+
+### Current failure / focus (what we are working on *next*)
+
+**ESLint `react-hooks/rules-of-hooks`** in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx): **`useCallback`** for palette **drag/drop** sits **after** `if (!score || !config) return null` (~lines 636–665). **Required fix:** hooks must run unconditionally at the top level of the component — **lift** the callbacks above the guard or **split** a **`RiffScoreEditorInner`** that receives `score` + `config` as non-null props.
 
 ---
 
@@ -334,6 +437,97 @@ Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged 
 
 - **No blocking engineering failure** for this thread: tests green, change set is UX + policy + copy.
 - **Follow-up (optional):** Manual QA on **`/document`** across browsers (Safari autoplay policies). Residual **IDEA_ACTIONS** / duplicate part-name edge cases unchanged from the **Current failure / what we are working on now** subsection in [Program narrative](#program-narrative-2026-04-20) above.
+
+---
+
+<a id="wl-learner-notes-scope-2026-04-20"></a>
+
+## Work log — Learner note names, classical-only scope, bar-regenerate removal (2026-04-20)
+
+### End goal (this thread)
+
+1. **Learner affordance:** Beginners (or anyone mapping staff to pitch names) can toggle **pitch help** on the score **without** polluting export/print previews. *(Initial implementation used scientific pitch with octave; **refinement** switched to **letter + accidental** only — see **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**.)*
+2. **Product honesty:** The app **defaults** to **basic classical-style** harmony generation; **do not** imply jazz/pop or “infer over file chords” until those paths are reliable and tested.
+3. **Scope control:** Remove the **localized bar regeneration** experiment from Sandbox so the surface area matches the **single-pass Document → Generate** flow.
+
+### Approach
+
+| Topic | Decision |
+|-------|----------|
+| **Note labels** | Zustand **`useScoreDisplayStore`** (`persist` key `harmonyforge-score-display`) — **`showNoteNameLabels`**. Sandbox header + Document **`ScorePreviewPanel`** checkbox; **`RiffScoreEditor`** receives **`showNoteNameLabels`** + **`allowNoteNameLabelsInPresentation`** for Document preview only; **Export modal** (`ScorePreviewPane`) stays **presentation-only** without labels. |
+| **Positioning / visibility** | **`extractNotePositions`** ([`riffscorePositions.ts`](../frontend/src/lib/music/riffscorePositions.ts)): if **`[data-note-id]`** exists but **none** map through **`rsToHf`**, **do not** return early with **[]** — fall through to **`g.staff`** / flat NoteHead strategies. **Refinement** adds testid-based extraction, rest-skipping walks, preview detection, lower overlay **z-index**, **toolbar band clipping**, and **`overflow-hidden`** on score frames — see [refinement work log](#wl-learner-pitch-labels-refine-2026-04-20). |
+| **Classical-only UX** | [`EnsembleBuilderPanel.tsx`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx): remove **Genre** buttons and **“Infer harmony from melody…”**; add **disclaimer** copy. Generate CTA passes **`genre: "classical"`** and **`preferInferredChords: false`** regardless of any stale persisted store. [`document/page.tsx`](../frontend/src/app/document/page.tsx): **`POST /api/generate-from-file`** **`config`** JSON uses **`genre: "classical"`** and omits **`preferInferredChords`**. |
+| **Bar regenerate removed** | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx): delete **`handleRegenerateHarmonyInBar`**, UI strip, **`isRegeneratingHarmonyBar`**, imports **`extractMelodyOnlyScore`**, **`replaceHarmonyMeasuresRange`**, unused **`GENERATE_TIMEOUT_MS`**. [`studyEventLog.ts`](../frontend/src/lib/study/studyEventLog.ts): drop **`regenerate_harmony_bar`** event name. |
+
+### Steps completed (files)
+
+- `frontend/src/store/useScoreDisplayStore.ts`, `*.test.ts` — persisted toggle.
+- `frontend/src/components/score/RiffScoreEditor.tsx` — overlay, `cn` + conditional `pt-3`, effect deps include **`showNoteNameLabels`**.
+- `frontend/src/components/organisms/ScoreCanvas.tsx`, `ScorePreviewPanel.tsx` — pass store + **overflow** when labels on.
+- `frontend/src/components/organisms/SandboxHeader.tsx` — “Note names” checkbox + tooltip.
+- `frontend/src/lib/music/riffscorePositions.ts` — strategy 1 fallback when mapped positions empty.
+- `frontend/src/components/organisms/EnsembleBuilderPanel.tsx` — disclaimer; removed genre + infer UI; fixed generate payload.
+- `frontend/src/app/document/page.tsx` — forced classical **`config`** + study log payloads.
+- `frontend/src/app/sandbox/page.tsx` — bar regeneration removed.
+
+### Verification
+
+- **`npm run build`** — green.
+- **`npm test`** — **223** tests (Vitest) after refinement (`learnerPitchLabel`, `riffscorePositions`, `useScoreDisplayStore`, etc.).
+
+### Current failure / focus (what we are working on *next*)
+
+**No failing test** from this slice. **Open work** remains the **Iteration 3** research themes in **[Iteration3.txt](Iteration3.txt)** — especially **progression-aware Theory Inspector** and **expressive-sovereignty** guarantees — **not** re-expanding genre/jazz/regenerate until the engine and prompts are ready. **`useGenerationConfigStore`** still exposes **`setGenre`** / **`preferInferredChords`** for **Theory Inspector** `<<<INTENT>>>` handlers and persistence; the **Document** path no longer surfaces those controls.
+
+---
+
+<a id="wl-learner-pitch-labels-refine-2026-04-20"></a>
+
+## Work log — Learner pitch labels refinement: letter+accidental, DOM sync, stacking (2026-04-20)
+
+### End goal (this thread)
+
+1. **Readable beginner labels:** Show **letter + accidental only** (e.g. **C**, **F#**, **Bb**) **above** each notehead — not scientific pitch with octave — so the staff stays the source of truth for register.
+2. **Correctness:** Every **real** notehead gets the label that matches **`Note.pitch`** / model order; no “all preview” or wrong-index bugs.
+3. **Polish:** Labels must not sit on top of **Notation** chip, **Theory Inspector** FAB, **F9 palette**, or the **RiffScore** internal toolbar row; scrolling/clipping must stay predictable.
+
+### Approach
+
+| Topic | Decision |
+|-------|----------|
+| **Format** | **`formatLearnerLetterName()`** in [`learnerPitchLabel.ts`](../frontend/src/lib/music/learnerPitchLabel.ts) — Vitest in **`learnerPitchLabel.test.ts`**. |
+| **DOM ↔ model** | Prefer **`g.note-group-container`** + **`rect[data-testid^="note-"]`** (RiffScore **`note-{rsNoteId}`**) merged with legacy staff walk; **`resolveRsNoteIdToHfNoteId`**; legacy + flat walks **skip rests** so list index matches **`NoteHead`** entries; **`isPreviewNotehead`** = **no** `closest("g.note-group-container")` (replacing the **`pointer-events: none`** parent heuristic that treated every head as preview). |
+| **Fresh rs→hf map** | [`useRiffScoreSync.ts`](../frontend/src/hooks/useRiffScoreSync.ts) — **`getRsToHf()`** for position extraction and selection handlers so refs do not require a rerender to see the latest map. |
+| **Placement** | Overlay in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx): anchor **above** notehead (`labelAnchorY = pos.y + pos.h * 0.49 - 5`, **`translate(-50%, -100%)`**); learner layer **`z-[3]`**. |
+| **Toolbar / chrome** | **`useLayoutEffect`** + **`ResizeObserver`** → **`learnerClipTopPx`** + **`clip-path: inset(Npx 0 0 0)`** under **`.riff-Toolbar`**; extra **`pt-5`** when labels on. |
+| **Global z-order** | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) — Notation control + chat FAB **`z-50`**. |
+| **Overflow** | [`ScoreCanvas.tsx`](../frontend/src/components/organisms/ScoreCanvas.tsx), [`ScorePreviewPanel.tsx`](../frontend/src/components/organisms/ScorePreviewPanel.tsx) — **`overflow-hidden`** on the score frame (no special `overflow-visible` path for labels). |
+| **Copy / store** | [`SandboxHeader.tsx`](../frontend/src/components/organisms/SandboxHeader.tsx), **`ScorePreviewPanel`**, [`useScoreDisplayStore.ts`](../frontend/src/store/useScoreDisplayStore.ts) — tooltips / JSDoc for “above notehead”, letter+accidental. |
+
+### Root causes fixed (engineering)
+
+| Symptom | Cause | Fix |
+|--------|--------|-----|
+| Toggle on, **no labels** | **`isPreviewNotehead`** true for all heads (RiffScore wraps in `pointer-events: none`) | Detect real notes via **`note-group-container`** |
+| **Wrong / missing** labels | DOM order ≠ `measure.notes`; rests in walk desynced index | **testid → HF id** + **skip rests** in positional paths |
+| Labels over **FAB / palette / toolbar** | Very high overlay **z-index** + `overflow-visible` | Lower overlay **z**, raise chrome **z**, **clip** toolbar band, **overflow-hidden** containers |
+
+### Steps completed (files)
+
+- [`learnerPitchLabel.ts`](../frontend/src/lib/music/learnerPitchLabel.ts), **`learnerPitchLabel.test.ts`**
+- [`riffscorePositions.ts`](../frontend/src/lib/music/riffscorePositions.ts), **`riffscorePositions.test.ts`**; [`vitest.config.ts`](../frontend/vitest.config.ts) **`happy-dom`** glob for DOM tests in that file
+- [`useRiffScoreSync.ts`](../frontend/src/hooks/useRiffScoreSync.ts) — **`getRsToHf()`**
+- [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — overlay, clip, padding, **`z-[3]`**
+- [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`ScoreCanvas.tsx`](../frontend/src/components/organisms/ScoreCanvas.tsx), [`ScorePreviewPanel.tsx`](../frontend/src/components/organisms/ScorePreviewPanel.tsx)
+- [`SandboxHeader.tsx`](../frontend/src/components/organisms/SandboxHeader.tsx), [`useScoreDisplayStore.ts`](../frontend/src/store/useScoreDisplayStore.ts), **`useScoreDisplayStore.test.ts`**
+
+### Verification
+
+- **`npm test`** — **223** tests (Vitest), including **`riffscorePositions`** and **`learnerPitchLabel`**.
+
+### Current failure / focus (what we are working on *next*)
+
+**No open engineering failure** for learner labels at this snapshot. **Product “current failure”** remains **Iteration 3** framing in **[Iteration3.txt](Iteration3.txt)** — progression-aware **Theory Inspector**, voicing/expressiveness gaps, genre fidelity when multi-style generation returns — **not** blocked by this overlay work. Run **`make verify`** before release as the full gate.
 
 ---
 

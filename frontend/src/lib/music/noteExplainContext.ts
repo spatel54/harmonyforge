@@ -330,6 +330,79 @@ export function buildSatbNoteContextLines(
   return lines;
 }
 
+/** Compact bass + melody motion between adjacent chord moments (Iteration 3: progression-aware FACTs). */
+export function buildProgressionWindowFacts(
+  auditedSlots: AuditedSlotLike[],
+  slotIndex: number,
+  opts?: SatbNoteContextOptions,
+): string[] {
+  const cur = auditedSlots[slotIndex];
+  if (!cur) return [];
+
+  const lines: string[] = [
+    `FACT: PROGRESSION WINDOW — chord-moment indices (0-based grid): ${slotIndex > 0 ? String(slotIndex - 1) : "—"} → ${slotIndex} → ${slotIndex < auditedSlots.length - 1 ? String(slotIndex + 1) : "—"}.`,
+  ];
+
+  if (slotIndex > 0) {
+    const prev = auditedSlots[slotIndex - 1]!;
+    const db =
+      pitchToMidi(cur.voices.bass) - pitchToMidi(prev.voices.bass);
+    const ds =
+      pitchToMidi(cur.voices.soprano) - pitchToMidi(prev.voices.soprano);
+    lines.push(
+      `FACT: PROGRESSION — ${staffLabel("bass", opts)} from previous moment → this: ${prev.voices.bass} → ${cur.voices.bass} (${db === 0 ? "unison repeat" : db > 0 ? `+${db} semitones` : `${db} semitones`}).`,
+    );
+    lines.push(
+      `FACT: PROGRESSION — ${staffLabel("soprano", opts)} from previous moment → this: ${prev.voices.soprano} → ${cur.voices.soprano} (${ds === 0 ? "unison repeat" : ds > 0 ? `+${ds} semitones` : `${ds} semitones`}).`,
+    );
+  }
+
+  if (slotIndex < auditedSlots.length - 1) {
+    const next = auditedSlots[slotIndex + 1]!;
+    const db =
+      pitchToMidi(next.voices.bass) - pitchToMidi(cur.voices.bass);
+    const ds =
+      pitchToMidi(next.voices.soprano) - pitchToMidi(cur.voices.soprano);
+    lines.push(
+      `FACT: PROGRESSION — ${staffLabel("bass", opts)} this moment → next: ${cur.voices.bass} → ${next.voices.bass} (${db === 0 ? "unison repeat" : db > 0 ? `+${db} semitones` : `${db} semitones`}).`,
+    );
+    lines.push(
+      `FACT: PROGRESSION — ${staffLabel("soprano", opts)} this moment → next: ${cur.voices.soprano} → ${next.voices.soprano} (${ds === 0 ? "unison repeat" : ds > 0 ? `+${ds} semitones` : `${ds} semitones`}).`,
+    );
+  }
+
+  const hint = progressionHeuristicTag(auditedSlots, slotIndex);
+  if (hint) {
+    lines.push(`FACT: PROGRESSION HINT (heuristic only; not Roman-numeral analysis): ${hint}`);
+  }
+
+  return lines;
+}
+
+function progressionHeuristicTag(
+  auditedSlots: AuditedSlotLike[],
+  slotIndex: number,
+): string | null {
+  if (slotIndex <= 0 || slotIndex >= auditedSlots.length - 1) return null;
+  const a = auditedSlots[slotIndex - 1]!;
+  const b = auditedSlots[slotIndex]!;
+  const c = auditedSlots[slotIndex + 1]!;
+  /** Signed semitone move, folded to ±12 for one step */
+  const step = (from: string, to: string) => {
+    let d = pitchToMidi(to) - pitchToMidi(from);
+    while (d > 12) d -= 12;
+    while (d < -12) d += 12;
+    return d;
+  };
+  const b1 = step(a.voices.bass, b.voices.bass);
+  const b2 = step(b.voices.bass, c.voices.bass);
+  // Descending fifth in bass (–7 semitones) twice often outlines ii–V–I-style motion; stay conservative.
+  if (b1 === -7 && b2 === -7) {
+    return "Bass descends by fifth into this moment and again to the next—common in cyclic major-key schemas (e.g. ii–V–I-style bass motion); verify by ear and context.";
+  }
+  return null;
+}
+
 /** Tutor FACT when the user changed pitch since generation. */
 export function buildPitchEditDeltaFact(
   originalPitch: string,

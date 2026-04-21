@@ -61,8 +61,8 @@ export function AudioUnlockBanner() {
       role="status"
     >
       <span>
-        Audio is paused by your browser. Click <strong>Enable audio</strong> so playback
-        starts on the first note.
+        Browsers keep audio muted until you interact. Use{" "}
+        <strong>Enable audio</strong> so the first Play isn’t silent.
       </span>
       <div className="flex gap-2">
         <button

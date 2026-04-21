@@ -30,6 +30,7 @@ import type { SatbNoteContextOptions } from "@/lib/music/noteExplainContext";
 import {
   buildAdditiveNoteContextLines,
   buildPitchEditDeltaFact,
+  buildProgressionWindowFacts,
   buildSatbNoteContextLines,
   buildSatbRhythmContextLines,
   buildScorePartRosterLines,
@@ -558,6 +559,11 @@ function buildLiveNoteExplainInsight(
     voice,
     satbOpts,
   );
+  const progressionFacts = buildProgressionWindowFacts(
+    slotData.auditedSlots,
+    slotIndex,
+    satbOpts,
+  );
 
   let originFindings: TraceFinding[] = [];
   const bt = baselineTrace?.find((t) => t.slotIndex === slotIndex);
@@ -642,6 +648,7 @@ function buildLiveNoteExplainInsight(
     ...rosterLines,
     clickedAuthoritative,
     ...rhythmFacts,
+    ...progressionFacts,
     ...currentFacts,
     "---",
     "FULL BAR (all staves, this measure):",

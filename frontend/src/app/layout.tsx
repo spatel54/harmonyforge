@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import {
   Inter,
   Instrument_Serif,
@@ -7,6 +6,11 @@ import {
 } from "next/font/google";
 
 import "./globals.css";
+import { buildRootMetadata } from "@/lib/siteMeta";
+import { ThemeProvider } from "@/components/atoms/ThemeProvider";
+import { StudySessionProvider } from "@/components/study/StudySessionProvider";
+import { StudyConsentGate } from "@/components/study/StudyConsentGate";
+import { CoachmarkOverlay } from "@/components/organisms/CoachmarkOverlay";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const instrumentSerif = Instrument_Serif({
@@ -25,15 +29,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
 });
 
-export const metadata: Metadata = {
-  title: "HarmonyForge — Glass Box",
-  description: "An Ante-hoc 'Glass Box' co-creative system for symbolic music.",
-};
-
-import { ThemeProvider } from "@/components/atoms/ThemeProvider";
-import { StudySessionProvider } from "@/components/study/StudySessionProvider";
-import { StudyConsentGate } from "@/components/study/StudyConsentGate";
-import { CoachmarkOverlay } from "@/components/organisms/CoachmarkOverlay";
+export const metadata = buildRootMetadata();
 
 export default function RootLayout({
   children,

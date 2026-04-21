@@ -1,0 +1,14 @@
+Product Improvements for HarmonyForge
+(Narrative sync: see docs/progress.md — Program narrative → “Iteration 3” table, 2026-04-20.)
+
+2026-04-20 product note: Item 2 below (localized bar regenerate) was briefly prototyped then removed from the UI; Document now states classical-only harmony and Generate sends genre:classical. Re-scope any “highlight-to-regenerate” work against that baseline.
+
+The transcript reveals that while HarmonyForge successfully outperforms the probabilistic model by preserving the original melody and offering robust customization, there are distinct architectural limitations hindering its utility as a true co-creative partner.
+1. Context-Aware Upgrades for the Theory Inspector The participant noted a critical flaw in the Theory Inspector's current LLM logic: it analyzes chords in isolation rather than understanding their sequential, transitional context. When generating a jazz progression, the system outputted "very basic" chords and justified them with generic, unhelpful reasoning (e.g., citing a study that claims a chord is "harmonically pleasing").
+Actionable Fix: The Inspector's underlying prompt architecture must be overhauled to evaluate harmonic progressions (e.g., identifying ii-V-I cadences, tritone substitutions, or contextual voice-leading) rather than just listing the dominant and root notes of isolated chords.
+2. Localized "Highlight-to-Generate" Functionality The participant explicitly articulated a vision for a more granular workflow, stating they would prefer to highlight a specific measure within the composition software and command the engine to generate a "more complex voicing here".
+Actionable Fix: Transition the interactive sandbox from a "generate-all" model to a localized editing model. Allow users to select specific bars or notes and request alternate harmonic voicings just for that section, transforming the AI into a targeted "assistant on the side".
+3. Strict Separation of Framework vs. Human Expression The user articulated a clear boundary for AI involvement: the system should only generate the "bare bones framework" (the chords), while tasks involving phrasing, dynamics, staccatos, and legatos must be strictly reserved for human interpretation.
+Actionable Fix: Ensure that the generative logic core never automatically inserts expressive or dynamic markings. Instead, design the UI to actively prompt the user to overlay their own articulations once the harmonic generation is complete, visually reinforcing their "Expressive Sovereignty."
+4. Parameter Execution Accuracy During testing, the participant attempted to change the genre to "jazz" and the key to "minor," but the system failed to execute these transformations correctly.
+Actionable Fix: The constraint-solving engine must be audited to ensure that user-selected parameters (like mode or stylistic genre) rigidly enforce the correct harmonic rulesets without corrupting the integrity of the user's inputted melody.

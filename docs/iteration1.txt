@@ -1,0 +1,14 @@
+Actionable Product Improvements for HarmonyForge
+1. UI/UX and Interactive Sandbox Mechanics
+Cursor and Selection Accuracy: The participant experienced significant difficulty selecting and moving notes. The system erroneously highlighted note stems instead of noteheads, and the cursor failed to transform into a "hand" icon to indicate movable elements, leading to accidental note additions.
+Rhythmic Editing Limitations: The interface struggled to handle complex rhythmic adjustments, such as combining an 8th note and a 16th note, which resulted in misaligned notation.
+Cognitive Load in the Toolbar: The participant reported being confused by the abundance of unlabelled buttons at the top of the interface, which detracted from the system's initial usability.
+2. Deterministic Generation Logic (The Logic Core)
+Rhythmic Monotony: The engine defaulted to generating half notes for the entire harmony rather than matching the rhythmic integrity of the input melody. The algorithm must be updated to derive rhythmic variations from the source material.
+Voice Independence: The participant noted that the generated soprano and alto lines were in unison for the entire duration, which they identified as a waste of a voice and a poor voice-leading practice.
+Clef Assignment Errors: The system incorrectly assigned a mezzo-soprano clef to the tenor voice, a basic engraving error that immediately damaged the system's credibility for a trained musician.
+3. Theory Inspector (LLM Integration)
+Information Density: The Theory Inspector's responses were excessively verbose. The participant noted there was "too much writing" for someone who just wants actionable advice. Prompts driving the LLM must be constrained to output concise, bulleted feedback.
+Contextual Alignment: The Inspector frequently offered advice that contradicted the user's specific musical goals, such as suggesting a dissonant 'A' when the user explicitly wanted to establish a stable 'C Major' or 'G' chord.
+Empty State Scaffolding: Upon opening the chat, the participant stated, "I just don't know what question to ask". The Inspector requires clickable, contextual starter prompts (e.g., "Check my voice leading," or "Suggest a passing chord here") to initiate the interaction.
+Targeted Editing: The participant explicitly requested the ability to highlight specific measures and ask the AI to apply targeted changes (e.g., "please follow the melody more, but with different notes").
