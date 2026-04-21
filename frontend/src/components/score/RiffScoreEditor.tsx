@@ -633,10 +633,6 @@ export function RiffScoreEditor({
     return unsub;
   }, [isReady, onError]);
 
-  if (!score || !config) return null;
-
-  const selectedIds = new Set(selection.map((s) => s.noteId));
-
   const onPaletteDragOverCapture = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       if (!onPaletteSymbolDrop) return;
@@ -663,6 +659,10 @@ export function RiffScoreEditor({
     },
     [onPaletteSymbolDrop],
   );
+
+  if (!score || !config) return null;
+
+  const selectedIds = new Set(selection.map((s) => s.noteId));
 
   const chordUiOn = Boolean(score && shouldShowChordNotation(score));
 

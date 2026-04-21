@@ -12,6 +12,9 @@ const appDir = path.dirname(fileURLToPath(import.meta.url));
 loadEnvConfig(appDir);
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   serverExternalPackages: [
     "@tonejs/midi",
     "adm-zip",

@@ -1,5 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=Instrument+Serif:ital,wght@0,400;1,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
-@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500&display=swap");
+/* Fonts: Google families come from next/font in layout.tsx (self-hosted, no blocking
+   @import). Satoshi (Fontshare) is linked in layout <head> so Tailwind can parse
+   immediately instead of waiting on network @import chains. */
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
@@ -21,9 +22,9 @@
   --color-hf-warning: #1976d2;
   --color-hf-override: #7b1fa2;
 
-  /* Typography — MASTER.md §2 */
-  --font-brand: "Instrument Serif", serif;
-  --font-body: "Inter", sans-serif;
+  /* Typography — MASTER.md §2 (align with --font-* from next/font on <html>) */
+  --font-brand: var(--font-instrument), "Instrument Serif", serif;
+  --font-body: var(--font-inter), "Inter", sans-serif;
   --font-system: "Satoshi", "SF Pro", ui-monospace, monospace;
 
   /* Spacing — 8-pt grid, MASTER.md §3 */

@@ -4,13 +4,13 @@ import {
   Fraunces,
   IBM_Plex_Mono,
 } from "next/font/google";
-
 import "./globals.css";
 import { buildRootMetadata } from "@/lib/siteMeta";
 import { ThemeProvider } from "@/components/atoms/ThemeProvider";
 import { StudySessionProvider } from "@/components/study/StudySessionProvider";
 import { StudyConsentGate } from "@/components/study/StudyConsentGate";
-import { CoachmarkOverlay } from "@/components/organisms/CoachmarkOverlay";
+import { NonBlockingFontshareLink } from "@/components/atoms/NonBlockingFontshareLink";
+import { CoachmarkOverlayLazy } from "@/components/organisms/CoachmarkOverlayLazy";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const instrumentSerif = Instrument_Serif({
@@ -46,6 +46,7 @@ export default function RootLayout({
         className="antialiased overflow-hidden w-screen h-screen"
         suppressHydrationWarning
       >
+        <NonBlockingFontshareLink />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <StudySessionProvider>
             <StudyConsentGate>
@@ -55,7 +56,7 @@ export default function RootLayout({
               <main id="main-content" className="w-full h-full relative">
                 {children}
               </main>
-              <CoachmarkOverlay />
+              <CoachmarkOverlayLazy />
             </StudyConsentGate>
           </StudySessionProvider>
         </ThemeProvider>
