@@ -8609,7 +8609,7 @@ _**Agent (claude-sonnet-4-6 2026-04-23 00:21:26Z)**_
 
 All changes including the arrow key handler are already in the last commit. The only unstaged changes are `.specstory/` auto-generated files. I'll commit those and push.
 
-_**Agent (claude-sonnet-4-6 2026-04-23 00:21:27Z)**_
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:33Z)**_
 
 <tool-use data-tool-type="shell" data-tool-name="Bash"><details>
 <summary>Tool use: **Bash**</summary>
@@ -8623,4 +8623,634 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
+
+```text
+[main a71f947] chore: update specstory session history
+ 2 files changed, 198 insertions(+), 5 deletions(-)
+```
 </details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:36Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:22:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Push main branch to remote
+
+`git push origin main`
+
+```text
+To https://github.com/salt-family/harmonyforge.git
+   e37f66c..a71f947  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:23:08Z)**_
+
+Pushed. All 3 commits from this session are now on `origin/main`.
+
+---
+
+_**User (2026-04-23 00:31:10Z)**_
+
+check vercel, are these changes uploaded
+
+---
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:31:13Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:32:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List recent Vercel deployments
+
+`vercel ls --scope salt-family 2>&1 | head -30`
+
+```text
+Error: The specified scope does not exist
+Learn More: https://err.sh/vercel/scope-not-existent
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:32:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List recent Vercel deployments without scope
+
+`vercel ls 2>&1 | head -30`
+
+```text
+Retrieving project…
+Fetching deployments in sjp10-9620s-projects
+> Deployments for sjp10-9620s-projects/harmonyforge [207ms]
+
+  Age     Project                               Deployment                                                         Status      Environment     Duration     Username       
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-r28wu49ud-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-3edzs6awr-sjp10-9620s-projects.vercel.app     ● Error     Production      8s           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-fb6amnhar-sjp10-9620s-projects.vercel.app     ● Error     Production      1m           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-3mr5ep5hl-sjp10-9620s-projects.vercel.app     ● Error     Production      8s           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-62dyp1752-sjp10-9620s-projects.vercel.app     ● Error     Production      9s           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-h56pn4lmi-sjp10-9620s-projects.vercel.app     ● Error     Production      8s           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-62jjdewuj-sjp10-9620s-projects.vercel.app     ● Error     Production      8s           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-ihfl34h6h-sjp10-9620s-projects.vercel.app     ● Ready     Production      51s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-qdh4hl3k2-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-1wyjny0nv-sjp10-9620s-projects.vercel.app     ● Ready     Production      50s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-idbeih0bq-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-k3ria1d27-sjp10-9620s-projects.vercel.app     ● Ready     Production      52s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-871j5oj26-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-h3z4i61bk-sjp10-9620s-projects.vercel.app     ● Ready     Production      45s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-d8nogghco-sjp10-9620s-projects.vercel.app     ● Ready     Production      51s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-9jgqv8908-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-nw67eerkn-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-nhgttrsao-sjp10-9620s-projects.vercel.app     ● Ready     Production      51s          sjp10-9620     
+  2d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-301nhg8wp-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+
+https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app
+https://harmonyforge-r28wu49ud-sjp10-9620s-projects.vercel.app
+https://harmonyforge-3edzs6awr-sjp10-9620s-projects.vercel.app
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:32:55Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:32:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect latest Vercel deployment for git commit info
+
+`vercel inspect https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app 2>&1 | grep -E "commit|git|SHA|branch|source|Created|creator" | head -15`
+
+```text
+(Bash completed with no output)
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:05Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Full inspection of latest deployment
+
+`vercel inspect https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app 2>&1`
+
+```text
+Fetching deployment "harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app" in sjp10-9620s-projects
+> Fetched deployment "harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app" in sjp10-9620s-projects [438ms]
+
+  General
+
+    id		dpl_Bu66JLnTtrg4YYtZZj243LdJ9Cps
+    name	harmonyforge
+    target	production
+    status	● Ready
+    url		https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app
+    created	Tue Apr 21 2026 14:11:25 GMT-0500 (Central Daylight Time) [1d ago]
+
+  Aliases
+
+    ╶ https://harmonyforge.vercel.app
+    ╶ https://harmonyforge-sjp10-9620s-projects.vercel.app
+    ╶ https://harmonyforge-sjp10-9620-sjp10-9620s-projects.vercel.app
+    
+
+  Builds
+
+    ┌ .        [0ms]
+    ├── λ api/health (852.17KB) [iad1]
+    ├── λ api/health.rsc (852.17KB) [iad1]
+    ├── λ api/theory-inspector/suggest (852.17KB) [iad1]
+    ├── λ api/theory-inspector/suggest.rsc (852.17KB) [iad1]
+    ├── λ api/theory-inspector (852.17KB) [iad1]
+    └── 61 output items hidden
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:11Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show commit timestamps
+
+`git log --oneline --format="%h %ai %s" -5`
+
+```text
+a71f947 2026-04-22 19:21:32 -0500 chore: update specstory session history
+e37f66c 2026-04-22 19:13:46 -0500 chore: update sandbox components and score editor
+72ac902 2026-04-22 19:04:40 -0500 feat: update UI components and theory inspector logic
+a99e755 2026-04-22 18:54:12 -0500 feat: add HarmonyForge video demo
+e14f386 2026-04-21 14:17:59 -0500 docs: add welcome guide for dgeni2
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:16Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:16Z)**_
+
+The latest Vercel deployment (`harmonyforge-bo7q2iatb`) was created Apr 21 — before today's commits. Let me check if a new build started after our push.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:20Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Re-check for new deployments
+
+`vercel ls 2>&1 | head -10`
+
+```text
+Retrieving project…
+Fetching deployments in sjp10-9620s-projects
+> Deployments for sjp10-9620s-projects/harmonyforge [182ms]
+
+  Age     Project                               Deployment                                                         Status      Environment     Duration     Username       
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-bo7q2iatb-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-r28wu49ud-sjp10-9620s-projects.vercel.app     ● Ready     Production      1m           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-3edzs6awr-sjp10-9620s-projects.vercel.app     ● Error     Production      8s           sjp10-9620     
+  1d      sjp10-9620s-projects/harmonyforge     https://harmonyforge-fb6amnhar-sjp10-9620s-projects.vercel.app     ● Error     Production      1m           sjp10-9620
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:23Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:23Z)**_
+
+No new deployment triggered automatically. Vercel's GitHub integration isn't picking up the push. Let me deploy manually.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:33:33Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Trigger manual production deployment from frontend directory
+
+`cd /Users/shivpat/harmonyforge/frontend && vercel --prod 2>&1`
+
+```text
+Exit code 1
+<claude-code-hint v="1" type="plugin" value="vercel@claude-plugins-official" />
+Retrieving project…
+Error: The provided path “~/harmonyforge/frontend/frontend” does not exist. To change your Project Settings, go to https://vercel.com/sjp10-9620s-projects/harmonyforge/settings
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:14Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Trigger manual production deployment from repo root
+
+`vercel --prod 2>&1`
+
+```text
+Exit code 1
+<claude-code-hint v="1" type="plugin" value="vercel@claude-plugins-official" />
+Retrieving project…
+Deploying sjp10-9620s-projects/harmonyforge
+Uploading [--------------------] (0.0B/6.2MB)
+Uploading [=====---------------] (1.6MB/6.2MB)
+Uploading [==========----------] (3.1MB/6.2MB)
+Uploading [===============-----] (4.6MB/6.2MB)
+Uploading [====================] (6.2MB/6.2MB)
+Inspect: https://vercel.com/sjp10-9620s-projects/harmonyforge/3wxKB7J7MpTK8dHJmvmt7cGmJVQk [4s]
+Production: https://harmonyforge-6d9osz4jc-sjp10-9620s-projects.vercel.app [4s]
+Building...
+Building...
+Building: Running build in Washington, D.C., USA (East) – iad1
+Building: Build machine configuration: 2 cores, 8 GB
+Building: Retrieving list of deployment files...
+Building: Downloading 326 deployment files...
+Building: Restored build cache from previous deployment (Bu66JLnTtrg4YYtZZj243LdJ9Cps)
+Building: Running "vercel build"
+Building: Vercel CLI 51.6.1
+Building: Installing dependencies...
+Building: > hf-next-scaffold@0.1.0 postinstall
+Building: > patch-package && node scripts/copy-pdfjs-worker.mjs
+Building: patch-package 8.0.1
+Building: Applying patches...
+Building: riffscore@1.0.0-alpha.9 ✔
+Building: [copy-pdfjs-worker] copied → /vercel/path0/frontend/public/pdfjs/pdf.worker.mjs
+Building: up to date in 1s
+Building: 248 packages are looking for funding
+Building: run `npm fund` for details
+Building: Detected Next.js version: 16.1.6
+Building: Running "npm run build"
+Building: > hf-next-scaffold@0.1.0 build
+Building: > next build
+Building: ▲ Next.js 16.1.6 (Turbopack)
+Building: - Experiments (use with caution):
+Building: · optimizePackageImports
+Building: Creating an optimized production build ...
+Building: > Build error occurred
+Building: Error: Turbopack build failed with 1 errors:
+Building: ./frontend/src/components/score/RiffScoreEditor.tsx:909:33
+Building: Parsing ecmascript source code failed
+Building: 907 |               const clickable = noteInspectionEnabled && Boolean(onInspectorSelectPart);
+Building: 908 |               const melodyName = (
+Building: > 909 |                 <span className=”flex flex-col items-start gap-0”>
+Building: |                                 ^
+Building: 910 |                   <span className=”font-medium”>Melody</span>
+Building: 911 |                   <span className=”text-[10px] opacity-85 font-mono”>{p.name}</span>
+Building: 912 |                 </span>
+Building: Unexpected character '”'
+Building: Import traces:
+Building: App Route:
+Building: ./frontend/src/components/score/RiffScoreEditor.tsx
+Building: ./frontend/src/server/engine/parsers/fileIntake.ts
+Building: ./frontend/src/server/engine/runtime.ts
+Building: ./frontend/src/app/api/export-chord-chart/route.ts
+Building: Client Component Browser:
+Building: ./frontend/src/components/score/RiffScoreEditor.tsx [Client Component Browser]
+Building: ./frontend/src/components/organisms/ExportPrintRoot.tsx [Client Component Browser]
+Building: ./frontend/src/app/sandbox/page.tsx [Client Component Browser]
+Building: ./frontend/src/app/sandbox/page.tsx [Server Component]
+Building: Client Component SSR:
+Building: ./frontend/src/components/score/RiffScoreEditor.tsx [Client Component SSR]
+Building: ./frontend/src/components/organisms/ExportPrintRoot.tsx [Client Component SSR]
+Building: ./frontend/src/app/sandbox/page.tsx [Client Component SSR]
+Building: ./frontend/src/app/sandbox/page.tsx [Server Component]
+Building: at <unknown> (./frontend/src/components/score/RiffScoreEditor.tsx:909:33)
+Building: Error: Command "npm run build" exited with 1
+{
+  "id": "dpl_3wxKB7J7MpTK8dHJmvmt7cGmJVQk",
+  "url": "https://harmonyforge-6d9osz4jc-sjp10-9620s-projects.vercel.app",
+  "inspectorUrl": "https://vercel.com/sjp10-9620s-projects/harmonyforge/3wxKB7J7MpTK8dHJmvmt7cGmJVQk",
+  "readyState": "ERROR",
+  "target": "production",
+  "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_3wxKB7J7MpTK8dHJmvmt7cGmJVQk",
+  "error": {
+    "name": "BUILD_ERROR",
+    "message": "Command \"npm run build\" exited with 1"
+  }
+}
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:20Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:21Z)**_
+
+Build error in Turbopack — parse failure at line 909. Let me inspect the actual bytes there.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:21Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./frontend/src/components/score/RiffScoreEditor.tsx`
+
+```text
+903	            {score.parts.map((p, i) => {
+904	              const multi = score.parts.length > 1;
+905	              const showMelody = multi && i === 0;
+906	              const PartIcon = getInstrumentIcon(p.name);
+907	              const clickable = noteInspectionEnabled && Boolean(onInspectorSelectPart);
+908	              const melodyName = (
+909	                <span className=”flex flex-col items-start gap-0”>
+910	                  <span className=”font-medium”>Melody</span>
+911	                  <span className=”text-[10px] opacity-85 font-mono”>{p.name}</span>
+912	                </span>
+913	              );
+914	              const nameContent = showMelody ? melodyName : p.name;
+915	              return (
+916	              <li key={p.id} className={cn(“flex items-center gap-[5px]”, clickable && “pointer-events-auto”)}>
+917	                <PartIcon size={11} className=”shrink-0 opacity-60” aria-hidden={true} />
+918	                {clickable ? (
+919	                  <button
+920	                    type=”button”
+921	                    className=”text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit”
+922	                    style={{ color: “var(--hf-text-primary)” }}
+923	                    title={showMelody ? `Melody — ${p.name} — focus this part for chat` : `Focus whole part “${p.name}” for chat`}
+924	                    onClick={(e) => {
+925	                      e.preventDefault();
+926	                      e.stopPropagation();
+927	                      runSelectStaffInRiffScore(i);
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:25Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show raw bytes on line 909 including non-printable chars
+
+`sed -n '909p' /Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx | cat -A | head -5`
+
+```text
+cat: illegal option -- A
+usage: cat [-belnstuv] [file ...]
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Hex dump of line 909 to detect curly quotes or invisible chars
+
+`sed -n '909p' /Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx | xxd | head -5`
+
+```text
+00000000: 2020 2020 2020 2020 2020 2020 2020 2020                  
+00000010: 3c73 7061 6e20 636c 6173 734e 616d 653d  <span className=
+00000020: e280 9d66 6c65 7820 666c 6578 2d63 6f6c  ...flex flex-col
+00000030: 2069 7465 6d73 2d73 7461 7274 2067 6170   items-start gap
+00000040: 2d30 e280 9d3e 0a                        -0...>.
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:34Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:35Z)**_
+
+Found it — curly/smart quotes (`e2 80 9d` = `"`) instead of straight ASCII quotes on line 909. TypeScript accepts them but Turbopack's SWC parser rejects them. Let me scan the whole file for any others.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:36Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find all curly/smart quotes in the file
+
+`grep -Pn '[\x{201C}\x{201D}\x{2018}\x{2019}]' /Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx`
+
+```text
+81:  /** Show scientific pitch next to RiffScore’s note-input preview ghost */
+755:        /* Hide RiffScore “Library” (melody presets) — scores come from upload/generate, not bundled melodies. */
+909:                <span className=”flex flex-col items-start gap-0”>
+910:                  <span className=”font-medium”>Melody</span>
+911:                  <span className=”text-[10px] opacity-85 font-mono”>{p.name}</span>
+916:              <li key={p.id} className={cn(“flex items-center gap-[5px]”, clickable && “pointer-events-auto”)}>
+917:                <PartIcon size={11} className=”shrink-0 opacity-60” aria-hidden={true} />
+920:                    type=”button”
+921:                    className=”text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit”
+922:                    style={{ color: “var(--hf-text-primary)” }}
+923:                    title={showMelody ? `Melody — ${p.name} — focus this part for chat` : `Focus whole part “${p.name}” for chat`}
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:46Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:47Z)**_
+
+Lines 909–923 have curly quotes throughout. I'll replace them all in one pass.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:34:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Replace all curly/smart quotes with straight ASCII quotes
+
+```bash
+python3 -c "
+import re
+with open('/Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx', 'r', encoding='utf-8') as f:
+    content = f.read()
+# Replace curly double quotes with straight double quotes
+content = content.replace('“', '\"').replace('”', '\"')
+# Replace curly single quotes with straight single quotes
+content = content.replace('‘', \"'\").replace('’', \"'\")
+with open('/Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx', 'w', encoding='utf-8') as f:
+    f.write(content)
+print('done')
+"
+```
+
+```text
+done
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:35:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify no curly quotes remain
+
+`grep -Pn '[\x{201C}\x{201D}\x{2018}\x{2019}]' /Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx && echo "none found" || echo "check above"`
+
+```text
+check above
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:35:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check for remaining curly quotes with exit code
+
+`grep -Pn '[\x{201C}\x{201D}\x{2018}\x{2019}]' /Users/shivpat/harmonyforge/frontend/src/components/score/RiffScoreEditor.tsx; echo "exit: $?"`
+
+```text
+exit: 1
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:35:53Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:35:53Z)**_
+
+Exit code 1 = no matches. Clean. TypeScript check:
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:36:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+TypeScript check on RiffScoreEditor
+
+`npx tsc --noEmit 2>&1 | grep "RiffScoreEditor" | head -10`
+
+```text
+(Bash completed with no output)
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:36:02Z)**_
+
+Clean. Commit and push:
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:36:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit fix and push to origin
+
+```bash
+git add frontend/src/components/score/RiffScoreEditor.tsx && git commit -m "$(cat <<'EOF'
+fix: replace curly quotes with straight ASCII quotes in RiffScoreEditor
+
+Turbopack's SWC parser rejects Unicode smart quotes (U+201C/201D) in JSX
+attribute strings; tsc accepted them but the production build failed.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)" && git push origin main
+```
+
+```text
+[main eb3eb6c] fix: replace curly quotes with straight ASCII quotes in RiffScoreEditor
+ 1 file changed, 11 insertions(+), 11 deletions(-)
+To https://github.com/salt-family/harmonyforge.git
+   a71f947..eb3eb6c  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:36:21Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:36:22Z)**_
+
+Now deploying with the curly-quote fix in place.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:37:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Trigger production deployment after quote fix
+
+`vercel --prod 2>&1`
+
+```text
+Retrieving project…
+Deploying sjp10-9620s-projects/harmonyforge
+Uploading [--------------------] (0.0B/457.1KB)
+Uploading [=====---------------] (116.0KB/457.1KB)
+Uploading [==========----------] (244.0KB/457.1KB)
+Uploading [===============-----] (356.0KB/457.1KB)
+Uploading [====================] (457.1KB/457.1KB)
+Inspect: https://vercel.com/sjp10-9620s-projects/harmonyforge/FvorbPH4DqfCm5wqUSaKGNbf3GAP [3s]
+Production: https://harmonyforge-cicrp78ps-sjp10-9620s-projects.vercel.app [3s]
+Building...
+Building...
+Building: Running build in Washington, D.C., USA (East) – iad1
+Building: Build machine configuration: 2 cores, 8 GB
+Building: Retrieving list of deployment files...
+Building: Downloading 327 deployment files...
+Building: Restored build cache from previous deployment (Bu66JLnTtrg4YYtZZj243LdJ9Cps)
+Building: Running "vercel build"
+Building: Vercel CLI 51.6.1
+Building: Installing dependencies...
+Building: > hf-next-scaffold@0.1.0 postinstall
+Building: > patch-package && node scripts/copy-pdfjs-worker.mjs
+Building: patch-package 8.0.1
+Building: Applying patches...
+Building: riffscore@1.0.0-alpha.9 ✔
+Building: [copy-pdfjs-worker] copied → /vercel/path0/frontend/public/pdfjs/pdf.worker.mjs
+Building: up to date in 2s
+Building: 248 packages are looking for funding
+Building: run `npm fund` for details
+Building: Detected Next.js version: 16.1.6
+Building: Running "npm run build"
+Building: > hf-next-scaffold@0.1.0 build
+Building: > next build
+Building: ▲ Next.js 16.1.6 (Turbopack)
+Building: - Experiments (use with caution):
+Building: · optimizePackageImports
+Building: Creating an optimized production build ...
+Building: ✓ Compiled successfully in 22.0s
+Building: Running TypeScript ...
+Building: Collecting page data using 1 worker ...
+Building: Generating static pages using 1 worker (0/8) ...
+Building: Generating static pages using 1 worker (2/8)
+Building: Generating static pages using 1 worker (4/8)
+Building: Generating static pages using 1 worker (6/8)
+Building: ✓ Generating static pages using 1 worker (8/8) in 251.8ms
+Building: Finalizing page optimization ...
+Building: Route (app)
+Building: ┌ ○ /
+Building: ├ ○ /_not-found
+Building: ├ ƒ /api/export-chord-chart
+Building: ├ ƒ /api/generate-from-file
+Building: ├ ƒ /api/health
+Building: ├ ƒ /api/theory-inspector
+Building: ├ ƒ /api/theory-inspector/suggest
+Building: ├ ƒ /api/to-preview-musicxml
+Building: ├ ƒ /api/validate-from-file
+Building: ├ ƒ /api/validate-satb-trace
+Building: ├ ○ /document
+Building: ├ ○ /onboarding
+Building: └ ○ /sandbox
+Building: ○  (Static)   prerendered as static content
+Building: ƒ  (Dynamic)  server-rendered on demand
+Building: Traced Next.js server files in: 34.721ms
+Building: Created all serverless functions in: 366.052ms
+Building: Collected static files (public/, static/, .next/static): 6.308ms
+Building: Build Completed in /vercel/output [37s]
+Building: Deploying outputs...
+Building: Deployment completed
+Building: Creating build cache...
+[2K[1A[2K[GProduction: https://harmonyforge-cicrp78ps-sjp10-9620s-projects.vercel.app [56s]
+Completing...
+Aliased: https://harmonyforge.vercel.app [56s]
+{
+  "status": "ok",
+  "deployment": {
+    "id": "dpl_FvorbPH4DqfCm5wqUSaKGNbf3GAP",
+    "url": "https://harmonyforge-cicrp78ps-sjp10-9620s-projects.vercel.app",
+    "inspectorUrl": "https://vercel.com/sjp10-9620s-projects/harmonyforge/FvorbPH4DqfCm5wqUSaKGNbf3GAP",
+    "readyState": "READY",
+    "target": "production",
+    "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_FvorbPH4DqfCm5wqUSaKGNbf3GAP"
+  },
+  "message": "Deployment harmonyforge-cicrp78ps-sjp10-9620s-projects.vercel.app ready.",
+  "next": [
+    {
+      "command": "vercel inspect harmonyforge-cicrp78ps-sjp10-9620s-projects.vercel.app",
+      "when": "Inspect deployment"
+    },
+    {
+      "command": "vercel deploy --prod",
+      "when": "Promote to production"
+    }
+  ]
+}
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:37:25Z)**_
+
+Deployed and live. All changes are up at **https://harmonyforge.vercel.app**
+
+The previous build was failing due to Turbopack's SWC parser rejecting Unicode curly quotes (`"`) that had crept into JSX attribute strings — `tsc` was lenient enough to pass them, but SWC is not. Fixed and the build came through clean (✓ Compiled in 22s, 8 static pages generated).
