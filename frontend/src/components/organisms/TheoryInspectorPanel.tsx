@@ -507,7 +507,15 @@ export const TheoryInspectorPanel = React.forwardRef<
 
           {noteInsight ? (
             <>
-                <div className="rounded-r-md p-[12px] border-l-4 bg-zinc-800/60 border-[var(--hf-accent)]">
+                <div
+                  className="rounded-md p-[12px]"
+                  style={{
+                    backgroundColor: "var(--hf-inspector-note-bg)",
+                    border: "1px solid var(--hf-detail)",
+                    borderLeftWidth: "4px",
+                    borderLeftColor: "var(--hf-accent)",
+                  }}
+                >
                   <div
                     className="font-mono text-[10px] mb-[6px] uppercase tracking-wide"
                     style={{ color: "var(--hf-text-secondary)" }}

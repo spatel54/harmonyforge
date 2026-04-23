@@ -88,6 +88,8 @@
   --hf-toolbar-border: rgba(210, 180, 140, 0.4);
   /* Panel alt bg — Ensemble Builder right panel */
   --hf-panel-bg: var(--neutral-50);
+  /* Theory Inspector “This note” summary card — panel + detail for a touch more depth */
+  --hf-inspector-note-bg: color-mix(in srgb, var(--hf-panel-bg) 82%, var(--hf-detail) 18%);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -119,6 +121,8 @@
   --hf-toolbar-border: rgba(165, 91, 55, 0.4);
   /* Panel alt bg — Ensemble Builder right panel — Node lXHYH: #2D1817 */
   --hf-panel-bg: #2d1817;
+  /* Slightly deeper than page bg; full border + accent bar frame the block */
+  --hf-inspector-note-bg: color-mix(in srgb, var(--hf-bg) 48%, var(--hf-panel-bg) 52%);
 }
 
 /* ─────────────────────────────────────────────────────────────
