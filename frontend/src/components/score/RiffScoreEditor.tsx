@@ -49,22 +49,22 @@ function getInstrumentIcon(name: string): LucideIcon {
 
 /** Generated instrument images — fuzzy-matched by lowercase name fragment. */
 const INSTRUMENT_IMAGE_MAP: Array<{ keys: string[]; src: string }> = [
-  { keys: ["soprano voice", "soprano"], src: "/instruments/soprano_voice_1776905179244.png" },
-  { keys: ["flute"],                    src: "/instruments/flute_1776905191197.png" },
-  { keys: ["oboe"],                     src: "/instruments/oboe_1776905202493.png" },
-  { keys: ["violin"],                   src: "/instruments/violin_i_1776905213825.png" },
-  { keys: ["alto voice", "alto"],       src: "/instruments/alto_voice_1776905231077.png" },
-  { keys: ["clarinet"],                 src: "/instruments/clarinet_1776905243517.png" },
-  { keys: ["viola"],                    src: "/instruments/viola_1776905253764.png" },
-  { keys: ["french horn", "horn"],      src: "/instruments/french_horn_1776905265120.png" },
-  { keys: ["tenor voice", "tenor"],     src: "/instruments/tenor_voice_1776905282484.png" },
-  { keys: ["trumpet"],                  src: "/instruments/trumpet_1776905295274.png" },
-  { keys: ["cello"],                    src: "/instruments/cello_1776905307289.png" },
-  { keys: ["trombone"],                 src: "/instruments/trombone_1776905319751.png" },
-  { keys: ["bass voice", "bass"],       src: "/instruments/bass_voice_1776905337124.png" },
-  { keys: ["bassoon"],                  src: "/instruments/bassoon_1776905347619.png" },
-  { keys: ["double bass", "contrabass"], src: "/instruments/double_bass_1776905360017.png" },
-  { keys: ["tuba"],                     src: "/instruments/tuba_1776905371558.png" },
+  { keys: ["soprano voice", "soprano"], src: "/instruments/soprano_voice.svg" },
+  { keys: ["flute"],                    src: "/instruments/flute.svg" },
+  { keys: ["oboe"],                     src: "/instruments/oboe.svg" },
+  { keys: ["violin"],                   src: "/instruments/violin_i.svg" },
+  { keys: ["alto voice", "alto"],       src: "/instruments/alto_voice.svg" },
+  { keys: ["clarinet"],                 src: "/instruments/clarinet.svg" },
+  { keys: ["viola"],                    src: "/instruments/viola.svg" },
+  { keys: ["french horn", "horn"],      src: "/instruments/french_horn.svg" },
+  { keys: ["tenor voice", "tenor"],     src: "/instruments/tenor_voice.svg" },
+  { keys: ["trumpet"],                  src: "/instruments/trumpet.svg" },
+  { keys: ["cello"],                    src: "/instruments/cello.svg" },
+  { keys: ["trombone"],                 src: "/instruments/trombone.svg" },
+  { keys: ["bass voice", "bass"],       src: "/instruments/bass_voice.svg" },
+  { keys: ["bassoon"],                  src: "/instruments/bassoon.svg" },
+  { keys: ["double bass", "contrabass"], src: "/instruments/double_bass.svg" },
+  { keys: ["tuba"],                     src: "/instruments/tuba.svg" },
 ];
 
 function getInstrumentImage(name: string): string | null {
