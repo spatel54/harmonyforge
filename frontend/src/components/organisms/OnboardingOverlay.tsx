@@ -18,7 +18,7 @@ export function OnboardingOverlay({
   open,
   onClose,
   title = "Welcome to the sandbox",
-  description = "Edit the generated score, use the palette for notation, and open Theory Inspector for explanations and suggestions. Playback and export live in the header.",
+  description = "Edit on the staff. Open Theory Inspector from the gold button at the bottom-right (a one-time hint may appear just above it). Notation: F9 · Export: top right.",
   primaryCta = "Got it",
 }: OnboardingOverlayProps) {
   if (!open) return null;

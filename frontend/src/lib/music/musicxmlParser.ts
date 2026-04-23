@@ -39,7 +39,7 @@ function extractSoundTempoBpm(measureEl: Element | null): number | undefined {
 
 function clefFromInstrumentName(partName?: string): string | null {
   if (!partName) return null;
-  const n = partName.toLowerCase();
+  const n = partName.toLowerCase().trim();
   if (n.includes("tenor sax")) return "treble";
   if (n.includes("viola")) return "alto";
   if (
@@ -57,7 +57,43 @@ function clefFromInstrumentName(partName?: string): string | null {
   }
   if (n.includes("bass voice")) return "bass";
   if (n.trim() === "bass") return "bass";
-  if (n.includes("tenor voice")) return "tenor";
+  // Choral / notated tenor: treble (often with clef-octave-change −1), not tenor C-clef.
+  if (n.includes("tenor voice") || n === "tenor" || n.startsWith("tenor ")) return "treble";
+  return null;
+}
+
+/**
+ * Staff clef from the first `<clef>` inside an `<attributes>` block on this fragment
+ * (a `<measure>` in partwise scores, or a `<part>` slice in timewise scores).
+ * MusicXML numbers staff lines from bottom (1) to top (5).
+ */
+function clefFromMusicXmlAttributes(fragment: Element | null): string | null {
+  if (!fragment) return null;
+  const attrBlocks = findAllByLocalName(fragment, "attributes");
+  for (const attrBlock of attrBlocks) {
+    const clefEls = findAllByLocalName(attrBlock, "clef");
+    const clefEl = clefEls[0];
+    if (!clefEl) continue;
+    const signEl = clefEl.querySelector("sign") ?? findByLocalName(clefEl, "sign");
+    const lineEl = clefEl.querySelector("line") ?? findByLocalName(clefEl, "line");
+    const sign = signEl?.textContent?.trim().toUpperCase() ?? "";
+    const lineNum = lineEl?.textContent?.trim()
+      ? parseInt(lineEl.textContent!.trim(), 10)
+      : NaN;
+
+    if (sign === "G" || sign === "GG") return "treble";
+    if (sign === "F") return "bass";
+    if (sign === "C") {
+      // Staff lines numbered from bottom (MusicXML). Middle C sits on the given line.
+      if (lineNum === 4) return "tenor";
+      if (lineNum === 3) return "alto";
+      if (lineNum === 2) return "mezzo";
+      if (lineNum === 1) return "soprano_c";
+      if (lineNum === 5) return "baritone_c";
+      return "alto";
+    }
+    return null;
+  }
   return null;
 }
 
@@ -286,6 +322,8 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
         const partCandidates = findAllByLocalName(measureEl, "part");
         partEl = partCandidates.find((p) => p.getAttribute("id") === partId) ?? null;
       }
+      const xmlClef = clefFromMusicXmlAttributes(partEl) ?? clefFromMusicXmlAttributes(measureEl);
+      if (xmlClef) parts[pIdx].clef = xmlClef;
       const notes = extractNotesFromElement(
         partEl,
         parts[pIdx]?.transposeSemitones ?? 0,
@@ -331,7 +369,9 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
         : findAllByLocalName(partEl, "measure");
 
     let partKeySig: number | undefined;
+    let partClefFromXml: string | null = null;
     for (const measureEl of measureEls) {
+      if (!partClefFromXml) partClefFromXml = clefFromMusicXmlAttributes(measureEl);
       partKeySig = advanceKeyFromMeasureAttributes(measureEl, partKeySig);
       const notes = extractNotesFromElement(
         measureEl,
@@ -351,7 +391,7 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
     parts.push({
       id: partId,
       name: partName,
-      clef: inferClef(partId, pIdx, partEls.length, partName),
+      clef: partClefFromXml ?? inferClef(partId, pIdx, partEls.length, partName),
       transposeSemitones: inferTransposition(partName),
       measures,
     });
@@ -376,7 +416,7 @@ function inferClef(
   if (fromName) return fromName;
   if (PART_CLEFS[partId]) return PART_CLEFS[partId];
   const normalized = (partName ?? "").toLowerCase();
-  if (normalized.includes("tenor")) return "tenor";
+  // Do not infer tenor C-clef from the word "tenor" (choral tenor uses treble).
   if (totalParts >= 4 && partIndex === totalParts - 1) return "bass";
   return "treble";
 }

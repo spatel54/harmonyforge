@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildIdMap, editableScoreToRsScore, riffScoreToEditableScore } from "./riffscoreAdapter";
+import {
+  buildIdMap,
+  editableScoreToRsScore,
+  hfNotePitchFromLiveRsScore,
+  riffScoreToEditableScore,
+} from "./riffscoreAdapter";
 import type { EditableScore } from "./scoreTypes";
 
 const measure = {
@@ -123,6 +128,32 @@ describe("riffscoreAdapter", () => {
     };
     const rs = editableScoreToRsScore(score);
     expect(rs.staves[0]?.clef).toBe("alto");
+  });
+
+  it("reads pitch from live RiffScore snapshot by HarmonyForge note id", () => {
+    const rs = editableScoreToRsScore(minimalOnePart);
+    const { rsToHf } = buildIdMap(minimalOnePart, rs);
+    const note = rs.staves[0]!.measures[0]!.events[0]!.notes[0]!;
+    note.pitch = "G4";
+    expect(hfNotePitchFromLiveRsScore(rs, rsToHf, "n1")).toBe("G4");
+    note.pitch = "G4";
+    note.accidental = "sharp";
+    expect(hfNotePitchFromLiveRsScore(rs, rsToHf, "n1")).toBe("G#4");
+  });
+
+  it("maps rare C-clefs to nearest RiffScore shape (mezzo→alto, baritone_c→tenor)", () => {
+    const mezzo: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [{ id: "P1", name: "Vox", clef: "mezzo", measures: [measure] }],
+    };
+    const bari: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [{ id: "P1", name: "Vox", clef: "baritone_c", measures: [measure] }],
+    };
+    expect(editableScoreToRsScore(mezzo).staves[0]?.clef).toBe("alto");
+    expect(editableScoreToRsScore(bari).staves[0]?.clef).toBe("tenor");
   });
 
   it("buildIdMap maps RiffScore event id (rse-…) for rests to HF note id", () => {

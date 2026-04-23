@@ -20,7 +20,11 @@ import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import { useScoreStore } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
-import { editableScoreToRiffConfig, shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
+import {
+  editableScoreToRiffConfig,
+  hfNotePitchFromLiveRsScore,
+  shouldShowChordNotation,
+} from "@/lib/music/riffscoreAdapter";
 import { cn } from "@/lib/utils";
 import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
@@ -272,8 +276,8 @@ export function RiffScoreEditor({
   } | null>(null);
   /** Pixels to clip from the top of the learner overlay so labels never paint over `.riff-Toolbar`. */
   const [learnerClipTopPx, setLearnerClipTopPx] = useState(0);
-  /** Top inset for playback scrub so the line starts below the full toolbar (incl. palette row), not over it. */
-  const [playbackScrubContentTopPx, setPlaybackScrubContentTopPx] = useState(52);
+  /** Mount target for playback scrub (inside `.riff-ScoreEditor__content`, below the toolbar). */
+  const [playbackScrubPortalHost, setPlaybackScrubPortalHost] = useState<HTMLElement | null>(null);
   const prevScoreRef = useRef<EditableScore | null>(null);
 
   const { resolvedTheme } = useNextTheme();
@@ -750,9 +754,56 @@ export function RiffScoreEditor({
       el.addEventListener("scroll", scheduleFromScroll, { passive: true });
     }
 
+    const svg =
+      containerRef.current.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+      containerRef.current.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg");
+    let mutationObserver: MutationObserver | null = null;
+    if (showNoteNameLabels && svg) {
+      mutationObserver = new MutationObserver(scheduleFromScroll);
+      mutationObserver.observe(svg, { subtree: true, childList: true, attributes: true });
+    }
+
+    const skipLearnerPositionRefresh = new Set([
+      "init",
+      "select",
+      "selectAtQuant",
+      "selectById",
+      "selectEvent",
+      "selectRangeTo",
+      "addToSelection",
+      "deselectAll",
+      "selectAll",
+      "extendSelectionUp",
+      "extendSelectionDown",
+      "extendSelectionAllStaves",
+      "selectFullEvents",
+      "play",
+      "pause",
+      "stop",
+      "rewind",
+      "setTheme",
+      "setZoom",
+      "setInputMode",
+      "clearStatus",
+      "debug",
+      "jump",
+      "move",
+    ]);
+    const api = apiRef.current;
+    let unsubOperation: (() => void) | undefined;
+    if (showNoteNameLabels && api) {
+      unsubOperation = api.on("operation", (r) => {
+        if (r.ok === false) return;
+        if (skipLearnerPositionRefresh.has(r.method)) return;
+        scheduleFromScroll();
+      });
+    }
+
     return () => {
       clearTimeout(timer);
       resizeObserver.disconnect();
+      mutationObserver?.disconnect();
+      unsubOperation?.();
       for (const el of scrollRoots) {
         el.removeEventListener("scroll", scheduleFromScroll);
       }
@@ -788,40 +839,24 @@ export function RiffScoreEditor({
 
   useLayoutEffect(() => {
     if (presentation || !isReady) {
-      setPlaybackScrubContentTopPx(52);
+      setPlaybackScrubPortalHost(null);
       return;
     }
     const root = containerRef.current;
     if (!root) return;
 
-    const measure = () => {
+    const syncHost = () => {
       const content = root.querySelector<HTMLElement>(".riff-ScoreEditor__content");
-      if (!content) {
-        setPlaybackScrubContentTopPx(52);
-        return;
-      }
-      const cr = root.getBoundingClientRect();
-      const er = content.getBoundingClientRect();
-      let top = Math.max(0, Math.round(er.top - cr.top));
-      const strip = root.querySelector<HTMLElement>("[data-hf-inspector-measure-strip]");
-      if (strip) {
-        const sr = strip.getBoundingClientRect();
-        top = Math.max(top, Math.round(sr.bottom - cr.top));
-      }
-      setPlaybackScrubContentTopPx(top);
+      setPlaybackScrubPortalHost((prev) => (prev === content ? prev : content ?? null));
     };
 
-    measure();
-    const ro = new ResizeObserver(measure);
+    syncHost();
+    const ro = new ResizeObserver(syncHost);
     ro.observe(root);
     const contentEl = root.querySelector(".riff-ScoreEditor__content");
     if (contentEl) ro.observe(contentEl);
-    const tb = root.querySelector(".riff-Toolbar");
-    if (tb) ro.observe(tb);
-    const stripEl = root.querySelector("[data-hf-inspector-measure-strip]");
-    if (stripEl) ro.observe(stripEl);
     return () => ro.disconnect();
-  }, [presentation, isReady, instanceId, score, noteInspectionEnabled, measureCount]);
+  }, [presentation, isReady, instanceId, score]);
 
   useEffect(() => {
     if (!noteInputPitchLabelEnabled || !isReady || !score) {
@@ -1043,6 +1078,7 @@ export function RiffScoreEditor({
           height: 100% !important;
         }
         .riffscore-hf-wrapper .riff-ScoreEditor__content {
+          position: relative !important;
           overflow: auto !important;
           min-height: 0 !important;
         }
@@ -1152,12 +1188,12 @@ export function RiffScoreEditor({
       {!presentation && (
         <PlaybackScrubOverlay
           containerRef={containerRef}
+          portalHost={playbackScrubPortalHost}
           apiRef={apiRef}
           score={score}
           notePositions={notePositions}
           measureCount={measureCount}
           isReady={isReady}
-          contentTopPx={playbackScrubContentTopPx}
         />
       )}
 
@@ -1625,8 +1661,14 @@ export function RiffScoreEditor({
           >
             {notePositions.map((pos) => {
               const hit = getNoteById(score, pos.selection.noteId);
-              const pitch = hit?.note.pitch?.trim();
-              if (!hit || hit.note.isRest || !pitch) return null;
+              if (!hit || hit.note.isRest) return null;
+              const api = apiRef.current;
+              const livePitch =
+                api != null
+                  ? hfNotePitchFromLiveRsScore(api.getScore(), getRsToHf(), pos.selection.noteId)
+                  : null;
+              const pitch = (livePitch ?? hit.note.pitch)?.trim();
+              if (!pitch) return null;
               const label = formatLearnerLetterName(pitch);
               if (!label) return null;
               const labelAnchorY = pos.y + pos.h * 0.49 - 5;

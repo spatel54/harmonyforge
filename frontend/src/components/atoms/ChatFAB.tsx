@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ChatFABProps extends React.HTMLAttributes<HTMLButtonElement> {
@@ -8,57 +9,64 @@ export interface ChatFABProps extends React.HTMLAttributes<HTMLButtonElement> {
   onClick?: () => void;
 }
 
+const ON_ACCENT = "#1a0f0c";
+
 /**
- * ChatFAB Atom
- * Pencil Node: t4vY4 ("ChatFAB")
- * Floating action button shown on the ScoreCanvas when the Theory Inspector is closed.
- * Spec: h:48, cornerRadius:6, padding:[4,20,4,8], gap:12
- *   Left sphere: 32×32 gradient ellipse (warning→accent→surface, 45°) with glow
- *   Label: Inter 16 500 "$text-on-light"
- *   Fill: $neutral-50 (light) / deep cognac (dark)
- *   Shadow: blur:16 color:#2D18171A y:4
+ * ChatFAB Atom — high-contrast “special feature” entry (gold pill + sparkles), not another surface chip.
  */
 export const ChatFAB = React.forwardRef<HTMLButtonElement, ChatFABProps>(
-  ({ className, onClick, ...props }, ref) => {
+  (
+    {
+      className,
+      onClick,
+      title = "Open Theory Inspector — note explanations, harmony audit, and tutor chat",
+      ...props
+    },
+    ref,
+  ) => {
     return (
       <button
         ref={ref}
         type="button"
         onClick={onClick}
+        title={title}
         aria-label="Open Theory Inspector"
+        data-hf-theory-inspector-cta="true"
         className={cn(
-          "flex items-center gap-[12px] h-[48px] rounded-[6px]",
-          "transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98]",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-surface)]",
+          "flex items-center gap-3 min-h-[52px] pl-3 pr-6 rounded-full",
+          "transition-transform duration-150 hover:scale-[1.03] active:scale-[0.98]",
+          "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-[3px] focus-visible:ring-offset-[var(--hf-bg)]",
           className,
         )}
         style={{
-          backgroundColor: "var(--hf-canvas-bg)",
-          border: "1px solid var(--hf-detail)",
-          padding: "4px 20px 4px 8px",
-          boxShadow: "0 4px 16px rgba(45,24,23,0.10)",
+          background:
+            "linear-gradient(165deg, color-mix(in srgb, var(--hf-accent) 100%, #fff 18%) 0%, var(--hf-accent) 42%, color-mix(in srgb, var(--hf-accent) 72%, var(--hf-surface)) 100%)",
+          border: `2px solid color-mix(in srgb, var(--hf-accent) 55%, ${ON_ACCENT})`,
+          boxShadow:
+            "0 2px 0 color-mix(in srgb, var(--hf-accent) 40%, #000), 0 10px 32px color-mix(in srgb, var(--hf-accent) 45%, transparent), 0 0 0 1px color-mix(in srgb, #fff 35%, transparent)",
         }}
         {...props}
       >
-        {/* Gradient sphere */}
         <span
-          className="shrink-0 rounded-full"
+          className="flex shrink-0 items-center justify-center rounded-full w-10 h-10"
           style={{
-            width: 32,
-            height: 32,
-            background:
-              "linear-gradient(45deg, var(--hf-accent) 0%, var(--hf-surface) 50%, var(--hf-surface) 100%)",
-            boxShadow: "0 0 12px rgba(25,118,210,0.30)",
+            backgroundColor: ON_ACCENT,
+            boxShadow: "inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent)",
           }}
           aria-hidden="true"
-        />
-
-        {/* Label */}
-        <span
-          className="font-sans text-[16px] font-medium leading-none whitespace-nowrap"
-          style={{ color: "var(--hf-text-primary)" }}
         >
-          Ask Theory Inspector
+          <Sparkles
+            className="w-[22px] h-[22px]"
+            strokeWidth={2}
+            style={{ color: "var(--hf-accent)" }}
+          />
+        </span>
+
+        <span
+          className="font-sans text-[17px] font-bold leading-none tracking-tight whitespace-nowrap pr-1"
+          style={{ color: ON_ACCENT }}
+        >
+          Theory Inspector
         </span>
       </button>
     );

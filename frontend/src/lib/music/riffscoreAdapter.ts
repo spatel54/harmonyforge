@@ -61,12 +61,18 @@ export function shouldShowChordNotation(score: EditableScore): boolean {
 /**
  * Map HarmonyForge `part.clef` (staff clef type) → RiffScore staff clef.
  * Must not treat `"alto"` as SATB voice: viola uses alto **C-clef** (`part.clef === "alto"`).
+ *
+ * RiffScore only exposes four single-staff shapes. Rare C-clef lines (`mezzo`, `soprano_c`,
+ * `baritone_c`) map to the closest supported clef so playback/layout still run; HarmonyForge
+ * staff geometry uses `staffPreviewPitch` with the exact clef string.
  */
 function hfClefToRs(clef: string): "treble" | "bass" | "alto" | "tenor" {
   const lower = clef.toLowerCase();
   if (lower === "treble" || lower === "bass" || lower === "alto" || lower === "tenor") {
     return lower;
   }
+  if (lower === "mezzo" || lower === "soprano_c") return "alto";
+  if (lower === "baritone_c") return "tenor";
   if (lower === "soprano") return "treble";
   return "treble";
 }
@@ -129,6 +135,38 @@ function rsKeySigToHf(keySig: string): number {
 // ---------------------------------------------------------------------------
 
 export type IdMap = Map<string, string>;
+
+/**
+ * Read the current pitch for an HF note from a live RiffScore `getScore()` snapshot
+ * (e.g. while dragging) without flushing to Zustand — avoids `loadScore` loops.
+ */
+export function hfNotePitchFromLiveRsScore(
+  rsScore: RsScore,
+  rsToHf: IdMap,
+  hfNoteId: string,
+): string | null {
+  let rsNoteId: string | null = null;
+  for (const [rsKey, hfId] of rsToHf) {
+    if (hfId === hfNoteId && rsKey.startsWith("rs-")) {
+      rsNoteId = rsKey;
+      break;
+    }
+  }
+  if (!rsNoteId) return null;
+  for (const st of rsScore.staves) {
+    for (const meas of st.measures) {
+      for (const ev of meas.events) {
+        for (const n of ev.notes) {
+          if (n.id === rsNoteId) {
+            if (n.isRest) return null;
+            return rsPitchToHf(n);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Build a bidirectional ID map correlating HarmonyForge note IDs

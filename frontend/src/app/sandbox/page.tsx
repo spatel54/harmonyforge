@@ -64,10 +64,13 @@ import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { OnboardingOverlay } from "@/components/organisms/OnboardingOverlay";
+import { TheoryInspectorFabHint } from "@/components/organisms/TheoryInspectorFabHint";
 import { WorkspaceResetModal } from "@/components/organisms/WorkspaceResetModal";
 import { SandboxHotkeysDialog } from "@/components/molecules/SandboxHotkeysDialog";
 import {
   completeOnboarding,
+  dismissInspectorFabHint,
+  isInspectorFabHintDismissed,
   isOnboardingComplete,
   isSandboxFirstVisitDone,
 } from "@/lib/onboarding";
@@ -345,6 +348,8 @@ function TactileSandboxPageInner({
   const [isInspectorOpen, setIsInspectorOpen] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const [sandboxIntroOpen, setSandboxIntroOpen] = React.useState(false);
+  const [inspectorFabHintLoaded, setInspectorFabHintLoaded] = React.useState(false);
+  const [inspectorFabHintDismissed, setInspectorFabHintDismissed] = React.useState(true);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
@@ -360,6 +365,30 @@ function TactileSandboxPageInner({
       typeof window !== "undefined" &&
       localStorage.getItem("hf-dismiss-expressive-sovereignty") !== "1",
   );
+
+  const dismissInspectorFabHintCallout = React.useCallback(() => {
+    try {
+      dismissInspectorFabHint();
+    } catch {
+      /* ignore */
+    }
+    setInspectorFabHintDismissed(true);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      setInspectorFabHintDismissed(isInspectorFabHintDismissed());
+    } catch {
+      setInspectorFabHintDismissed(false);
+    }
+    setInspectorFabHintLoaded(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isInspectorOpen || !inspectorFabHintLoaded) return;
+    if (inspectorFabHintDismissed) return;
+    dismissInspectorFabHintCallout();
+  }, [isInspectorOpen, inspectorFabHintLoaded, inspectorFabHintDismissed, dismissInspectorFabHintCallout]);
 
   const openExportModal = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
@@ -1786,7 +1815,15 @@ function TactileSandboxPageInner({
             </div>
             {/* ChatFAB — shown only when inspector is closed */}
             {!isInspectorOpen && (
-              <div className="hf-print-hide absolute bottom-[28px] right-[28px] z-50">
+              <div className="hf-print-hide absolute bottom-[28px] right-[28px] z-50 flex flex-col items-end gap-0">
+                {inspectorFabHintLoaded &&
+                  !inspectorFabHintDismissed &&
+                  Boolean(generatedMusicXML) &&
+                  Boolean(score) &&
+                  !coachmarkTourActive &&
+                  !sandboxIntroOpen && (
+                    <TheoryInspectorFabHint onDismiss={dismissInspectorFabHintCallout} />
+                  )}
                 <ChatFAB onClick={() => setIsInspectorOpen(true)} />
               </div>
             )}

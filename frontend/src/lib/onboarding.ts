@@ -3,6 +3,19 @@ const ONBOARDING_KEY = "harmonyforge-onboarding-v1-complete";
 /** First-run sandbox overlay (distinct from coachmark tour). */
 export const HF_ONBOARDING_SEEN_KEY = "hf_onboarding_seen";
 
+/** One-time hint for the bottom-right Theory Inspector FAB (dismissed explicitly or after first open). */
+export const HF_INSPECTOR_FAB_HINT_DISMISSED_KEY = "hf_inspector_fab_hint_dismissed";
+
+export function isInspectorFabHintDismissed(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(HF_INSPECTOR_FAB_HINT_DISMISSED_KEY) === "1";
+}
+
+export function dismissInspectorFabHint(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(HF_INSPECTOR_FAB_HINT_DISMISSED_KEY, "1");
+}
+
 export function isOnboardingComplete(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(ONBOARDING_KEY) === "1";

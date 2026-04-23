@@ -9,6 +9,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import type { MusicEditorAPI } from "riffscore";
 import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
 import {
@@ -28,13 +29,13 @@ function clearRiffScoreInternalPlaybackAnchor() {
 
 export interface PlaybackScrubOverlayProps {
   containerRef: RefObject<HTMLDivElement | null>;
+  /** RiffScore `.riff-ScoreEditor__content` — scrub is portaled here so it stacks above the staff but never over the toolbar (a sibling above this node). */
+  portalHost: HTMLElement | null;
   apiRef: RefObject<MusicEditorAPI | null>;
   score: EditableScore;
   notePositions: NotePosition[];
   measureCount: number;
   isReady: boolean;
-  /** Top offset (px) below RiffScore toolbar / inspector chrome */
-  contentTopPx?: number;
 }
 
 /**
@@ -43,12 +44,12 @@ export interface PlaybackScrubOverlayProps {
  */
 export function PlaybackScrubOverlay({
   containerRef,
+  portalHost,
   apiRef,
   score,
   notePositions,
   measureCount,
   isReady,
-  contentTopPx = 52,
 }: PlaybackScrubOverlayProps) {
   const draggingRef = useRef(false);
   const wasPlayingRef = useRef(false);
@@ -66,16 +67,38 @@ export function PlaybackScrubOverlay({
   const [lineLeftPx, setLineLeftPx] = useState(0);
   /** Measure index for aria-valuenow after scrub. */
   const [ariaMeasureIndex, setAriaMeasureIndex] = useState(0);
+  /** Maps wrapper-horizontal `lineLeftPx` to `left` inside `portalHost`: left_portal = lineLeftPx - portalXOffset. */
+  const [portalXOffset, setPortalXOffset] = useState(0);
 
   useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el || !isReady) return;
-    const update = () => setScrollW(Math.max(el.scrollWidth, 200));
+    const scrollEl = portalHost ?? containerRef.current;
+    if (!scrollEl || !isReady) return;
+    const update = () => setScrollW(Math.max(scrollEl.scrollWidth, 200));
     update();
     const ro = new ResizeObserver(update);
-    ro.observe(el);
+    ro.observe(scrollEl);
     return () => ro.disconnect();
-  }, [containerRef, isReady, notePositions, measureCount]);
+  }, [containerRef, portalHost, isReady, notePositions, measureCount]);
+
+  useLayoutEffect(() => {
+    const wrap = containerRef.current;
+    const scroll = portalHost;
+    if (!wrap || !scroll || !isReady) return;
+    const update = () => {
+      const wr = wrap.getBoundingClientRect();
+      const cr = scroll.getBoundingClientRect();
+      setPortalXOffset(cr.left - wr.left - scroll.scrollLeft);
+    };
+    update();
+    scroll.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(wrap);
+    ro.observe(scroll);
+    return () => {
+      scroll.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [containerRef, portalHost, isReady]);
 
   const spans = useMemo(
     () => buildMeasurePlaybackSpans(notePositions, measureCount, scrollW),
@@ -237,12 +260,21 @@ export function PlaybackScrubOverlay({
     await seekTo(measureIndex, 0, wasPlayingRef.current, snapContentX);
   };
 
-  if (!isReady || measureCount <= 0) return null;
+  if (!isReady || measureCount <= 0 || !portalHost) return null;
 
-  return (
+  const lineLeftInHost = lineLeftPx - portalXOffset;
+
+  const scrub = (
     <div
-      className="absolute z-[10] pointer-events-none overflow-visible"
-      style={{ left: lineLeftPx, top: contentTopPx, bottom: 8, width: 0 }}
+      className="pointer-events-none overflow-visible"
+      style={{
+        position: "absolute",
+        left: lineLeftInHost,
+        top: 0,
+        bottom: 8,
+        width: 0,
+        zIndex: 10,
+      }}
     >
       <div
         role="slider"
@@ -270,4 +302,6 @@ export function PlaybackScrubOverlay({
       </div>
     </div>
   );
+
+  return createPortal(scrub, portalHost);
 }

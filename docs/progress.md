@@ -6,7 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
-- [Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23) — **rest ghost hardening + hotkeys dialog + export paper + RiffScore↔HF multi-select + viola alto clef**
+- [Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23) — **rest ghost hardening + hotkeys dialog + export paper + RiffScore↔HF multi-select + viola alto clef + RiffScore alto/tenor layout patch + CJS/ESM toolbar parity (`pendingClefChange` runtime)**
 - [Program narrative — MVP + Inspector polish (2026-04-22)](#program-narrative-2026-04-22) — **shipped bundle + lint/QA gaps (superseded for sandbox tranche by 2026-04-23 work log above)**
 - [Work log — Sandbox score UX: hotkeys, reset, rest hover ghost (2026-04-22)](#wl-sandbox-score-ux-2026-04-22) — **MuseScore-style rest replacement without duration tool**
 - [Work log — MVP phase: Document, Sandbox, Theory Inspector (2026-04-22)](#wl-mvp-phase-ship-2026-04-22) — **file-level checklist**
@@ -41,10 +41,12 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
+<a id="last-updated-2026-04-23"></a>
+
 ### Last updated (2026-04-23)
 
 - **Sandbox & export polish tranche:** See **[Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)** for the consolidated **end goal**, **approach**, **steps done**, and **current failure / open QA**.
-- **Summary:** **Rest-hover ghost** — larger, higher-contrast Bravura preview, center-based layout, expanded commit hit box, guards against **`NaN`** CSS from bad staff geometry (`staffAnchorYForPitch`, `staffLineYsFiveInContainer`, `midStaffDiatonicPitchInContainer`); rest-hover **`useEffect`** uses **primitive deps** + ref flushes to avoid stale geometry. **Keyboard shortcuts** — in-app **`SandboxHotkeysDialog`** (header keyboard button); **`sandbox/page.tsx`** keydown aligned with help text (Caps Lock, `e.code` for brackets / main-row digits / numpad, unicode minus). **Export modal** — score preview **always paper** `#F8F3EA`; **`RiffScoreEditor`** **`presentation`** forces **LIGHT** theme; **PNG** capture uses the same paper background (not OS dark). **Multi-selection** — **`mapRiffSelectedNotesToHFSelections`** + **`onEditorSelectionChange`** sync full RiffScore **`selection`** to **`useToolStore`**; session **`editorSelectAll`** / **`editorDeselectAll`**; **⌘/Ctrl+A** and **Esc** clear both sides; **marquee / shift-range** should now drive **joint** drag + palette hotkeys. **Viola / staff clef** — **`hfClefToRs`** no longer maps **`alto`** through **`PART_CLEF_MAP`** (SATB alto *voice* default treble); **staff clefs** **`treble` / `bass` / `alto` / `tenor`** pass through; test in **`riffscoreAdapter.test.ts`**. **Open:** manual QA on dense scores, chords, and **inspector overlay** vs native selection desync (see work log); **touch** still has no hover ghost.
+- **Summary:** **Rest-hover ghost** — larger, higher-contrast Bravura preview, center-based layout, expanded commit hit box, guards against **`NaN`** CSS from bad staff geometry (`staffAnchorYForPitch`, `staffLineYsFiveInContainer`, `midStaffDiatonicPitchInContainer`); rest-hover **`useEffect`** uses **primitive deps** + ref flushes to avoid stale geometry. **Keyboard shortcuts** — in-app **`SandboxHotkeysDialog`** (header keyboard button); **`sandbox/page.tsx`** keydown aligned with help text (Caps Lock, `e.code` for brackets / main-row digits / numpad, unicode minus). **Export modal** — score preview **always paper** `#F8F3EA`; **`RiffScoreEditor`** **`presentation`** forces **LIGHT** theme; **PNG** capture uses the same paper background (not OS dark). **Multi-selection** — **`mapRiffSelectedNotesToHFSelections`** + **`onEditorSelectionChange`** sync full RiffScore **`selection`** to **`useToolStore`**; session **`editorSelectAll`** / **`editorDeselectAll`**; **⌘/Ctrl+A** and **Esc** clear both sides; **marquee / shift-range** should now drive **joint** drag + palette hotkeys. **Viola / staff clef (HF adapter)** — **`hfClefToRs`** no longer maps **`alto`** through **`PART_CLEF_MAP`** (SATB alto *voice* default treble); **staff clefs** **`treble` / `bass` / `alto` / `tenor`** pass through; test in **`riffscoreAdapter.test.ts`**. **Viola / additive harmony (RiffScore layout)** — upstream **`getOffsetForPitch`** treated **alto** and **tenor** like **treble** for Y offsets, so **C-clef** looked right but **noteheads** sat on the wrong lines; **`patches/riffscore+1.0.0-alpha.9.patch`** now uses **treble/bass lookup tables only for those clefs** and **`CLEF_REFERENCE` + formula** (and **`getPitchForOffset`** inversion) for **alto/tenor**. **Runtime `pendingClefChange`** — HarmonyForge patch removes the confirm-dialog flow; **`dist/index.js`** (CJS) is now **parity-patched** with **`index.mjs`** for **`toolbarPlugins`** on **`Toolbar`**, **`ScoreEditorContent`**, and **`RiffScoreInner`** so partial bundler resolution cannot leave stale JSX; after pull run **`cd frontend && rm -rf .next && npm install`**. **Open:** manual QA on dense scores, chords, **inspector overlay** vs native selection desync; **touch** still has no hover ghost; spot-check **viola** (and any **alto/tenor** staff) after layout patch.
 
 ### Last updated (2026-04-22)
 
@@ -105,6 +107,8 @@ For checklist and verification steps, pair this file with **[plan.md](plan.md)**
 - **Exports that read as “paper”:** modal preview and **PNG** capture use a consistent **light score paper** (`#F8F3EA`) even when the OS or app theme is dark; RiffScore **`presentation`** mode stays visually aligned with that intent.
 - **Selection parity:** when the user **marquee-selects**, **shift-extends**, or uses **⌘/Ctrl+A** in RiffScore, HarmonyForge’s tool/store selection (`useToolStore`) stays aligned so **joint drag**, **palette** typing, and **Esc** clear behave as one system.
 - **Correct staff clef in RiffScore:** **Viola** (and any part whose canonical clef is **alto C-clef**) must render with **alto staff clef** in the adapter path — not treble due to conflating the word **“alto”** with the **SATB alto voice** default.
+- **Correct *placement* on alto/tenor staves:** generated **additive viola** (and any **alto** or **tenor C-clef** staff) must show **noteheads and learner letter labels** that agree with **concert/written pitch** — not treble-line geometry under a C-clef (the engine/MusicXML path was already emitting sensible pitches and `<clef><sign>C</sign><line>3</line></clef>` for viola; the defect was in **RiffScore vertical layout**).
+- **Stable patched editor bundle:** no **ReferenceError** from removed **`pendingClefChange`** state when Turbopack or dual **CJS/ESM** resolution loads **`riffscore`**; HarmonyForge **`toolbarPlugins`** must work on both **`dist/index.mjs`** and **`dist/index.js`** after **`patch-package`**.
 
 ### Approach
 
@@ -113,7 +117,9 @@ For checklist and verification steps, pair this file with **[plan.md](plan.md)**
 3. **Physical-key hotkeys** — prefer **`KeyboardEvent.code`** where layout-independent behavior matters; document the matrix in **`SandboxHotkeysDialog`** and mirror it in **`sandbox/page.tsx`**.
 4. **Export surface** — force **`presentation`** + **LIGHT** styling for the export preview subtree; match **PNG** raster background to the same paper token.
 5. **Selection mapping** — implement **`mapRiffSelectedNotesToHFSelections`**, wire **`onEditorSelectionChange`**, and expose **`editorSelectAll` / `editorDeselectAll`** so session code can clear or select both sides together.
-6. **Clef semantics** — treat **`hfClefToRs`** input as **staff clef** (`treble`, `bass`, `alto`, `tenor`); remove **`PART_CLEF_MAP`** voice-default logic that incorrectly forced **`alto` → treble** for viola; map legacy **`soprano` → treble** only.
+6. **Clef semantics (HF → RiffScore config)** — treat **`hfClefToRs`** input as **staff clef** (`treble`, `bass`, `alto`, `tenor`); remove **`PART_CLEF_MAP`** voice-default logic that incorrectly forced **`alto` → treble** for viola; map legacy **`soprano` → treble** only.
+7. **Clef semantics (RiffScore internals)** — patch **`node_modules/riffscore/dist/*.js`** so **`getOffsetForPitch`** uses the **treble** pitch→offset table only for **`treble`**, **`grand`**, or default clef, the **bass** table only for **`bass`**, and the **`CLEF_REFERENCE`** diatonic formula for **`alto`** and **`tenor`**; patch **`getPitchForOffset`** to invert alto/tenor with **`movePitchVisual`** instead of the treble **`Y_TO_PITCH`** map.
+8. **Patch-package hygiene** — keep **`ScoreProvider`** / **`ScoreEditorContent`** changes consistent (no **`pendingClefChange`** in context or JSX); mirror **`toolbarPlugins`** wiring on **`index.js`** the same as **`index.mjs`**; regenerate **`frontend/patches/riffscore+1.0.0-alpha.9.patch`**; document **`rm -rf .next`** after pull when the editor throws stale **`pendingClefChange`** errors.
 
 ### Steps completed (file-level)
 
@@ -123,14 +129,20 @@ For checklist and verification steps, pair this file with **[plan.md](plan.md)**
 | **Hotkeys** | **`SandboxHotkeysDialog`**, **`sandbox/page.tsx`** — Caps Lock–safe behavior, `e.code` for `[/]`, digits, numpad, minus variants. |
 | **Export modal** | Paper background **`#F8F3EA`**, **`presentation` → LIGHT**, PNG uses same paper (not system dark). |
 | **Multi-select** | **`mapRiffSelectedNotesToHFSelections`**, **`onEditorSelectionChange`**, **`editorSelectAll` / `editorDeselectAll`**, ⌘A / Esc parity. |
-| **Viola / alto clef** | **`riffscoreAdapter.ts`** — **`hfClefToRs`** staff-clef interpretation; **`riffscoreAdapter.test.ts`** — *maps viola alto C-clef to RiffScore alto staff*. |
+| **Viola / alto clef (adapter)** | **`riffscoreAdapter.ts`** — **`hfClefToRs`** staff-clef interpretation; **`riffscoreAdapter.test.ts`** — *maps viola alto C-clef to RiffScore alto staff*. |
+| **Viola / alto & tenor (RiffScore layout)** | **`patches/riffscore+1.0.0-alpha.9.patch`** — **`getOffsetForPitch`** / **`getPitchForOffset`** in **`dist/index.js`** and **`dist/index.mjs`** so **alto/tenor** staves use **C-clef geometry**, not the treble offset table. |
+| **CJS / ESM parity + `pendingClefChange`** | Same patch — **`Toolbar`** accepts **`toolbarPlugins = []`** and renders plugin row; **`ScoreEditorContent`** / **`RiffScoreInner`** pass **`config.ui.toolbarPlugins`** on **`index.js`** as well as **`index.mjs`**; **`ScoreProvider`** uses **`SetSingleStaffCommand`** when collapsing grand staff (no dialog state). |
 
 ### Current failure / what we are working on now
 
-- **Not a single blocking crash** — the open work is **validation and edge cases:**
+- **Recently addressed (2026-04-23 late):**
+  - **“Wrong notes” on generated viola** — **MusicXML + HF** were already correct; **RiffScore** placed pitches using **treble Y-offsets** on **alto/tenor** staves. **Fixed** in **`patches/riffscore+1.0.0-alpha.9.patch`** (see **Approach §7** above).
+  - **`ReferenceError: pendingClefChange is not defined`** (stack often pointed at **`RiffScoreEditor`** / dynamic **`RiffScore`** mount) — caused by **removed** React state while a **stale Turbopack chunk** or **CJS `index.js`** path did not match the patched **`index.mjs`**. **Mitigation:** **`toolbarPlugins`** parity on **`dist/index.js`**, full **`patch-package`** regenerate, and **`cd frontend && rm -rf .next && npm install`** after pulling.
+- **Still open — validation and edge cases (non-blocking):**
   - **Dense notation & chords** — rest hit order, ghost pitch vs RiffScore’s own preview, chord-heavy layouts.
   - **Theory Inspector overlay** — **`noteInspectionEnabled`** disables the ghost by design; confirm **native RiffScore selection** vs **HF overlay** do not **drift** during multi-select or inspector-driven focus.
   - **Touch / tablet** — **no hover**; rest → note still relies on **select + A–G** (and related paths); optional future **long-press** or explicit control if study feedback requires it.
+  - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch.
 - **Lint (carryover from 2026-04-22):** **`@next/next/no-img-element`**, unused **`_e`** in **`RiffScoreEditor`** **`handleKeyDown`** — warnings only unless CI is tightened.
 
 ---
@@ -1102,6 +1114,8 @@ Underlying product end goal (unchanged): **Upload → Document → Generate → 
 <a id="consolidated-status-2026-04"></a>
 
 ## Consolidated status (2026-04, updated through 2026-04-20) — end goal, approach, done work, active gaps
+
+> **2026-04-23+ sandbox tranche:** For **RiffScore** alto/tenor vertical placement, **CJS/ESM `toolbarPlugins`** parity, **`pendingClefChange`** runtime cleanup, and **rest-hover** ref/deps hardening, see **[Last updated (2026-04-23)](#last-updated-2026-04-23)** and **[Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)**. This section stays the broader April snapshot through **2026-04-20**.
 
 > **Prefer the short summary first:** [Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20).
 
