@@ -78,7 +78,7 @@ export interface RiffScoreEditorProps {
   ) => void;
   /** Exposes flush + RiffScore-native undo/redo for sandbox / Theory Inspector. */
   onSessionReady?: (session: RiffScoreSessionHandles) => void;
-  /** Show scientific pitch next to RiffScore’s note-input preview ghost */
+  /** Show scientific pitch next to RiffScore's note-input preview ghost */
   noteInputPitchLabelEnabled?: boolean;
   /** Show letter + accidental (e.g. C, F#, Bb) above each notehead — learner aid; off for export when parent passes false. */
   showNoteNameLabels?: boolean;
@@ -752,7 +752,7 @@ export function RiffScoreEditor({
           opacity: 0 !important;
           pointer-events: none !important;
         }
-        /* Hide RiffScore “Library” (melody presets) — scores come from upload/generate, not bundled melodies. */
+        /* Hide RiffScore "Library" (melody presets) — scores come from upload/generate, not bundled melodies. */
         .riffscore-hf-wrapper .riff-Toolbar__library-wrapper {
           display: none !important;
         }
@@ -906,21 +906,21 @@ export function RiffScoreEditor({
               const PartIcon = getInstrumentIcon(p.name);
               const clickable = noteInspectionEnabled && Boolean(onInspectorSelectPart);
               const melodyName = (
-                <span className=”flex flex-col items-start gap-0”>
-                  <span className=”font-medium”>Melody</span>
-                  <span className=”text-[10px] opacity-85 font-mono”>{p.name}</span>
+                <span className="flex flex-col items-start gap-0">
+                  <span className="font-medium">Melody</span>
+                  <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
                 </span>
               );
               const nameContent = showMelody ? melodyName : p.name;
               return (
-              <li key={p.id} className={cn(“flex items-center gap-[5px]”, clickable && “pointer-events-auto”)}>
-                <PartIcon size={11} className=”shrink-0 opacity-60” aria-hidden={true} />
+              <li key={p.id} className={cn("flex items-center gap-[5px]", clickable && "pointer-events-auto")}>
+                <PartIcon size={11} className="shrink-0 opacity-60" aria-hidden={true} />
                 {clickable ? (
                   <button
-                    type=”button”
-                    className=”text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit”
-                    style={{ color: “var(--hf-text-primary)” }}
-                    title={showMelody ? `Melody — ${p.name} — focus this part for chat` : `Focus whole part “${p.name}” for chat`}
+                    type="button"
+                    className="text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit"
+                    style={{ color: "var(--hf-text-primary)" }}
+                    title={showMelody ? `Melody — ${p.name} — focus this part for chat` : `Focus whole part "${p.name}" for chat`}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
