@@ -76,10 +76,11 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
             <button
               type="button"
               onClick={onExportClick}
-              className="flex items-center gap-[6px] h-[32px] px-[12px] rounded-[6px] border border-[var(--hf-detail)] text-[var(--hf-text-primary)] hover:bg-[rgba(var(--hf-surface-rgb),0.05)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-surface)]"
+              className="flex items-center gap-[6px] h-[36px] px-[14px] rounded-[6px] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[var(--hf-surface)]"
+              style={{ backgroundColor: "var(--hf-surface)" }}
             >
-              <Download className="w-[14px] h-[14px] opacity-70" />
-              <span className="font-mono text-[11px] font-medium mt-0.5">
+              <Download className="w-[14px] h-[14px]" style={{ color: "#F8F8F8" }} />
+              <span className="font-mono text-[11px] font-semibold" style={{ color: "#F8F8F8" }}>
                 Export
               </span>
             </button>

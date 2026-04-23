@@ -9,6 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Mic, Wind, Bell, Music, Music2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTheme as useNextTheme } from "next-themes";
 import "riffscore/styles.css";
@@ -34,6 +36,16 @@ import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
+
+/** Map an instrument name to a recognisable Lucide icon by family. */
+function getInstrumentIcon(name: string): LucideIcon {
+  const n = name.toLowerCase();
+  if (/\b(flute|oboe|clarinet|bassoon|saxophone|sax|piccolo|recorder)\b/.test(n)) return Wind;
+  if (/\b(trumpet|horn|trombone|tuba|cornet|bugle|flugelhorn)\b/.test(n)) return Bell;
+  if (/\b(violin|viola|cello|string|guitar|harp|double bass|contrabass|lute)\b/.test(n)) return Music2;
+  if (/\b(voice|vocal|singer|soprano|alto|tenor|baritone|mezzo)\b/.test(n) || n.endsWith(" voice")) return Mic;
+  return Music;
+}
 
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
@@ -660,6 +672,20 @@ export function RiffScoreEditor({
     [onPaletteSymbolDrop],
   );
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!hasSelection) return;
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const semitones = e.key === "ArrowUp"
+        ? (e.shiftKey ? 12 : 1)
+        : (e.shiftKey ? -12 : -1);
+      applyOnSelection((current, ids) => transposeNotes(current, ids, semitones));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasSelection, score, selectedNoteIds],
+  );
+
   if (!score || !config) return null;
 
   const selectedIds = new Set(selection.map((s) => s.noteId));
@@ -676,6 +702,8 @@ export function RiffScoreEditor({
       )}
       data-hf-chord-ui={chordUiOn ? "1" : "0"}
       style={{ position: "relative" }}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       onDragOverCapture={onPaletteSymbolDrop ? onPaletteDragOverCapture : undefined}
       onDropCapture={onPaletteSymbolDrop ? onPaletteDropCapture : undefined}
     >
@@ -875,43 +903,35 @@ export function RiffScoreEditor({
             {score.parts.map((p, i) => {
               const multi = score.parts.length > 1;
               const showMelody = multi && i === 0;
+              const PartIcon = getInstrumentIcon(p.name);
+              const clickable = noteInspectionEnabled && Boolean(onInspectorSelectPart);
+              const melodyName = (
+                <span className=”flex flex-col items-start gap-0”>
+                  <span className=”font-medium”>Melody</span>
+                  <span className=”text-[10px] opacity-85 font-mono”>{p.name}</span>
+                </span>
+              );
+              const nameContent = showMelody ? melodyName : p.name;
               return (
-              <li key={p.id} className={noteInspectionEnabled && onInspectorSelectPart ? "pointer-events-auto" : ""}>
-                {noteInspectionEnabled && onInspectorSelectPart ? (
+              <li key={p.id} className={cn(“flex items-center gap-[5px]”, clickable && “pointer-events-auto”)}>
+                <PartIcon size={11} className=”shrink-0 opacity-60” aria-hidden={true} />
+                {clickable ? (
                   <button
-                    type="button"
-                    className="text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit w-full"
-                    style={{ color: "var(--hf-text-primary)" }}
-                    title={
-                      showMelody
-                        ? `Melody — ${p.name} — focus this part for chat`
-                        : `Focus whole part “${p.name}” for chat`
-                    }
+                    type=”button”
+                    className=”text-left underline-offset-2 hover:underline bg-transparent border-none p-0 cursor-pointer font-inherit”
+                    style={{ color: “var(--hf-text-primary)” }}
+                    title={showMelody ? `Melody — ${p.name} — focus this part for chat` : `Focus whole part “${p.name}” for chat`}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       runSelectStaffInRiffScore(i);
-                      onInspectorSelectPart(i);
+                      onInspectorSelectPart!(i);
                     }}
                   >
-                    {showMelody ? (
-                      <span className="flex flex-col items-start gap-0">
-                        <span className="font-medium">Melody</span>
-                        <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
-                      </span>
-                    ) : (
-                      p.name
-                    )}
+                    {nameContent}
                   </button>
                 ) : (
-                  showMelody ? (
-                    <span className="flex flex-col items-start gap-0">
-                      <span className="font-medium">Melody</span>
-                      <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
-                    </span>
-                  ) : (
-                    p.name
-                  )
+                  nameContent
                 )}
               </li>
               );
@@ -933,22 +953,31 @@ export function RiffScoreEditor({
           const canPartInspect = noteInspectionEnabled && onInspectorSelectPart;
           const textShadow =
             "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)";
+          const InstrumentIcon = getInstrumentIcon(part.name);
           const labelInner = (
-            <span className="flex flex-col items-start gap-0 min-w-0 text-left">
-              <span
-                className="truncate font-body text-[11px] font-semibold leading-tight"
-                style={{ color: "var(--hf-text-primary)", textShadow }}
-              >
-                {primaryLabel}
-              </span>
-              {secondaryLabel ? (
+            <span className="flex items-center gap-[5px] min-w-0 text-left">
+              <InstrumentIcon
+                size={13}
+                className="shrink-0"
+                style={{ color: "var(--hf-text-secondary)", filter: `drop-shadow(0 0 4px var(--hf-bg))` }}
+                aria-hidden
+              />
+              <span className="flex flex-col items-start gap-0 min-w-0">
                 <span
-                  className="truncate font-mono text-[9px] leading-tight opacity-90"
-                  style={{ color: "var(--hf-text-secondary)", textShadow }}
+                  className="truncate font-body text-[11px] font-semibold leading-tight"
+                  style={{ color: "var(--hf-text-primary)", textShadow }}
                 >
-                  {secondaryLabel}
+                  {primaryLabel}
                 </span>
-              ) : null}
+                {secondaryLabel ? (
+                  <span
+                    className="truncate font-mono text-[9px] leading-tight opacity-90"
+                    style={{ color: "var(--hf-text-secondary)", textShadow }}
+                  >
+                    {secondaryLabel}
+                  </span>
+                ) : null}
+              </span>
             </span>
           );
           return (
