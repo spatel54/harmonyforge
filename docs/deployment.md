@@ -24,7 +24,8 @@ Both paths produce the same UX; the only functional difference is PDF OMR.
 1. **Import** the GitHub repo into Vercel.
 2. **Root Directory:** `frontend` (required).
 3. **Framework:** Next.js (auto-detected).
-4. **Environment variables** (Vercel → Settings → Environment Variables):
+4. **Install command:** the repo ships [`frontend/vercel.json`](../frontend/vercel.json) with **`npm ci --include=dev`** so each build gets a **clean** `node_modules` from `package-lock.json`. That avoids Vercel’s dependency cache leaving a **stale `riffscore`** tree when the version string is unchanged but [`patch-package`](../frontend/patches/riffscore+1.0.0-alpha.9.patch) expects a pristine tarball — otherwise postinstall can fail with **“Failed to apply patch for package riffscore”**. If you ever override the install command in the dashboard, prefer the same `npm ci --include=dev` (the `--include=dev` part matters when `NODE_ENV=production` during install). As a one-off, **Redeploy** with **“Clear build cache”** also fixes a poisoned cache.
+5. **Environment variables** (Vercel → Settings → Environment Variables):
 
 | Variable | Where it runs | Notes |
 |----------|----------------|--------|
@@ -37,8 +38,8 @@ Both paths produce the same UX; the only functional difference is PDF OMR.
 | `NEXT_PUBLIC_GENERATE_TIMEOUT_MS` | Browser | Client abort on `/api/generate-from-file` (default 180000). |
 | `NEXT_PUBLIC_HF_*` | Browser | M5 study toggles — see [plan.md §M5](plan.md). |
 
-5. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }`.
-6. **Smoke test** the upload → generate → sandbox flow with MusicXML (fastest) and MXL.
+6. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }`.
+7. **Smoke test** the upload → generate → sandbox flow with MusicXML (fastest) and MXL.
 
 **PDF on Vercel:** the browser client-rasterizes PDFs via `pdfjs-dist` so you always see a preview on `/document`. Running OMR (oemer) requires binaries that Vercel's serverless runtime does not ship — if you need PDF → MusicXML, use Path B.
 
