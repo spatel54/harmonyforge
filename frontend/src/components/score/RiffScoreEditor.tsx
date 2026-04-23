@@ -47,6 +47,38 @@ function getInstrumentIcon(name: string): LucideIcon {
   return Music;
 }
 
+/** Generated instrument images — fuzzy-matched by lowercase name fragment. */
+const INSTRUMENT_IMAGE_MAP: Array<{ keys: string[]; src: string }> = [
+  { keys: ["soprano voice", "soprano"], src: "/instruments/soprano_voice_1776905179244.png" },
+  { keys: ["flute"],                    src: "/instruments/flute_1776905191197.png" },
+  { keys: ["oboe"],                     src: "/instruments/oboe_1776905202493.png" },
+  { keys: ["violin"],                   src: "/instruments/violin_i_1776905213825.png" },
+  { keys: ["alto voice", "alto"],       src: "/instruments/alto_voice_1776905231077.png" },
+  { keys: ["clarinet"],                 src: "/instruments/clarinet_1776905243517.png" },
+  { keys: ["viola"],                    src: "/instruments/viola_1776905253764.png" },
+  { keys: ["french horn", "horn"],      src: "/instruments/french_horn_1776905265120.png" },
+  { keys: ["tenor voice", "tenor"],     src: "/instruments/tenor_voice_1776905282484.png" },
+  { keys: ["trumpet"],                  src: "/instruments/trumpet_1776905295274.png" },
+  { keys: ["cello"],                    src: "/instruments/cello_1776905307289.png" },
+  { keys: ["trombone"],                 src: "/instruments/trombone_1776905319751.png" },
+  { keys: ["bass voice", "bass"],       src: "/instruments/bass_voice_1776905337124.png" },
+  { keys: ["bassoon"],                  src: "/instruments/bassoon_1776905347619.png" },
+  { keys: ["double bass", "contrabass"], src: "/instruments/double_bass_1776905360017.png" },
+  { keys: ["tuba"],                     src: "/instruments/tuba_1776905371558.png" },
+];
+
+function getInstrumentImage(name: string): string | null {
+  const n = name.toLowerCase();
+  // More specific matches first (longer key wins)
+  const sorted = [...INSTRUMENT_IMAGE_MAP].sort((a, b) =>
+    Math.max(...b.keys.map((k) => k.length)) - Math.max(...a.keys.map((k) => k.length)),
+  );
+  for (const entry of sorted) {
+    if (entry.keys.some((k) => n.includes(k))) return entry.src;
+  }
+  return null;
+}
+
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
   () => import("riffscore").then((mod) => mod.RiffScore),
@@ -672,18 +704,34 @@ export function RiffScoreEditor({
     [onPaletteSymbolDrop],
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
+  // Window-level arrow key listener — fires even when focus is inside RiffScore's SVG canvas.
+  // capture:true ensures we intercept before any inner element swallows the event.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
       if (!hasSelection) return;
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      const container = containerRef.current;
+      if (!container) return;
+      // Only transpose when focus is inside the score container (or the container itself)
+      const active = document.activeElement;
+      if (!container.contains(active) && active !== container) return;
       e.preventDefault();
       const semitones = e.key === "ArrowUp"
         ? (e.shiftKey ? 12 : 1)
         : (e.shiftKey ? -12 : -1);
-      applyOnSelection((current, ids) => transposeNotes(current, ids, semitones));
-    },
+      applyOnSelection((cur, ids) => transposeNotes(cur, ids, semitones));
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasSelection, score, selectedNoteIds],
+  }, [hasSelection, score, selectedNoteIds]);
+
+  const handleKeyDown = useCallback(
+    (_e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Arrow key transposing is handled by the window-level listener above.
+      // This handler remains for any future keyboard shortcuts on the wrapper.
+    },
+    [],
   );
 
   if (!score || !config) return null;
@@ -760,23 +808,25 @@ export function RiffScoreEditor({
           display: none !important;
         }
         /*
-         * Iter1 §1 selection feedback:
-         *   - Show a "grab" cursor over the score canvas so users know notes are movable.
-         *   - Switch to "grabbing" while a pointer is held down (hints at drag-in-progress).
-         *   - Prefer noteheads over stems / beams as hit targets by giving SVG
-         *     lines a narrower pointer-events region; glyphs (noteheads) stay
-         *     fully clickable.
+         * Iter6 cursor fix:
+         *   - Default cursor for the whole wrapper (beats any crosshair/+ from RiffScore).
+         *   - Grab cursor only on SVG noteheads (path/text elements) so the user knows
+         *     those are interactive — not the whole canvas area.
+         *   - Grabbing while pointer is held down.
          */
-        .riffscore-hf-wrapper .riff-ScoreCanvas {
-          cursor: grab;
+        .riffscore-hf-wrapper {
+          cursor: default !important;
         }
-        .riffscore-hf-wrapper .riff-ScoreCanvas:active,
-        .riffscore-hf-wrapper .riff-ScoreCanvas[data-dragging="true"] {
-          cursor: grabbing;
+        .riffscore-hf-wrapper .riff-ScoreCanvas {
+          cursor: default !important;
         }
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg text,
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg path {
-          cursor: grab;
+          cursor: grab !important;
+        }
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg text:active,
+        .riffscore-hf-wrapper .riff-ScoreCanvas__svg path:active {
+          cursor: grabbing !important;
         }
         /* Iter1 §1: selection should prefer noteheads over stems. Stems render as
            SVG <line> elements; giving them pointer-events:none pushes hit-testing
@@ -954,14 +1004,38 @@ export function RiffScoreEditor({
           const textShadow =
             "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)";
           const InstrumentIcon = getInstrumentIcon(part.name);
+          const instrumentImgSrc = getInstrumentImage(part.name);
           const labelInner = (
-            <span className="flex items-center gap-[5px] min-w-0 text-left">
-              <InstrumentIcon
-                size={13}
-                className="shrink-0"
-                style={{ color: "var(--hf-text-secondary)", filter: `drop-shadow(0 0 4px var(--hf-bg))` }}
-                aria-hidden
-              />
+            <span className="flex items-center gap-[6px] min-w-0 text-left">
+              {/* Instrument image or fallback Lucide icon */}
+              {instrumentImgSrc ? (
+                <span
+                  className="shrink-0 flex items-center justify-center rounded-[4px] overflow-hidden"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    background: "color-mix(in srgb, var(--hf-bg) 80%, transparent)",
+                    backdropFilter: "blur(4px)",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                  }}
+                >
+                  <img
+                    src={instrumentImgSrc}
+                    alt={part.name}
+                    width={28}
+                    height={28}
+                    style={{ objectFit: "contain", filter: `drop-shadow(0 0 3px var(--hf-bg))` }}
+                    draggable={false}
+                  />
+                </span>
+              ) : (
+                <InstrumentIcon
+                  size={13}
+                  className="shrink-0"
+                  style={{ color: "var(--hf-text-secondary)", filter: `drop-shadow(0 0 4px var(--hf-bg))` }}
+                  aria-hidden
+                />
+              )}
               <span className="flex flex-col items-start gap-0 min-w-0">
                 <span
                   className="truncate font-body text-[11px] font-semibold leading-tight"

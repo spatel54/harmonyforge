@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { X, SendHorizontal, Check, ChevronDown, ChevronRight, Target } from "lucide-react";
+import { X, SendHorizontal, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatBubble } from "@/components/molecules/ChatBubble";
 import { describeIntent, type Intent } from "@/lib/ai/intentRouter";
@@ -20,6 +20,9 @@ import { resolveStarterPrompts } from "@/lib/ai/starterPrompts";
 import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogyCallout";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
+
+const AI_MODAL_KEY = "hf-inspector-ai-modal-seen";
+const TAGS_VISIBLE_KEY = "hf-suggestion-tags-visible";
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -72,6 +75,8 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onApplyIntent?: (msgId: string, intent: import("@/lib/ai/intentRouter").Intent) => void;
   /** Dismiss an INTENT confirmation bubble without applying it. */
   onDismissIntent?: (msgId: string) => void;
+  /** Fired when user clicks a bold keyword in AI explanations — for note highlighting. */
+  onKeywordClick?: (keyword: string) => void;
 }
 
 /**
@@ -126,26 +131,49 @@ export const TheoryInspectorPanel = React.forwardRef<
       onEditFocusedRegion,
       onApplyIntent,
       onDismissIntent,
+      onKeywordClick,
       className,
       ...props
     },
     ref,
   ) => {
-    const chatScrollRef = React.useRef<HTMLDivElement>(null);
+    const scrollRef = React.useRef<HTMLDivElement>(null);
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
-    const musicalGoal = useTheoryInspectorStore((s) => s.musicalGoal);
-    const setMusicalGoal = useTheoryInspectorStore((s) => s.setMusicalGoal);
     const showInspectorRationale = useTheoryInspectorStore((s) => s.showInspectorRationale);
     const setShowInspectorRationale = useTheoryInspectorStore(
       (s) => s.setShowInspectorRationale,
     );
     const explanationLevel = useTheoryInspectorStore((s) => s.explanationLevel);
     const setExplanationLevel = useTheoryInspectorStore((s) => s.setExplanationLevel);
-    const [goalEditing, setGoalEditing] = React.useState(false);
-    const [goalDraft, setGoalDraft] = React.useState(musicalGoal);
+
+    // AI first-visit modal
+    const [showAiModal, setShowAiModal] = React.useState(false);
     React.useEffect(() => {
-      if (!goalEditing) setGoalDraft(musicalGoal);
-    }, [musicalGoal, goalEditing]);
+      if (typeof window === "undefined") return;
+      if (!localStorage.getItem(AI_MODAL_KEY)) setShowAiModal(true);
+    }, []);
+    const dismissAiModal = React.useCallback(() => {
+      setShowAiModal(false);
+      if (typeof window !== "undefined") localStorage.setItem(AI_MODAL_KEY, "1");
+    }, []);
+
+    // Suggestive tags
+    const [tagsVisible, setTagsVisible] = React.useState(() => {
+      if (typeof window === "undefined") return true;
+      return localStorage.getItem(TAGS_VISIBLE_KEY) !== "0";
+    });
+    const [dismissedTags, setDismissedTags] = React.useState<Set<string>>(new Set());
+    const dismissTag = React.useCallback((id: string) => {
+      setDismissedTags((prev) => new Set([...prev, id]));
+    }, []);
+    const toggleTagsVisible = React.useCallback(() => {
+      setTagsVisible((v) => {
+        const next = !v;
+        if (typeof window !== "undefined") localStorage.setItem(TAGS_VISIBLE_KEY, next ? "1" : "0");
+        return next;
+      });
+    }, []);
+
     const suppressSuggestionProse = isMinimalSuggestionExplanation();
     const chatInputLocked = isStreaming && streamingMessageId != null;
     const starterPrompts = React.useMemo(
@@ -280,12 +308,9 @@ export const TheoryInspectorPanel = React.forwardRef<
       }
     };
 
-    // Near-bottom guard (Iter2 §3): only auto-scroll the chat pane when the user
-    // is already close to the bottom, otherwise reading older context would keep
-    // being ripped to the latest message. No deps array avoids React Compiler /
-    // Turbopack "final argument changed size" errors on this small panel.
+    // Near-bottom guard: only auto-scroll when the user is already close to the bottom.
     React.useLayoutEffect(() => {
-      const el = chatScrollRef.current;
+      const el = scrollRef.current;
       if (!el) return;
       const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
       if (distance < 120 || isStreaming) {
@@ -312,8 +337,9 @@ export const TheoryInspectorPanel = React.forwardRef<
         )}
         style={{
           backgroundColor: "var(--hf-panel-bg)",
-          boxShadow: "var(--shadow-lg)", // added shadow per design system
+          boxShadow: "var(--shadow-lg)",
           borderLeft: "1px solid var(--hf-detail)",
+          position: "relative",
         }}
         role="complementary"
         aria-label="Theory Inspector — note explainability"
@@ -363,6 +389,7 @@ export const TheoryInspectorPanel = React.forwardRef<
               <button
                 key={level}
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setExplanationLevel(level)}
                 aria-pressed={explanationLevel === level}
                 aria-label={`Explanation level: ${level}`}
@@ -416,91 +443,87 @@ export const TheoryInspectorPanel = React.forwardRef<
           </div>
         )}
 
-        {/* Musical goal — Iter1 §3: let the user state what they want,
-            which the tutor then aligns to in every reply. */}
+        {/* ── Body: single unified scroll pane ───────────────── */}
         <div
-          className="px-[12px] py-[8px] shrink-0"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
-            borderBottom: "1px solid var(--hf-detail)",
-          }}
-          aria-label="Musical goal for this session"
+          ref={scrollRef}
+          className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
+          aria-label="Theory Inspector — note details and conversation"
         >
-          <div className="flex items-center gap-[6px] mb-[4px]">
-            <Target className="w-[12px] h-[12px]" style={{ color: "var(--hf-text-secondary)" }} aria-hidden="true" />
-            <span
-              className="font-mono text-[10px] font-medium"
-              style={{ color: "var(--hf-text-secondary)" }}
+          {/* Suggestive tags strip */}
+          {tagsVisible ? (
+            <div
+              className="flex items-center gap-[6px] shrink-0 overflow-x-auto py-[2px]"
+              style={{ scrollbarWidth: "none" }}
+              aria-label="Suggested actions"
             >
-              My musical goal
-            </span>
-          </div>
-          {goalEditing ? (
-            <div className="flex items-center gap-[6px]">
-              <input
-                type="text"
-                value={goalDraft}
-                onChange={(e) => setGoalDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setMusicalGoal(goalDraft.trim());
-                    setGoalEditing(false);
-                  } else if (e.key === "Escape") {
-                    setGoalDraft(musicalGoal);
-                    setGoalEditing(false);
-                  }
-                }}
-                placeholder="e.g. establish a stable C major cadence here"
-                className="flex-1 rounded-[4px] px-[8px] py-[4px] font-body text-[11px]"
-                style={{
-                  backgroundColor: "var(--hf-bg)",
-                  border: "1px solid var(--hf-detail)",
-                  color: "var(--hf-text-primary)",
-                }}
-                autoFocus
-              />
+              {/* Show rationale tag */}
+              {!dismissedTags.has("rationale") && noteInsight && (
+                <div className="flex items-center gap-[2px] shrink-0 rounded-full px-[10px] py-[4px]" style={{ background: "color-mix(in srgb, var(--hf-accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--hf-accent) 35%, transparent)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowInspectorRationale(!showInspectorRationale)}
+                    className="font-mono text-[10px] whitespace-nowrap"
+                    style={{ color: "var(--hf-accent)" }}
+                  >
+                    {showInspectorRationale ? "Hide rationale" : "Show rationale"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissTag("rationale")}
+                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
+                    aria-label="Dismiss Show rationale tag"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    <X className="w-[8px] h-[8px]" strokeWidth={2.5} />
+                  </button>
+                </div>
+              )}
+              {/* Starter prompt tags — only when a note is selected and no messages yet */}
+              {noteInsight && messages.length === 0 && [
+                { id: "why", label: "Why this note?", prompt: "Why did HarmonyForge write this note?" },
+                { id: "alt", label: "What else fits here?", prompt: "What other pitches could work at this moment?" },
+                { id: "motion", label: "Show voice motion", prompt: "Explain the voice-leading motion into and out of this note." },
+              ].filter((t) => !dismissedTags.has(t.id)).map((tag) => (
+                <div key={tag.id} className="flex items-center gap-[2px] shrink-0 rounded-full px-[10px] py-[4px]" style={{ background: "color-mix(in srgb, var(--hf-surface) 12%, transparent)", border: "1px solid var(--hf-detail)" }}>
+                  <button
+                    type="button"
+                    onClick={() => onStarterPromptClick?.(tag.prompt)}
+                    className="font-mono text-[10px] whitespace-nowrap"
+                    style={{ color: "var(--hf-text-primary)" }}
+                  >
+                    {tag.label}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissTag(tag.id)}
+                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
+                    aria-label={`Dismiss ${tag.label} tag`}
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    <X className="w-[8px] h-[8px]" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+              {/* Hide all tags button */}
               <button
                 type="button"
-                onClick={() => {
-                  setMusicalGoal(goalDraft.trim());
-                  setGoalEditing(false);
-                }}
-                className="font-mono text-[10px] px-[8px] py-[4px] rounded-[4px]"
-                style={{
-                  backgroundColor: "var(--hf-accent)",
-                  color: "var(--text-on-light)",
-                }}
+                onClick={toggleTagsVisible}
+                className="ml-auto shrink-0 font-mono text-[9px] whitespace-nowrap hover:opacity-70"
+                style={{ color: "var(--hf-text-secondary)" }}
               >
-                Save
+                Hide tags
               </button>
             </div>
           ) : (
             <button
               type="button"
-              onClick={() => setGoalEditing(true)}
-              className="text-left w-full rounded-[4px] px-[8px] py-[4px] font-body text-[11px] hover:bg-black/10"
-              style={{ color: "var(--hf-text-primary)" }}
+              onClick={toggleTagsVisible}
+              className="font-mono text-[9px] self-start hover:opacity-70 shrink-0"
+              style={{ color: "var(--hf-text-secondary)" }}
             >
-              {musicalGoal?.trim() || (
-                <span style={{ color: "var(--hf-text-secondary)" }}>
-                  Click to describe what you want (used to align the tutor).
-                </span>
-              )}
+              Show tags
             </button>
           )}
-        </div>
-
-        <div className="px-[12px] pb-[8px] shrink-0">
-          <GlassBoxPedagogyCallout variant="inspector" />
-        </div>
-
-        {/* ── Body: note details (top) + chat (bottom), equal split ── */}
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div
-            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
-            style={{ borderBottom: "1px solid var(--hf-detail)" }}
-            aria-label="Theory Inspector — note details and recommendations"
-          >
           {!noteInsight &&
             inspectorScoreFocus &&
             (inspectorScoreFocus.kind === "measure" ||
@@ -675,7 +698,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                         <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
                           Frozen snapshot from when the score was generated (if we have it).
                         </div>
-                        <MarkdownText content={noteInsight.engineOriginExplanation} variant="panel" />
+                        <MarkdownText content={noteInsight.engineOriginExplanation} variant="panel" onKeywordClick={onKeywordClick} />
                       </div>
                     ) : null}
 
@@ -695,7 +718,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                           ? "How your tune sits at this beat with the other staves. (HarmonyForge did not generate the melody—focus on fit and rhythm; full detail is in the export.)"
                           : "Why HarmonyForge’s axiomatic engine chose the original harmony pitch at generation, and how that relates to what you see now—then use the export to verify every staff."}
                       </div>
-                      <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" />
+                      <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" onKeywordClick={onKeywordClick} />
                     </div>
 
                     <div
@@ -747,7 +770,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                       </span>
                     ) : tutorEnabled ? (
                       noteInsight.aiExplanation?.trim() ? (
-                        <MarkdownText content={noteInsight.aiExplanation.trim()} variant="panel" />
+                        <MarkdownText content={noteInsight.aiExplanation.trim()} variant="panel" onKeywordClick={onKeywordClick} />
                       ) : (
                         <span
                           className="font-body text-[13px]"
@@ -800,7 +823,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                         …
                       </span>
                     ) : noteInsight.aiSuggestions?.trim() ? (
-                      <MarkdownText content={noteInsight.aiSuggestions.trim()} variant="panel" />
+                      <MarkdownText content={noteInsight.aiSuggestions.trim()} variant="panel" onKeywordClick={onKeywordClick} />
                     ) : (
                       <span
                         className="font-body text-[13px]"
@@ -892,79 +915,101 @@ export const TheoryInspectorPanel = React.forwardRef<
                 </div>
               </>
           ) : null}
+          {/* Chat separator */}
+          {messages.length > 0 && (
+            <div className="flex items-center gap-[8px] shrink-0">
+              <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
+              <span className="font-mono text-[9px]" style={{ color: "var(--hf-text-secondary)" }}>Conversation</span>
+              <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
+            </div>
+          )}
+          {showStarterPrompts && (
+            <div
+              className="rounded-[6px] p-[10px]"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
+                border: "1px dashed var(--hf-detail)",
+              }}
+              aria-label="Suggested starts"
+            >
+              <div className="font-mono text-[10px] mb-[6px]" style={{ color: "var(--hf-text-secondary)" }}>
+                Suggested starts
+              </div>
+              <div className="flex flex-wrap gap-[6px]">
+                {starterPrompts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onStarterPromptClick?.(p.prompt)}
+                    className="rounded-[999px] px-[10px] py-[4px] font-mono text-[11px] hover:opacity-90"
+                    style={{
+                      backgroundColor: "var(--hf-bg)",
+                      border: "1px solid var(--hf-detail)",
+                      color: "var(--hf-text-primary)",
+                    }}
+                    title={p.prompt}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div role="log" aria-live="polite" aria-label="Theory Inspector — chat" className="flex flex-col gap-[8px]">
+            {messages.map((msg) => renderChatMessage(msg))}
           </div>
+          {isStreaming && streamingMessageId != null && (
+            <div className="flex items-center gap-[4px] px-[12px] py-[6px]" aria-label="AI is typing" role="status">
+              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }} />
+              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }} />
+              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }} />
+            </div>
+          )}
+        </div>
 
+        {/* AI first-visit modal */}
+        {showAiModal && (
           <div
-            className="flex-1 min-h-0 flex flex-col min-h-0"
-            aria-label="Theory Inspector — chat column"
+            className="absolute inset-0 z-50 flex items-center justify-center p-[24px]"
+            style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="About conversational AI in Theory Inspector"
+            onClick={(e) => { if (e.target === e.currentTarget) dismissAiModal(); }}
           >
             <div
-              ref={chatScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
-              role="log"
-              aria-live="polite"
-              aria-label="Theory Inspector — chat"
+              className="w-full max-w-[320px] rounded-[12px] p-[20px] flex flex-col gap-[14px]"
+              style={{
+                backgroundColor: "var(--hf-panel-bg)",
+                border: "1px solid var(--hf-detail)",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.45)",
+              }}
             >
-              {showStarterPrompts && (
-                <div
-                  className="rounded-[6px] p-[10px]"
-                  style={{
-                    backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
-                    border: "1px dashed var(--hf-detail)",
-                  }}
-                  aria-label="Suggested starts"
-                >
-                  <div
-                    className="font-mono text-[10px] mb-[6px]"
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
-                    Suggested starts
-                  </div>
-                  <div className="flex flex-wrap gap-[6px]">
-                    {starterPrompts.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => onStarterPromptClick?.(p.prompt)}
-                        className="rounded-[999px] px-[10px] py-[4px] font-mono text-[11px] hover:opacity-90"
-                        style={{
-                          backgroundColor: "var(--hf-bg)",
-                          border: "1px solid var(--hf-detail)",
-                          color: "var(--hf-text-primary)",
-                        }}
-                        title={p.prompt}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {messages.map((msg) => renderChatMessage(msg))}
-
-              {isStreaming && streamingMessageId != null && (
-                <div
-                  className="flex items-center gap-[4px] px-[12px] py-[6px]"
-                  aria-label="AI is typing"
-                  role="status"
-                >
-                  <span
-                    className="w-[6px] h-[6px] rounded-full animate-pulse"
-                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }}
-                  />
-                  <span
-                    className="w-[6px] h-[6px] rounded-full animate-pulse"
-                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }}
-                  />
-                  <span
-                    className="w-[6px] h-[6px] rounded-full animate-pulse"
-                    style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }}
-                  />
-                </div>
-              )}
+              <div className="flex items-start justify-between gap-[8px]">
+                <h2 className="font-mono text-[13px] font-semibold" style={{ color: "var(--hf-text-primary)" }}>
+                  Conversational AI is ready
+                </h2>
+                <button type="button" onClick={dismissAiModal} aria-label="Close" className="flex items-center justify-center w-[22px] h-[22px] rounded-full hover:bg-black/15" style={{ color: "var(--hf-text-secondary)" }}>
+                  <X className="w-[12px] h-[12px]" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="font-body text-[12px] leading-[1.5]" style={{ color: "var(--hf-text-primary)" }}>
+                This panel uses a language model for explanations, audits, and suggestions. HarmonyForge&#x27;s automatic voicings still come from the deterministic engine — transparent coaching next to fixed rules.
+              </p>
+              <p className="font-mono text-[10px]" style={{ color: "var(--hf-text-secondary)" }}>
+                Click a note in the score, then ask anything.
+              </p>
+              <button
+                type="button"
+                onClick={dismissAiModal}
+                className="self-end rounded-[6px] px-[14px] py-[7px] font-mono text-[11px] font-medium transition-opacity hover:opacity-85"
+                style={{ backgroundColor: "var(--hf-accent)", color: "#1a0f0c" }}
+              >
+                Got it
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
         <div
           className="flex items-center gap-[8px] w-full h-[60px] px-[12px] shrink-0"
@@ -973,6 +1018,7 @@ export const TheoryInspectorPanel = React.forwardRef<
             borderTop: "1px solid var(--hf-detail)",
           }}
         >
+
           <div
             className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
             style={{
