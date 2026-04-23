@@ -46,51 +46,10 @@ index 1ca537c..ee2d0eb 100644
      scale?: number;
      label?: string;
 diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
-index ef82e00..5ae65f4 100644
+index ef82e00..b3a91ca 100644
 --- a/node_modules/riffscore/dist/index.js
 +++ b/node_modules/riffscore/dist/index.js
-@@ -1165,9 +1165,13 @@ var CLEF_REFERENCE = {
- var getOffsetForPitch = (pitch, clef = "treble") => {
-   if (!pitch) return 0;
-   const normalizedPitch = getStaffPitch(pitch);
--  const mapping = getPitchToOffset(clef);
--  if (mapping[normalizedPitch] !== void 0) {
--    return mapping[normalizedPitch];
-+  const useBassMap = clef === "bass";
-+  const useTrebleMap = clef === "treble" || clef === "grand" || clef === void 0 || clef === null || clef === "";
-+  if (useBassMap && BASS_PITCH_TO_OFFSET[normalizedPitch] !== void 0) {
-+    return BASS_PITCH_TO_OFFSET[normalizedPitch];
-+  }
-+  if (useTrebleMap && PITCH_TO_OFFSET[normalizedPitch] !== void 0) {
-+    return PITCH_TO_OFFSET[normalizedPitch];
-   }
-   const ref = CLEF_REFERENCE[clef] || CLEF_REFERENCE.treble;
-   const match = normalizedPitch.match(/^([A-G])(\d+)$/);
-@@ -1184,8 +1188,21 @@ var getOffsetForPitch = (pitch, clef = "treble") => {
-   return ref.offset - stepsFromRef * 6;
- };
- var getPitchForOffset = (offset, clef = "treble") => {
--  const mapping = getYToPitch(clef);
--  return mapping[offset];
-+  if (clef === "bass") {
-+    const hit = BASS_Y_TO_PITCH[offset];
-+    if (hit !== void 0) return hit;
-+  } else if (clef === "treble" || clef === "grand" || clef === void 0 || clef === null || clef === "") {
-+    const hit = Y_TO_PITCH[offset];
-+    if (hit !== void 0) return hit;
-+  } else if (clef === "alto" || clef === "tenor") {
-+    const ref = CLEF_REFERENCE[clef];
-+    if (ref) {
-+      const rawSteps = (ref.offset - offset) / 6;
-+      const stepsFromRef = Number.isFinite(rawSteps) ? Math.round(rawSteps) : 0;
-+      return movePitchVisual(ref.pitch, stepsFromRef);
-+    }
-+  }
-+  return Y_TO_PITCH[offset];
- };
- var getNoteWidth = (duration, dotted) => {
-   const quants = getNoteDuration(duration, dotted, void 0);
-@@ -3426,7 +3443,7 @@ var initTone = async (onState) => {
+@@ -3426,7 +3426,7 @@ var initTone = async (onState) => {
  var loadPianoSampler = (Tone) => {
    if (sampler) return;
    updateState({ instrumentState: "loading-samples" });
@@ -99,7 +58,7 @@ index ef82e00..5ae65f4 100644
    sampler = new Tone.Sampler({
      urls: {
        A0: "A0.mp3",
-@@ -3692,6 +3709,16 @@ var usePlayback = (score, bpm) => {
+@@ -3692,6 +3692,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -116,7 +75,7 @@ index ef82e00..5ae65f4 100644
    const exitPlaybackMode = React2.useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3700,6 +3727,10 @@ var usePlayback = (score, bpm) => {
+@@ -3700,6 +3710,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -127,7 +86,7 @@ index ef82e00..5ae65f4 100644
    }, []);
    const pausePlayback = React2.useCallback(() => {
      stopTonePlayback();
-@@ -3708,6 +3739,7 @@ var usePlayback = (score, bpm) => {
+@@ -3708,6 +3722,7 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = React2.useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -135,7 +94,7 @@ index ef82e00..5ae65f4 100644
        await ensureInit();
        stopTonePlayback();
        setLastPlayStart({ measureIndex: startMeasureIndex, quant: startQuant });
-@@ -3738,10 +3770,12 @@ var usePlayback = (score, bpm) => {
+@@ -3738,10 +3753,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -148,7 +107,7 @@ index ef82e00..5ae65f4 100644
              }
            );
          });
-@@ -3754,9 +3788,23 @@ var usePlayback = (score, bpm) => {
+@@ -3754,9 +3771,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -175,7 +134,7 @@ index ef82e00..5ae65f4 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -8740,13 +8788,36 @@ var useInteraction = ({
+@@ -8740,13 +8771,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -213,7 +172,7 @@ index ef82e00..5ae65f4 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8765,7 +8836,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8765,7 +8819,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -225,111 +184,7 @@ index ef82e00..5ae65f4 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -9974,7 +10048,6 @@ var useScoreContext = () => {
- };
- var ScoreProvider = ({ children, initialScore }) => {
-   const logic = useScoreLogic(initialScore);
--  const [pendingClefChange, setPendingClefChange] = React2__default.default.useState(null);
-   const setGrandStaff = logic.measures.setGrandStaff;
-   const dispatch = logic.engines.dispatch;
-   const score = logic.state.score;
-@@ -9985,7 +10058,7 @@ var ScoreProvider = ({ children, initialScore }) => {
-       if (newClef === "grand") {
-         setGrandStaff();
-       } else if (staffCount >= 2) {
--        setPendingClefChange({ targetClef: newClef });
-+        dispatch(new SetSingleStaffCommand(newClef));
-       } else {
-         dispatch(new SetClefCommand(newClef));
-       }
-@@ -9994,11 +10067,9 @@ var ScoreProvider = ({ children, initialScore }) => {
-   );
-   const contextValue = React2__default.default.useMemo(
-     () => __spreadProps(__spreadValues({}, logic), {
--      pendingClefChange,
--      setPendingClefChange,
-       handleClefChange
-     }),
--    [logic, pendingClefChange, handleClefChange]
-+    [logic, handleClefChange]
-   );
-   return /* @__PURE__ */ jsxRuntime.jsx(ScoreContext.Provider, { value: contextValue, children });
- };
-@@ -16169,6 +16240,50 @@ var ChromaticTransposeCommand = class _ChromaticTransposeCommand {
-   }
- };
- 
-+function hfDeepCopyScoreEvent(ev) {
-+  return __spreadProps(__spreadValues({}, ev), {
-+    notes: (ev.notes || []).map((n) => __spreadValues({}, n))
-+  });
-+}
-+function hfMergeGrandStaffMeasureEvents(eventsA, eventsB) {
-+  const out = [];
-+  const a = eventsA || [];
-+  const b = eventsB || [];
-+  const len = Math.max(a.length, b.length);
-+  for (let i = 0; i < len; i++) {
-+    const ea = a[i];
-+    const eb = b[i];
-+    if (!ea) {
-+      if (eb) out.push(hfDeepCopyScoreEvent(eb));
-+      continue;
-+    }
-+    if (!eb) {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+      continue;
-+    }
-+    const sameRhythm = ea.duration === eb.duration && !!ea.dotted === !!eb.dotted;
-+    if (sameRhythm && !ea.isRest && !eb.isRest) {
-+      out.push(
-+        __spreadProps(__spreadValues({}, ea), {
-+          notes: [
-+            ...(ea.notes || []).map((n) => __spreadValues({}, n)),
-+            ...(eb.notes || []).map((n) => __spreadValues({}, n))
-+          ],
-+          isRest: false
-+        })
-+      );
-+    } else if (ea.isRest && !eb.isRest) {
-+      out.push(hfDeepCopyScoreEvent(eb));
-+    } else if (!ea.isRest && eb.isRest) {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+    } else {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+      out.push(hfDeepCopyScoreEvent(eb));
-+    }
-+  }
-+  return out;
-+}
-+
- // src/commands/SetSingleStaffCommand.ts
- var SetSingleStaffCommand = class {
-   constructor(targetClef) {
-@@ -16186,10 +16301,20 @@ var SetSingleStaffCommand = class {
-     const trebleStaff = score.staves[0];
-     const bassStaff = score.staves[1];
-     const keepStaff = this.targetClef === "treble" ? trebleStaff : bassStaff;
--    const resultMeasures = keepStaff.measures.map((m) => __spreadValues({}, m));
-+    const mergedMeasures = trebleStaff.measures.map((mTreble, idx) => {
-+      const mBass = bassStaff.measures[idx];
-+      if (!mBass) {
-+        return __spreadProps(__spreadValues({}, mTreble), {
-+          events: (mTreble.events || []).map((e) => hfDeepCopyScoreEvent(e))
-+        });
-+      }
-+      return __spreadProps(__spreadValues({}, mTreble), {
-+        events: hfMergeGrandStaffMeasureEvents(mTreble.events, mBass.events)
-+      });
-+    });
-     const resultStaff = __spreadProps(__spreadValues({}, keepStaff), {
-       clef: this.targetClef,
--      measures: resultMeasures
-+      measures: mergedMeasures
-     });
-     return __spreadProps(__spreadValues({}, score), {
-       staves: [resultStaff]
-@@ -18041,7 +18166,8 @@ var Toolbar = React2.forwardRef(
+@@ -18041,7 +18098,8 @@ var Toolbar = React2.forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -339,7 +194,7 @@ index ef82e00..5ae65f4 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18190,6 +18316,26 @@ var Toolbar = React2.forwardRef(
+@@ -18190,6 +18248,26 @@ var Toolbar = React2.forwardRef(
                  }
                )
              ] }),
@@ -366,7 +221,7 @@ index ef82e00..5ae65f4 100644
              /* @__PURE__ */ jsxRuntime.jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsxRuntime.jsx(
                ToolbarButton_default,
-@@ -23943,7 +24089,8 @@ var ScoreEditorContent = ({
+@@ -23943,7 +24021,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -376,27 +231,7 @@ index ef82e00..5ae65f4 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -23953,7 +24100,6 @@ var ScoreEditorContent = ({
-   const { select: handleNoteSelection, focus: focusScore } = scoreLogic.navigation;
-   const { addChord: addChordToMeasure, updatePitch: updateNotePitch } = scoreLogic.entry;
-   const { clearSelection, setPreviewNote } = scoreLogic;
--  const { pendingClefChange, setPendingClefChange } = scoreLogic;
-   const [bpm, setBpm] = React2.useState(120);
-   const [showHelp, setShowHelp] = React2.useState(false);
-   const [isHoveringScore, setIsHoveringScore] = React2.useState(false);
-@@ -24104,11 +24250,6 @@ var ScoreEditorContent = ({
-     }, 0);
-     focusScore();
-   }, [focusScore]);
--  const handleClefConfirm = React2.useCallback(() => {
--    if (!pendingClefChange) return;
--    dispatch(new SetSingleStaffCommand(pendingClefChange.targetClef));
--    setPendingClefChange(null);
--  }, [pendingClefChange, dispatch, setPendingClefChange]);
-   const handleBackgroundClick = React2.useCallback(() => {
-     clearSelection();
-   }, [clearSelection]);
-@@ -24159,7 +24300,8 @@ var ScoreEditorContent = ({
+@@ -24159,7 +24238,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -406,32 +241,7 @@ index ef82e00..5ae65f4 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsxRuntime.jsx(Portal_default, { children: /* @__PURE__ */ jsxRuntime.jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24203,23 +24345,7 @@ var ScoreEditorContent = ({
-               chordTrack: chordTrackHook
-             }
-           )
--        ] }),
--        pendingClefChange && /* @__PURE__ */ jsxRuntime.jsx(Portal_default, { children: /* @__PURE__ */ jsxRuntime.jsx(
--          ConfirmDialog_default,
--          {
--            title: "Change to Single Staff?",
--            message: `This will remove the ${pendingClefChange.targetClef === "treble" ? "bass" : "treble"} clef and all its contents.`,
--            actions: [
--              { label: "Cancel", onClick: () => setPendingClefChange(null), variant: "secondary" },
--              {
--                label: `Drop ${pendingClefChange.targetClef === "treble" ? "Bass" : "Treble"} Clef`,
--                onClick: handleClefConfirm,
--                variant: "danger"
--              }
--            ],
--            onClose: () => setPendingClefChange(null)
--          }
--        ) })
-+        ] })
-       ]
-     }
-   );
-@@ -24272,7 +24398,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24272,7 +24352,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,
@@ -442,7 +252,7 @@ index ef82e00..5ae65f4 100644
          ) }) })
        ]
 diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
-index fc71835..4323c85 100644
+index fc71835..49fd66c 100644
 --- a/node_modules/riffscore/dist/index.mjs
 +++ b/node_modules/riffscore/dist/index.mjs
 @@ -3686,6 +3686,16 @@ var usePlayback = (score, bpm) => {
@@ -571,111 +381,7 @@ index fc71835..4323c85 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -9968,7 +10025,6 @@ var useScoreContext = () => {
- };
- var ScoreProvider = ({ children, initialScore }) => {
-   const logic = useScoreLogic(initialScore);
--  const [pendingClefChange, setPendingClefChange] = React2.useState(null);
-   const setGrandStaff = logic.measures.setGrandStaff;
-   const dispatch = logic.engines.dispatch;
-   const score = logic.state.score;
-@@ -9979,7 +10035,7 @@ var ScoreProvider = ({ children, initialScore }) => {
-       if (newClef === "grand") {
-         setGrandStaff();
-       } else if (staffCount >= 2) {
--        setPendingClefChange({ targetClef: newClef });
-+        dispatch(new SetSingleStaffCommand(newClef));
-       } else {
-         dispatch(new SetClefCommand(newClef));
-       }
-@@ -9988,11 +10044,9 @@ var ScoreProvider = ({ children, initialScore }) => {
-   );
-   const contextValue = React2.useMemo(
-     () => __spreadProps(__spreadValues({}, logic), {
--      pendingClefChange,
--      setPendingClefChange,
-       handleClefChange
-     }),
--    [logic, pendingClefChange, handleClefChange]
-+    [logic, handleClefChange]
-   );
-   return /* @__PURE__ */ jsx(ScoreContext.Provider, { value: contextValue, children });
- };
-@@ -16163,6 +16217,50 @@ var ChromaticTransposeCommand = class _ChromaticTransposeCommand {
-   }
- };
- 
-+function hfDeepCopyScoreEvent(ev) {
-+  return __spreadProps(__spreadValues({}, ev), {
-+    notes: (ev.notes || []).map((n) => __spreadValues({}, n))
-+  });
-+}
-+function hfMergeGrandStaffMeasureEvents(eventsA, eventsB) {
-+  const out = [];
-+  const a = eventsA || [];
-+  const b = eventsB || [];
-+  const len = Math.max(a.length, b.length);
-+  for (let i = 0; i < len; i++) {
-+    const ea = a[i];
-+    const eb = b[i];
-+    if (!ea) {
-+      if (eb) out.push(hfDeepCopyScoreEvent(eb));
-+      continue;
-+    }
-+    if (!eb) {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+      continue;
-+    }
-+    const sameRhythm = ea.duration === eb.duration && !!ea.dotted === !!eb.dotted;
-+    if (sameRhythm && !ea.isRest && !eb.isRest) {
-+      out.push(
-+        __spreadProps(__spreadValues({}, ea), {
-+          notes: [
-+            ...(ea.notes || []).map((n) => __spreadValues({}, n)),
-+            ...(eb.notes || []).map((n) => __spreadValues({}, n))
-+          ],
-+          isRest: false
-+        })
-+      );
-+    } else if (ea.isRest && !eb.isRest) {
-+      out.push(hfDeepCopyScoreEvent(eb));
-+    } else if (!ea.isRest && eb.isRest) {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+    } else {
-+      out.push(hfDeepCopyScoreEvent(ea));
-+      out.push(hfDeepCopyScoreEvent(eb));
-+    }
-+  }
-+  return out;
-+}
-+
- // src/commands/SetSingleStaffCommand.ts
- var SetSingleStaffCommand = class {
-   constructor(targetClef) {
-@@ -16180,10 +16278,20 @@ var SetSingleStaffCommand = class {
-     const trebleStaff = score.staves[0];
-     const bassStaff = score.staves[1];
-     const keepStaff = this.targetClef === "treble" ? trebleStaff : bassStaff;
--    const resultMeasures = keepStaff.measures.map((m) => __spreadValues({}, m));
-+    const mergedMeasures = trebleStaff.measures.map((mTreble, idx) => {
-+      const mBass = bassStaff.measures[idx];
-+      if (!mBass) {
-+        return __spreadProps(__spreadValues({}, mTreble), {
-+          events: (mTreble.events || []).map((e) => hfDeepCopyScoreEvent(e))
-+        });
-+      }
-+      return __spreadProps(__spreadValues({}, mTreble), {
-+        events: hfMergeGrandStaffMeasureEvents(mTreble.events, mBass.events)
-+      });
-+    });
-     const resultStaff = __spreadProps(__spreadValues({}, keepStaff), {
-       clef: this.targetClef,
--      measures: resultMeasures
-+      measures: mergedMeasures
-     });
-     return __spreadProps(__spreadValues({}, score), {
-       staves: [resultStaff]
-@@ -18035,7 +18143,8 @@ var Toolbar = forwardRef(
+@@ -18035,7 +18092,8 @@ var Toolbar = forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -685,7 +391,7 @@ index fc71835..4323c85 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18184,6 +18293,26 @@ var Toolbar = forwardRef(
+@@ -18184,6 +18242,26 @@ var Toolbar = forwardRef(
                  }
                )
              ] }),
@@ -712,7 +418,7 @@ index fc71835..4323c85 100644
              /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsx(
                ToolbarButton_default,
-@@ -23937,7 +24066,8 @@ var ScoreEditorContent = ({
+@@ -23937,7 +24015,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -722,27 +428,7 @@ index fc71835..4323c85 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -23947,7 +24077,6 @@ var ScoreEditorContent = ({
-   const { select: handleNoteSelection, focus: focusScore } = scoreLogic.navigation;
-   const { addChord: addChordToMeasure, updatePitch: updateNotePitch } = scoreLogic.entry;
-   const { clearSelection, setPreviewNote } = scoreLogic;
--  const { pendingClefChange, setPendingClefChange } = scoreLogic;
-   const [bpm, setBpm] = useState(120);
-   const [showHelp, setShowHelp] = useState(false);
-   const [isHoveringScore, setIsHoveringScore] = useState(false);
-@@ -24098,11 +24227,6 @@ var ScoreEditorContent = ({
-     }, 0);
-     focusScore();
-   }, [focusScore]);
--  const handleClefConfirm = useCallback(() => {
--    if (!pendingClefChange) return;
--    dispatch(new SetSingleStaffCommand(pendingClefChange.targetClef));
--    setPendingClefChange(null);
--  }, [pendingClefChange, dispatch, setPendingClefChange]);
-   const handleBackgroundClick = useCallback(() => {
-     clearSelection();
-   }, [clearSelection]);
-@@ -24153,7 +24277,8 @@ var ScoreEditorContent = ({
+@@ -24153,7 +24232,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -752,32 +438,7 @@ index fc71835..4323c85 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24197,23 +24322,7 @@ var ScoreEditorContent = ({
-               chordTrack: chordTrackHook
-             }
-           )
--        ] }),
--        pendingClefChange && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(
--          ConfirmDialog_default,
--          {
--            title: "Change to Single Staff?",
--            message: `This will remove the ${pendingClefChange.targetClef === "treble" ? "bass" : "treble"} clef and all its contents.`,
--            actions: [
--              { label: "Cancel", onClick: () => setPendingClefChange(null), variant: "secondary" },
--              {
--                label: `Drop ${pendingClefChange.targetClef === "treble" ? "Bass" : "Treble"} Clef`,
--                onClick: handleClefConfirm,
--                variant: "danger"
--              }
--            ],
--            onClose: () => setPendingClefChange(null)
--          }
--        ) })
-+        ] })
-       ]
-     }
-   );
-@@ -24266,7 +24375,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24266,7 +24346,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,
