@@ -8431,3 +8431,196 @@ Clean. The implementation:
 - Coachmark step 3 now reads: *"…or press ↑↓ to move by semitone (Shift+↑↓ for an octave)."*
 
 All 6 gaps from the audit plan are now shipped, Superman.
+
+---
+
+_**User (2026-04-23 00:20:58Z)**_
+
+push repo
+
+---
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:01Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show working tree status and diff stats
+
+`git status && git diff --stat`
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .specstory/history/2026-04-22_23-31-52Z-in-the-design-folder.md
+	modified:   .specstory/statistics.json
+
+no changes added to commit (use "git add" and/or "git commit -a")
+ .../2026-04-22_23-31-52Z-in-the-design-folder.md      | 19 +++++++++++++++++++
+ .specstory/statistics.json                            | 10 +++++-----
+ 2 files changed, 24 insertions(+), 5 deletions(-)
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:06Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check RiffScoreEditor diff against HEAD
+
+`git diff HEAD -- frontend/src/components/score/RiffScoreEditor.tsx | head -60`
+
+```text
+(Bash completed with no output)
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show recent commits
+
+`git log --oneline -8`
+
+```text
+e37f66c chore: update sandbox components and score editor
+72ac902 feat: update UI components and theory inspector logic
+a99e755 feat: add HarmonyForge video demo
+e14f386 docs: add welcome guide for dgeni2
+b5860e6 docs: add collaboration guide for research partners
+ea10106 chore: update .gitignore for root .vercel directory
+f0e1a0f chore: trigger Vercel deployment
+da21449 docs: add Vercel deploy button with correct root directory
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:14Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show what files changed in the last two commits
+
+`git show e37f66c --stat && git show 72ac902 --stat`
+
+```text
+commit e37f66cdbe7a38b5950825f97d2236c206f113c6
+Author: spatel54 <112018787+spatel54@users.noreply.github.com>
+Date:   Wed Apr 22 19:13:46 2026 -0500
+
+    chore: update sandbox components and score editor
+
+ .../2026-04-22_23-31-52Z-in-the-design-folder.md   | 1338 ++++++++++++++++++++
+ .specstory/statistics.json                         |   10 +-
+ .../src/components/organisms/CoachmarkOverlay.tsx  |    2 +-
+ .../src/components/organisms/SandboxHeader.tsx     |    7 +-
+ frontend/src/components/score/RiffScoreEditor.tsx  |  107 +-
+ 5 files changed, 1416 insertions(+), 48 deletions(-)
+commit 72ac9020267f3f52cce7ae980b21ffd443639c47
+Author: spatel54 <112018787+spatel54@users.noreply.github.com>
+Date:   Wed Apr 22 19:04:40 2026 -0500
+
+    feat: update UI components and theory inspector logic
+
+ .specstory/.project.json                           |     7 +
+ .specstory/cli/config.toml                         |    79 +
+ ...-frontend-and-backend-integration-for-vercel.md |  6735 +++++++
+ ...4-09_09-06-42Z-demo-presentation-preparation.md |    66 +
+ ...3Z-changelog-file-update-and-repository-push.md |  5375 ++++++
+ ...6-04-18_19-47-56Z-deployment-issue-on-vercel.md |   544 +
+ ...18_20-01-09Z-vercel-deployment-reintegration.md |  5716 ++++++
+ ...-59-01Z-merging-frontend-and-backend-process.md |   268 +
+ ...20-23-15Z-vercel-project-deployment-and-link.md | 17218 ++++++++++++++++++
+ ...04-20_21-17-15Z-api-key-deployment-on-vercel.md | 17791 +++++++++++++++++++
+ ...-vercel-project-deployment-and-configuration.md |  4923 +++++
+ ...0_22-47-22Z-github-pull-request-instructions.md |  3788 ++++
+ ...4-21_05-04-59Z-git-pull-and-error-resolution.md |  2257 +++
+ .../2026-04-22_23-05-41Z-can-you-install-google.md |   357 +
+ .../2026-04-22_23-12-47Z-we-are-currently-going.md |  1385 ++
+ .../history/2026-04-22_23-27-23Z-ctx-stats.md      |  1048 ++
+ .../2026-04-22_23-31-52Z-in-the-design-folder.md   |  7095 ++++++++
+ .specstory/statistics.json                         |   139 +
+ docs/iteration4.txt                                |     6 +
+ docs/iteration5.txt                                |     6 +
+ .../src/components/molecules/QuickReplyChips.tsx   |     8 +-
+ frontend/src/components/molecules/StepBar.tsx      |     2 +-
+ .../src/components/molecules/VoiceDropdown.tsx     |    25 +-
+ .../src/components/organisms/CoachmarkOverlay.tsx  |     2 +-
+ .../components/organisms/EnsembleBuilderPanel.tsx  |    30 +
+ .../components/organisms/TheoryInspectorPanel.tsx  |    43 +
+ frontend/src/hooks/useTheoryInspector.ts           |     7 +-
+ frontend/src/store/useTheoryInspectorStore.ts      |     8 +
+ 28 files changed, 74911 insertions(+), 17 deletions(-)
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:20Z)**_
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check if arrow key handler is in the last commit
+
+`git show e37f66c -- frontend/src/components/score/RiffScoreEditor.tsx | grep -A 10 "handleKeyDown\|ArrowUp\|ArrowDown" | head -30`
+
+```text
++  const handleKeyDown = useCallback(
++    (e: React.KeyboardEvent<HTMLDivElement>) => {
++      if (!hasSelection) return;
++      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
++      e.preventDefault();
++      const semitones = e.key === "ArrowUp"
++        ? (e.shiftKey ? 12 : 1)
++        : (e.shiftKey ? -12 : -1);
++      applyOnSelection((current, ids) => transposeNotes(current, ids, semitones));
++    },
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++    [hasSelection, score, selectedNoteIds],
++  );
++
+   if (!score || !config) return null;
+ 
+--
++      onKeyDown={handleKeyDown}
+       onDragOverCapture={onPaletteSymbolDrop ? onPaletteDragOverCapture : undefined}
+       onDropCapture={onPaletteSymbolDrop ? onPaletteDropCapture : undefined}
+     >
+@@ -875,43 +903,35 @@ export function RiffScoreEditor({
+             {score.parts.map((p, i) => {
+               const multi = score.parts.length > 1;
+               const showMelody = multi && i === 0;
++              const PartIcon = getInstrumentIcon(p.name);
++              const clickable = noteInspectionEnabled && Boolean(onInspectorSelectPart);
++              const melodyName = (
+```
+</details></tool-use>
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:26Z)**_
+
+All changes including the arrow key handler are already in the last commit. The only unstaged changes are `.specstory/` auto-generated files. I'll commit those and push.
+
+_**Agent (claude-sonnet-4-6 2026-04-23 00:21:27Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Stage and commit specstory updates
+
+```bash
+git add .specstory/ && git commit -m "$(cat <<'EOF'
+chore: update specstory session history
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+</details></tool-use>
