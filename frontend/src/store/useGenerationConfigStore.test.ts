@@ -4,7 +4,7 @@ import { useGenerationConfigStore } from "./useGenerationConfigStore";
 
 describe("useGenerationConfigStore", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     useGenerationConfigStore.getState().reset();
   });
 
@@ -17,7 +17,7 @@ describe("useGenerationConfigStore", () => {
     expect(s.detectedTonic).toBeNull();
   });
 
-  it("persists updates to sessionStorage and restores them", async () => {
+  it("persists updates to localStorage", async () => {
     useGenerationConfigStore.getState().setMood("minor");
     useGenerationConfigStore.getState().setGenre("jazz");
     useGenerationConfigStore.getState().setRhythmDensity("flowing");
@@ -26,22 +26,17 @@ describe("useGenerationConfigStore", () => {
 
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
-    useGenerationConfigStore.setState({
-      mood: "major",
-      genre: "classical",
-      rhythmDensity: "mixed",
-      instruments: { soprano: [], alto: [], tenor: [], bass: [] },
-      detectedTonic: null,
-      detectedMode: null,
-    });
-    useGenerationConfigStore.getState().restoreFromStorage();
-    const s = useGenerationConfigStore.getState();
-    expect(s.mood).toBe("minor");
-    expect(s.genre).toBe("jazz");
-    expect(s.rhythmDensity).toBe("flowing");
-    expect(s.instruments.soprano).toContain("Flute");
-    expect(s.detectedTonic).toBe("G");
-    expect(s.detectedMode).toBe("major");
+    const raw = localStorage.getItem("harmonyforge-generation-config");
+    expect(raw).toBeTruthy();
+    const { state } = JSON.parse(raw!) as { state: Record<string, unknown> };
+    expect(state.mood).toBe("minor");
+    expect(state.genre).toBe("jazz");
+    expect(state.rhythmDensity).toBe("flowing");
+    expect(state.instruments).toEqual(
+      expect.objectContaining({ soprano: expect.arrayContaining(["Flute"]) }),
+    );
+    expect(state.detectedTonic).toBe("G");
+    expect(state.detectedMode).toBe("major");
   });
 
   it("toggleInstrument adds then removes an instrument", () => {

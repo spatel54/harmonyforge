@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       content:
         fallbackContent +
-        "\n\n_[Offline mode — set OPENAI_API_KEY in your environment (.env.local locally or Vercel Project Settings when deployed). Optional: OPENAI_BASE_URL or OPENAI_URL.]_",
+        "\n\n_[Offline mode — set OPENAI_API_KEY in your environment (.env.local locally or Vercel Project Settings when deployed). Base URL is optional (defaults to OpenAI).]_",
       source: "fallback" as const,
       chips: getChipsForPersona(persona, violationType),
     });

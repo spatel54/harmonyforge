@@ -146,9 +146,13 @@ export function usePlayback({
       endTimeoutRef.current = null;
     }
     const Tone = await import("tone");
-    Tone.getTransport().cancel(0);
-    Tone.getTransport().stop();
-    Tone.getTransport().seconds = 0;
+    try {
+      Tone.getTransport().cancel(0);
+      Tone.getTransport().stop();
+      Tone.getTransport().seconds = 0;
+    } catch (err) {
+      console.warn("[harmonyforge] Transport stop failed", err);
+    }
     partRef.current?.stop(0);
     setIsPlaying(false);
   }, [riffScoreApi]);
@@ -236,7 +240,17 @@ export function usePlayback({
 
       part.start(0);
       Tone.getTransport().seconds = 0;
-      Tone.getTransport().start();
+      try {
+        Tone.getTransport().start();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Transport failed to start";
+        console.warn("[harmonyforge] Transport.start failed", err);
+        part.dispose();
+        synth.dispose();
+        setLastError(msg);
+        setIsPlaying(false);
+        return;
+      }
 
       partRef.current = part;
       synthRef.current = synth;

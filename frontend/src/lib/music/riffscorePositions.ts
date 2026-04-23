@@ -9,7 +9,9 @@
 
 import type { NotePosition, EditableScore } from "./scoreTypes";
 import type { IdMap } from "./riffscoreAdapter";
-import { pitchFromStaffGeometry } from "./staffPreviewPitch";
+import { getNoteById } from "./scoreUtils";
+import type { NoteSelection } from "@/store/useScoreStore";
+import { pitchFromStaffGeometry, staffAnchorYForPitch } from "./staffPreviewPitch";
 
 /**
  * Map a RiffScore note id (`rs-…` from `editableScoreToRsScore`) back to HarmonyForge `Note.id`.
@@ -25,7 +27,63 @@ export function resolveRsNoteIdToHfNoteId(
     const raw = rsNoteId.slice(3);
     if (findNoteSelection(score, raw)) return raw;
   }
+  // `editableScoreToRsScore` uses event.id `rse-${hfNote.id}` on Rest groups in the SVG.
+  if (rsNoteId.startsWith("rse-")) {
+    const raw = rsNoteId.slice(4);
+    if (findNoteSelection(score, raw)) return raw;
+  }
   return null;
+}
+
+/** Map RiffScore `selection.selectedNotes` to HarmonyForge tool-store selections (deduped by note id). */
+export function mapRiffSelectedNotesToHFSelections(
+  score: EditableScore,
+  selectedNotes: ReadonlyArray<{
+    staffIndex: number;
+    measureIndex: number;
+    eventId: string;
+    noteId: string | null;
+  }>,
+  rsToHf: IdMap,
+): NoteSelection[] {
+  const out: NoteSelection[] = [];
+  const seen = new Set<string>();
+
+  for (const sn of selectedNotes) {
+    const raw = sn.noteId || sn.eventId;
+    if (!raw) continue;
+    const hfId = resolveRsNoteIdToHfNoteId(raw, rsToHf, score) ?? raw;
+
+    const found = getNoteById(score, hfId);
+    if (found) {
+      if (seen.has(hfId)) continue;
+      seen.add(hfId);
+      out.push({
+        partId: found.part.id,
+        measureIndex: found.measureIdx,
+        noteIndex: found.noteIdx,
+        noteId: hfId,
+      });
+      continue;
+    }
+
+    const part = score.parts[sn.staffIndex];
+    if (!part) continue;
+    const measure = part.measures[sn.measureIndex];
+    if (!measure) continue;
+    const idx = measure.notes.findIndex((n) => n.id === hfId);
+    if (idx < 0) continue;
+    if (seen.has(hfId)) continue;
+    seen.add(hfId);
+    out.push({
+      partId: part.id,
+      measureIndex: sn.measureIndex,
+      noteIndex: idx,
+      noteId: hfId,
+    });
+  }
+
+  return out;
 }
 
 /**
@@ -81,6 +139,36 @@ export function extractNotePositions(
     // If the DOM has data-note-id nodes but none map into our score (stale map /
     // partial render), fall through to staff / flat strategies instead of [].
     if (positions.length > 0) {
+      // RiffScore often tags pitched elements with data-note-id but not rests.
+      // Early-returning here used to drop rest hit-rects from note-group SVG,
+      // which broke sandbox "hover rest → ghost" (pickRestHitAt had no rest boxes).
+      const staffGroupsEarly = svg.querySelectorAll("g.staff");
+      if (
+        staffGroupsEarly.length > 0 &&
+        staffGroupsEarly.length >= score.parts.length
+      ) {
+        const fromGroups = extractPositionsFromNoteGroupsPerStaff(
+          staffGroupsEarly,
+          score,
+          rsToHf,
+          containerRect,
+        );
+        if (fromGroups.length > 0) {
+          const byNoteId = new Map<string, NotePosition>();
+          for (const p of positions) {
+            byNoteId.set(p.selection.noteId, p);
+          }
+          for (const p of fromGroups) {
+            const part = score.parts.find((pr) => pr.id === p.selection.partId);
+            const meas = part?.measures[p.selection.measureIndex];
+            const n = meas?.notes[p.selection.noteIndex];
+            if (n?.isRest && !byNoteId.has(p.selection.noteId)) {
+              byNoteId.set(p.selection.noteId, p);
+            }
+          }
+          return [...byNoteId.values()];
+        }
+      }
       return positions;
     }
   }
@@ -174,9 +262,6 @@ function extractPositionsFromNoteGroupsPerStaff(
     groups.forEach((group) => {
       if (group.closest(".chord-group--ghost")) return;
 
-      const head = group.querySelector("text.NoteHead");
-      if (!head || isPreviewNotehead(head)) return;
-
       const hit = group.querySelector<SVGRectElement>('rect[data-testid^="note-"]');
       let hfNoteId: string | null = null;
       if (hit) {
@@ -192,14 +277,71 @@ function extractPositionsFromNoteGroupsPerStaff(
       const sel = findNoteSelection(score, hfNoteId);
       if (!sel) return;
 
-      const rect = head.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return;
+      const measure = part.measures[sel.measureIndex];
+      const note = measure?.notes[sel.noteIndex];
+      if (!note) return;
+
+      const head = group.querySelector("text.NoteHead");
+      const headIsReal = head && !isPreviewNotehead(head);
+
+      if (headIsReal) {
+        const rect = head.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        out.push({
+          x: rect.left - containerRect.left,
+          y: rect.top - containerRect.top,
+          w: Math.max(rect.width, 12),
+          h: Math.max(rect.height, 12),
+          selection: sel,
+        });
+        return;
+      }
+
+      // Rests (older layout): `rect[data-testid^="note-"]` inside `note-group-container`.
+      if (note.isRest && hit) {
+        const rect = hit.getBoundingClientRect();
+        const w = Math.max(rect.width, 14);
+        const h = Math.max(rect.height, 14);
+        out.push({
+          x: rect.left - containerRect.left,
+          y: rect.top - containerRect.top,
+          w,
+          h,
+          selection: sel,
+        });
+      }
+    });
+
+    // RiffScore 1.0.x: rests use `<g class="Rest rest-group" data-testid="rest-{eventId}">`
+    // with an invisible hit `<rect>` child — not `g.note-group-container` / `note-*` test ids.
+    const restGroups = staffGroup.querySelectorAll("g.rest-group");
+    restGroups.forEach((group) => {
+      if (group.closest(".chord-group--ghost")) return;
+
+      const tid = group.getAttribute("data-testid");
+      if (!tid?.startsWith("rest-")) return;
+
+      const rsId = tid.slice("rest-".length);
+      const hfNoteId = resolveRsNoteIdToHfNoteId(rsId, rsToHf, score);
+      if (!hfNoteId) return;
+
+      const sel = findNoteSelection(score, hfNoteId);
+      if (!sel) return;
+
+      const measure = part.measures[sel.measureIndex];
+      const note = measure?.notes[sel.noteIndex];
+      if (!note?.isRest) return;
+
+      const hitRect = group.querySelector("rect");
+      const box = (hitRect ?? group).getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) return;
 
       out.push({
-        x: rect.left - containerRect.left,
-        y: rect.top - containerRect.top,
-        w: Math.max(rect.width, 12),
-        h: Math.max(rect.height, 12),
+        x: box.left - containerRect.left,
+        y: box.top - containerRect.top,
+        w: Math.max(box.width, 14),
+        h: Math.max(box.height, 14),
         selection: sel,
       });
     });
@@ -256,6 +398,66 @@ function extractLegacyStaffOrderedPositions(
   }
 
   return positions;
+}
+
+/**
+ * When `extractNotePositions` snapshots lag or omit a rest, resolve hover via `elementsFromPoint`.
+ * RiffScore uses `<g class="rest-group" data-testid="rest-{eventId}">` (see dist bundle).
+ */
+export function pickRestDomHitAt(
+  container: HTMLElement,
+  score: EditableScore,
+  clientX: number,
+  clientY: number,
+  rsToHf: IdMap,
+): { sel: NotePosition["selection"]; pos: NotePosition; staffIndex: number } | null {
+  const svg =
+    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
+    container.querySelector<SVGSVGElement>("svg");
+  if (!svg || typeof document === "undefined" || !document.elementsFromPoint) return null;
+
+  const containerRect = container.getBoundingClientRect();
+  let stack: Element[];
+  try {
+    stack = document.elementsFromPoint(clientX, clientY) as Element[];
+  } catch {
+    return null;
+  }
+
+  for (const el of stack) {
+    if (!svg.contains(el)) continue;
+    let node: Element | null = el;
+    while (node && node !== svg) {
+      const tid = node.getAttribute?.("data-testid");
+      if (tid?.startsWith("rest-")) {
+        const rsId = tid.slice("rest-".length);
+        const hfNoteId = resolveRsNoteIdToHfNoteId(rsId, rsToHf, score);
+        if (!hfNoteId) break;
+        const sel = findNoteSelection(score, hfNoteId);
+        if (!sel) break;
+        const part = score.parts.find((p) => p.id === sel.partId);
+        const note = part?.measures[sel.measureIndex]?.notes[sel.noteIndex];
+        if (!note?.isRest) break;
+        const staffIndex = score.parts.findIndex((p) => p.id === sel.partId);
+        if (staffIndex < 0) break;
+        const g = node.closest("g.rest-group") ?? node;
+        const hitRect = g.querySelector("rect");
+        const box = (hitRect ?? g).getBoundingClientRect();
+        if (box.width === 0 && box.height === 0) break;
+        const pos: NotePosition = {
+          x: box.left - containerRect.left,
+          y: box.top - containerRect.top,
+          w: Math.max(box.width, 14),
+          h: Math.max(box.height, 14),
+          selection: sel,
+        };
+        return { sel, pos, staffIndex };
+      }
+      node = node.parentElement;
+    }
+  }
+  return null;
 }
 
 /** Layout for aligning part name labels with each RiffScore staff (top/height in container coordinates). */
@@ -510,4 +712,119 @@ export function findNoteInputPreviewLayout(
   }
 
   return null;
+}
+
+/** Five staff line center Ys in container coordinates (top → bottom), or null. */
+export function staffLineYsFiveInContainer(
+  container: HTMLElement,
+  staffIndex: number,
+): number[] | null {
+  const svg =
+    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
+    container.querySelector<SVGSVGElement>("svg");
+
+  if (!svg) return null;
+
+  const staffGroups = svg.querySelectorAll("g.staff");
+  const staffGroup = staffGroups[staffIndex];
+  if (!staffGroup) return null;
+
+  const containerRect = container.getBoundingClientRect();
+
+  const horizLines = [...staffGroup.querySelectorAll("line")].filter((l) => {
+    const y1 = parseFloat(l.getAttribute("y1") || "NaN");
+    const y2 = parseFloat(l.getAttribute("y2") || "NaN");
+    return Number.isFinite(y1) && Number.isFinite(y2) && Math.abs(y1 - y2) < 1.5;
+  });
+
+  const lineCenters = horizLines
+    .map((l) => {
+      const r = l.getBoundingClientRect();
+      return r.top + r.height / 2 - containerRect.top;
+    })
+    .sort((a, b) => a - b);
+
+  const lineYsFive: number[] = [];
+  for (const y of lineCenters) {
+    if (!Number.isFinite(y)) continue;
+    if (
+      lineYsFive.length === 0 ||
+      Math.abs(y - lineYsFive[lineYsFive.length - 1]!) > 1.5
+    ) {
+      lineYsFive.push(y);
+    }
+  }
+  if (lineYsFive.length < 5) return null;
+  return lineYsFive.slice(0, 5);
+}
+
+/** Center + size for a rest-hover preview notehead (container coordinates). */
+export type RestGhostNoteheadLayout = {
+  centerX: number;
+  centerY: number;
+  fontSize: number;
+};
+
+/**
+ * Bravura notehead position/size for a rest-hover ghost — horizontal center aligned with the rest,
+ * vertical center from snapped pitch on the staff (same geometry as step-time preview).
+ */
+export function restGhostNoteheadLayoutInContainer(
+  container: HTMLElement,
+  score: EditableScore,
+  staffIndex: number,
+  anchorXContainer: number,
+  pitch: string,
+): RestGhostNoteheadLayout | null {
+  if (!Number.isFinite(anchorXContainer)) return null;
+  const part = score.parts[staffIndex];
+  if (!part) return null;
+  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
+  if (!lineYsFive) return null;
+  const centerY = staffAnchorYForPitch(part.clef, lineYsFive, pitch);
+  if (centerY == null || !Number.isFinite(centerY)) return null;
+  const sorted = [...lineYsFive].sort((a, b) => a - b);
+  if (!Number.isFinite(sorted[0]) || !Number.isFinite(sorted[4])) return null;
+  const spacing = (sorted[4]! - sorted[0]!) / 4;
+  if (!Number.isFinite(spacing) || spacing <= 0) return null;
+  // Larger than live RiffScore noteheads so the hover target is easy to read; capped for huge staves.
+  const fontSize = Math.max(22, Math.min(58, spacing * 2.95));
+  if (!Number.isFinite(fontSize)) return null;
+  return { centerX: anchorXContainer, centerY, fontSize };
+}
+
+/** When pointer Y does not resolve (e.g. edge timing), use middle-staff diatonic pitch — always in `ANCHOR_PITCHES`. */
+export function midStaffDiatonicPitchInContainer(
+  container: HTMLElement,
+  score: EditableScore,
+  staffIndex: number,
+): string | null {
+  const part = score.parts[staffIndex];
+  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
+  if (!part || !lineYsFive) return null;
+  const sorted = [...lineYsFive].sort((a, b) => a - b);
+  if (!Number.isFinite(sorted[0]) || !Number.isFinite(sorted[4])) return null;
+  const midY = (sorted[0]! + sorted[4]!) / 2;
+  return pitchFromStaffGeometry(part.clef, lineYsFive, midY);
+}
+
+/**
+ * Map a vertical position (container coordinates) on a staff to diatonic pitch,
+ * using the same line geometry as note-input preview. Used when placing a ghost
+ * over a rest without RiffScore’s preview notehead.
+ */
+export function pitchAtStaffVerticalInContainer(
+  container: HTMLElement,
+  score: EditableScore,
+  staffIndex: number,
+  centerYContainer: number,
+): string | null {
+  const part = score.parts[staffIndex];
+  if (!part) return null;
+
+  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
+  if (!lineYsFive) return null;
+
+  return pitchFromStaffGeometry(part.clef, lineYsFive, centerYContainer);
 }

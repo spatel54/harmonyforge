@@ -82,12 +82,12 @@ export function SandboxPalettePanel({
         "bg-[var(--hf-panel-bg)] border-l border-[var(--hf-detail)]",
         className,
       )}
-      aria-label="Notation and symbols"
+      aria-label="Notation and symbols (beta)"
     >
       <div className="flex items-center justify-between h-[52px] px-3 border-b border-[var(--hf-detail)] shrink-0">
         <div className="flex flex-col leading-tight">
           <span className="font-serif text-[15px]" style={{ color: "var(--hf-text-primary)" }}>
-            Notation
+            Notation (beta)
           </span>
           <span className="font-mono text-[10px] opacity-60" style={{ color: "var(--hf-text-primary)" }}>
             Click or drag symbols onto the score · F9 hides this panel

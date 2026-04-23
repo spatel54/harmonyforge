@@ -7,7 +7,7 @@ export function isExplanationLevel(v: unknown): v is ExplanationLevel {
 }
 
 /** Audience depth when the client omits or sends an invalid level. */
-export const DEFAULT_EXPLANATION_LEVEL: ExplanationLevel = "intermediate";
+export const DEFAULT_EXPLANATION_LEVEL: ExplanationLevel = "beginner";
 
 export function resolveExplanationLevel(v: unknown): ExplanationLevel {
   return isExplanationLevel(v) ? v : DEFAULT_EXPLANATION_LEVEL;

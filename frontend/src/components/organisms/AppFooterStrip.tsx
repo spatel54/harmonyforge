@@ -6,6 +6,8 @@ import { SiteCopyright } from "@/components/atoms/SiteCopyright";
 import { OpenSourceCreditsDialog } from "@/components/molecules/OpenSourceCreditsDialog";
 
 export interface AppFooterStripProps extends React.HTMLAttributes<HTMLElement> {
+  /** Left side before copyright (e.g. sandbox back link) */
+  lead?: React.ReactNode;
   /** Right side (e.g. study log controls) */
   end?: React.ReactNode;
 }
@@ -13,7 +15,7 @@ export interface AppFooterStripProps extends React.HTMLAttributes<HTMLElement> {
 /**
  * Bottom strip: Salt Family copyright + Credits dialog; optional trailing slot (sandbox research bar).
  */
-export function AppFooterStrip({ className, end, ...props }: AppFooterStripProps) {
+export function AppFooterStrip({ className, lead, end, ...props }: AppFooterStripProps) {
   const [creditsOpen, setCreditsOpen] = React.useState(false);
 
   return (
@@ -29,6 +31,7 @@ export function AppFooterStrip({ className, end, ...props }: AppFooterStripProps
         {...props}
       >
         <div className="flex flex-wrap items-center gap-3 min-w-0">
+          {lead != null ? <div className="shrink-0">{lead}</div> : null}
           <SiteCopyright />
           <button
             type="button"

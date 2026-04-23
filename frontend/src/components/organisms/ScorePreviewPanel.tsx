@@ -27,6 +27,8 @@ export interface ScorePreviewPanelProps extends React.HTMLAttributes<HTMLDivElem
   pdfPreviewUrl?: string | null;
   /** Copy shown on top of the PDF preview (e.g. "Page 1 of 4"). */
   pdfPreviewCaption?: string;
+  /** Optional one-line rhythm / ensemble hint (e.g. harmony motion choice). */
+  rhythmSummary?: string;
 }
 
 function buildPreviewTags(score: EditableScore): string[] {
@@ -54,6 +56,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
       onReupload,
       pdfPreviewUrl,
       pdfPreviewCaption,
+      rhythmSummary,
       className,
       ...props
     },
@@ -158,6 +161,14 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
           >
             {scoreMeta}
           </p>
+          {rhythmSummary ? (
+            <p
+              className="font-mono text-[10px] font-normal leading-snug text-center px-3 m-0 mt-1"
+              style={{ color: "var(--hf-text-secondary)" }}
+            >
+              {rhythmSummary}
+            </p>
+          ) : null}
 
           {previewTags.length > 0 ? (
             <div

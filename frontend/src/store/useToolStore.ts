@@ -39,7 +39,7 @@ export const useToolStore = create<ToolState>((set, get) => ({
         set({ selection: [...selection, sel] });
       }
     } else {
-      set({ selection: exists ? [] : [sel] });
+      set({ selection: [sel] });
     }
   },
   clearSelection: () => set({ selection: [] }),

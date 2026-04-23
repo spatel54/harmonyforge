@@ -47,6 +47,22 @@ export function cloneScore(score: EditableScore): EditableScore {
   return JSON.parse(JSON.stringify(score));
 }
 
+/** Pitches in a measure across all parts (non-rest), deduped — for localized regenerate context. */
+export function collectNonRestPitchesInMeasure(
+  score: EditableScore,
+  measureIndex: number,
+): string[] {
+  const out: string[] = [];
+  for (const part of score.parts) {
+    const measure = part.measures[measureIndex];
+    if (!measure) continue;
+    for (const note of measure.notes) {
+      if (!note.isRest && note.pitch) out.push(note.pitch);
+    }
+  }
+  return [...new Set(out)];
+}
+
 export function noteBeats(note: Note): number {
   const base = DURATION_BEATS[note.duration] ?? 1;
   if (!note.dots) return base;

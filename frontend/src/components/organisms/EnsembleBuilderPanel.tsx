@@ -51,20 +51,22 @@ export interface GenerationConfig {
   instruments: Record<VoiceType, string[]>;
   /** When true, infer harmony from melody + mood/genre (ignore chord symbols in file). */
   preferInferredChords?: boolean;
+  /** Pickup length in quarter-note beats (0–3), or null to use the file’s detected pickup. */
+  pickupBeats?: number | null;
 }
 
 const RHYTHM_DENSITY_LABELS: Record<RhythmDensity, { title: string; hint: string }> = {
   chordal: {
-    title: "Chordal",
-    hint: "Long, sustained backing—chords change slowly (fewer harmony updates).",
+    title: "Chordal (slow)",
+    hint: "Long, sustained accompaniment—chords change slowly (fewer harmony updates).",
   },
   mixed: {
     title: "Mixed",
-    hint: "Backing refreshes when your melody starts a new note—fits most tunes.",
+    hint: "Accompaniment refreshes when your melody attacks a new note—fits most tunes.",
   },
   flowing: {
-    title: "Flowing",
-    hint: "Busier backing—harmony moves more often between melody notes.",
+    title: "Flowing (active)",
+    hint: "Busier accompaniment—harmony moves more often between melody notes.",
   },
 };
 
@@ -100,10 +102,16 @@ export const EnsembleBuilderPanel = React.forwardRef<
   const removeInstrument = useGenerationConfigStore((s) => s.removeInstrument);
   const restoreFromStorage = useGenerationConfigStore((s) => s.restoreFromStorage);
   const reset = useGenerationConfigStore((s) => s.reset);
+  const pickupBeats = useGenerationConfigStore((s) => s.pickupBeats);
+  const setPickupBeats = useGenerationConfigStore((s) => s.setPickupBeats);
+  const preferInferredChords = useGenerationConfigStore((s) => s.preferInferredChords);
+  const setPreferInferredChords = useGenerationConfigStore((s) => s.setPreferInferredChords);
 
   React.useEffect(() => {
     restoreFromStorage();
   }, [restoreFromStorage]);
+
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
 
   const handleToggle = (voice: VoiceType, instrument: string) => {
     toggleInstrument(voice, instrument);
@@ -148,7 +156,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
           {studyPanelSubtitle ??
             (studyPrimaryVariant === "reviewer_melody"
               ? "Set context for the assistant; you will add harmonies in the editor."
-              : "Choose mood, backing density, and instruments for this arrangement.")}
+              : "Choose mood, accompaniment density, and instruments for this arrangement.")}
         </p>
         <p
           className="font-body text-[11px] leading-snug m-0 mt-[10px] max-w-prose"
@@ -238,8 +246,8 @@ export const EnsembleBuilderPanel = React.forwardRef<
             Harmony motion
             <HoverTooltip
               ariaLabel="About harmony motion"
-              content={
-                "How often the harmony refreshes under your tune.\n\n• Chordal — long, slow-changing chords\n• Mixed — aligns with melody attacks\n• Flowing — busier motion between melody notes"
+                content={
+                "How often the harmony refreshes under your tune.\n\n• Chordal (slow) — long, slow-changing chords\n• Mixed — aligns with melody attacks\n• Flowing (active) — busier motion between melody notes"
               }
             />
           </span>
@@ -281,6 +289,91 @@ export const EnsembleBuilderPanel = React.forwardRef<
         )}
       </section>
 
+      <div
+        className="rounded-[8px] border p-4 flex flex-col gap-3"
+        style={{
+          borderColor: "color-mix(in srgb, var(--hf-detail) 65%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--hf-surface) 7%, transparent)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] cursor-pointer border-0 bg-transparent p-0 flex items-center justify-between gap-2 w-full text-left"
+          style={{ color: "var(--hf-text-secondary)" }}
+          aria-expanded={advancedOpen}
+        >
+          Advanced
+          <span className="text-[10px] opacity-70">{advancedOpen ? "Hide" : "Show"}</span>
+        </button>
+        {advancedOpen && (
+        <div className="flex flex-col gap-4 pt-2">
+          <div className="flex flex-col gap-[8px]">
+            <span
+              className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+              style={{ color: "var(--hf-text-secondary)" }}
+            >
+              Pickup (anacrusis)
+              <HoverTooltip
+                ariaLabel="About pickup"
+                content={
+                  "Beats before the first full bar. Auto uses what the file shows. Or set 0–3 quarter-note beats to override for generation."
+                }
+              />
+            </span>
+            <div className="flex flex-wrap gap-[8px]">
+              <button
+                type="button"
+                onClick={() => setPickupBeats(null)}
+                className={cn(
+                  "rounded-[6px] px-[14px] py-[8px] font-mono text-[11px] font-medium",
+                  "transition-opacity hover:opacity-90",
+                  pickupBeats === null
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                    : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]",
+                )}
+              >
+                Auto
+              </button>
+              {([0, 1, 2, 3] as const).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setPickupBeats(b)}
+                  className={cn(
+                    "rounded-[6px] px-[14px] py-[8px] font-mono text-[11px] font-medium",
+                    "transition-opacity hover:opacity-90",
+                    pickupBeats === b
+                      ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                      : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]",
+                  )}
+                >
+                  {b} beat{b === 1 ? "" : "s"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="mt-1 rounded border-[var(--hf-detail)]"
+              checked={preferInferredChords}
+              onChange={(e) => setPreferInferredChords(e.target.checked)}
+            />
+            <span className="flex flex-col gap-1">
+              <span className="font-mono text-[11px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
+                Prefer inferred chords
+              </span>
+              <span className="font-body text-[10px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                Ignore chord symbols in the upload and infer harmony from the melody plus mood (useful when chord
+                charts are missing or untrusted).
+              </span>
+            </span>
+          </label>
+        </div>
+        )}
+      </div>
+
       {/* Voice List — Node iVLue */}
       <section
         className="rounded-[8px] border p-4 flex flex-col gap-3 w-full"
@@ -295,11 +388,11 @@ export const EnsembleBuilderPanel = React.forwardRef<
           className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px] m-0"
           style={{ color: "var(--hf-text-secondary)" }}
         >
-          Instruments (SATB)
+          4-part harmony
           <HoverTooltip
-            ariaLabel="What SATB means"
+            ariaLabel="Four parts"
             content={
-              "Four ranges, high to low: soprano, alto, tenor, bass.\nPick any instruments per line—mix freely."
+              "Four lines from high to low (soprano, alto, tenor, bass ranges).\nPick any instruments per line—mix freely."
             }
           />
         </h3>
@@ -354,7 +447,8 @@ export const EnsembleBuilderPanel = React.forwardRef<
               genre: "classical",
               rhythmDensity,
               instruments: selections,
-              preferInferredChords: false,
+              preferInferredChords,
+              pickupBeats,
             })
           }
           className={cn(

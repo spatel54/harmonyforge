@@ -149,6 +149,11 @@ export function pasteNotes(score: EditableScore, targetPartId: string, targetMea
   if (!part || targetMeasureIndex >= part.measures.length) return score;
   const measure = part.measures[targetMeasureIndex];
   const toInsert = clipboardNotes.map((n) => ({ ...n, id: generateId("n") }));
-  measure.notes.splice(targetNoteIndex, 0, ...toInsert);
+  const at = measure.notes[targetNoteIndex];
+  if (at?.isRest) {
+    measure.notes.splice(targetNoteIndex, 1, ...toInsert);
+  } else {
+    measure.notes.splice(targetNoteIndex, 0, ...toInsert);
+  }
   return next;
 }

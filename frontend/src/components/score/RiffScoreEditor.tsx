@@ -30,6 +30,11 @@ import {
   extractStaffLabelLayout,
   findNoteInputPreviewLayout,
   getRiffScoreScrollRoots,
+  pickRestDomHitAt,
+  pitchAtStaffVerticalInContainer,
+  midStaffDiatonicPitchInContainer,
+  restGhostNoteheadLayoutInContainer,
+  mapRiffSelectedNotesToHFSelections,
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
@@ -79,6 +84,84 @@ function getInstrumentImage(name: string): string | null {
   return null;
 }
 
+/** Hit-test a rendered rest by overlay coordinates (container-relative). */
+function pickRestHitAt(
+  score: EditableScore,
+  notePositions: NotePosition[],
+  mx: number,
+  my: number,
+  pad = 8,
+): { sel: NoteSelection; pos: NotePosition; staffIndex: number } | null {
+  for (const pos of notePositions) {
+    const part = score.parts.find((p) => p.id === pos.selection.partId);
+    const measure = part?.measures[pos.selection.measureIndex];
+    const n = measure?.notes[pos.selection.noteIndex];
+    if (!n?.isRest) continue;
+    if (
+      mx >= pos.x - pad &&
+      my >= pos.y - pad &&
+      mx <= pos.x + pos.w + pad &&
+      my <= pos.y + pos.h + pad
+    ) {
+      const staffIndex = score.parts.findIndex((p) => p.id === pos.selection.partId);
+      if (staffIndex < 0) continue;
+      return { sel: pos.selection, pos, staffIndex };
+    }
+  }
+  return null;
+}
+
+/** Union of rest bbox and staff ghost so clicks on the enlarged preview still commit. */
+function restGhostCommitHitBox(
+  pos: NotePosition,
+  ghost: { centerX: number; centerY: number; fontSize: number } | null,
+): { left: number; top: number; width: number; height: number } {
+  const pad = 8;
+  const px = Number.isFinite(pos.x) ? pos.x : 0;
+  const py = Number.isFinite(pos.y) ? pos.y : 0;
+  const pw = Number.isFinite(pos.w) ? Math.max(pos.w, 1) : 12;
+  const ph = Number.isFinite(pos.h) ? Math.max(pos.h, 1) : 12;
+  const restL = px - pad;
+  const restT = py - pad;
+  const restW = Math.max(pw + pad * 2, 24);
+  const restH = Math.max(ph + pad * 2, 24);
+  const restR = restL + restW;
+  const restB = restT + restH;
+
+  if (
+    !ghost ||
+    !Number.isFinite(ghost.centerX) ||
+    !Number.isFinite(ghost.centerY) ||
+    !Number.isFinite(ghost.fontSize)
+  ) {
+    return {
+      left: Math.max(0, restL),
+      top: Math.max(0, restT),
+      width: restW,
+      height: restH,
+    };
+  }
+
+  const half = Math.max(ghost.fontSize * 0.72, 22);
+  const labelPadX = ghost.fontSize * 0.95;
+  const labelPadY = ghost.fontSize * 0.55;
+  const gL = ghost.centerX - half;
+  const gR = ghost.centerX + half + labelPadX;
+  const gT = ghost.centerY - half;
+  const gB = ghost.centerY + half * 0.45 + labelPadY;
+
+  const left = Math.max(0, Math.min(restL, gL));
+  const top = Math.max(0, Math.min(restT, gT));
+  const right = Math.max(restR, gR);
+  const bottom = Math.max(restB, gB);
+  return {
+    left,
+    top,
+    width: Math.max(28, right - left),
+    height: Math.max(28, bottom - top),
+  };
+}
+
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
   () => import("riffscore").then((mod) => mod.RiffScore),
@@ -90,6 +173,8 @@ export interface RiffScoreEditorProps {
   className?: string;
   selection?: NoteSelection[];
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
+  /** Full editor selection (click, shift-range, marquee, Cmd+A in editor) — replaces HF tool-store selection. */
+  onEditorSelectionChange?: (selections: NoteSelection[]) => void;
   noteInspectionEnabled?: boolean;
   onError?: (err: Error) => void;
   pendingCorrections?: ScoreCorrection[];
@@ -127,6 +212,11 @@ export interface RiffScoreEditorProps {
   onEditorApiReady?: (api: MusicEditorAPI) => void;
   /** Instance id registered on `window.riffScore` — lets parents resolve the API if React state lags. */
   onRiffInstanceId?: (instanceId: string) => void;
+  /**
+   * Hover a rest to show a pitch ghost from pointer Y on the staff; click commits replacement
+   * (MuseScore / Noteflight-style). Parent should use the slot’s duration/dots, not a toolbar duration.
+   */
+  onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
 }
 
 export function RiffScoreEditor({
@@ -134,6 +224,7 @@ export function RiffScoreEditor({
   className,
   selection = [],
   onNoteClick,
+  onEditorSelectionChange,
   noteInspectionEnabled = false,
   onError,
   pendingCorrections,
@@ -152,14 +243,28 @@ export function RiffScoreEditor({
   onPaletteSymbolDrop,
   onEditorApiReady,
   onRiffInstanceId,
+  onRestInputCommit,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
   const [instanceId] = useState(() => `hf-score-${Date.now()}`);
   const [notePositions, setNotePositions] = useState<NotePosition[]>([]);
+  const scoreHoverRef = useRef<EditableScore | null>(score);
+  scoreHoverRef.current = score;
+  const notePositionsHoverRef = useRef<NotePosition[]>(notePositions);
+  notePositionsHoverRef.current = notePositions;
+  const onRestInputCommitRef = useRef(onRestInputCommit);
+  onRestInputCommitRef.current = onRestInputCommit;
   const [staffLabelLayouts, setStaffLabelLayouts] = useState<StaffLabelLayout[]>([]);
   const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const restHoverGateRef = useRef({
+    presentation,
+    noteInspectionEnabled,
+    isReady,
+  });
+  restHoverGateRef.current = { presentation, noteInspectionEnabled, isReady };
+  const hasScore = score != null;
   const [inputPreviewLabel, setInputPreviewLabel] = useState<{
     pitch: string;
     left: number;
@@ -167,13 +272,19 @@ export function RiffScoreEditor({
   } | null>(null);
   /** Pixels to clip from the top of the learner overlay so labels never paint over `.riff-Toolbar`. */
   const [learnerClipTopPx, setLearnerClipTopPx] = useState(0);
+  /** Top inset for playback scrub so the line starts below the full toolbar (incl. palette row), not over it. */
+  const [playbackScrubContentTopPx, setPlaybackScrubContentTopPx] = useState(52);
   const prevScoreRef = useRef<EditableScore | null>(null);
 
   const { resolvedTheme } = useNextTheme();
-  const rsTheme = resolvedTheme === "dark" ? "DARK" as const : "LIGHT" as const;
+  /** Print / export preview must stay on light “paper” so RiffScore’s black glyphs remain visible. */
+  const rsTheme =
+    presentation || resolvedTheme !== "dark" ? ("LIGHT" as const) : ("DARK" as const);
   const applyScore = useScoreStore((s) => s.applyScore);
 
   const { pushToRiffScore, getRsToHf, flushToZustand } = useRiffScoreSync(apiRef, score);
+  const getRsToHfRef = useRef(getRsToHf);
+  getRsToHfRef.current = getRsToHf;
   const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
   const hasSelection = selectedNoteIds.size > 0;
   const focusHighlightSet = useMemo(
@@ -409,6 +520,124 @@ export function RiffScoreEditor({
     return { left: pos.x, top: pos.y + pos.h + 6 };
   }, [presentation, score, selection, notePositions]);
 
+  const [restHoverGhost, setRestHoverGhost] = useState<{
+    sel: NoteSelection;
+    pos: NotePosition;
+    pitch: string;
+    ghostLayout: { centerX: number; centerY: number; fontSize: number } | null;
+  } | null>(null);
+
+  // Primitives-only deps: avoid Next 16 + Turbopack + React 19 "dependency array changed size"
+  // when `score` / callbacks would be rewritten by the compiler (see docs/progress.md).
+  useEffect(() => {
+    const gate = restHoverGateRef.current;
+    if (
+      gate.presentation ||
+      gate.noteInspectionEnabled ||
+      !scoreHoverRef.current ||
+      !gate.isReady ||
+      !hasScore
+    ) {
+      setRestHoverGhost(null);
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    let pending: PointerEvent | null = null;
+
+    const flush = (e: PointerEvent) => {
+      const g = restHoverGateRef.current;
+      const commitFn = onRestInputCommitRef.current;
+      const s = scoreHoverRef.current;
+      if (!commitFn || g.presentation || g.noteInspectionEnabled || !s || !g.isReady) {
+        setRestHoverGhost(null);
+        return;
+      }
+      const positions = notePositionsHoverRef.current;
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const target = e.target as HTMLElement | null;
+
+      if (target?.closest?.("[data-hf-rest-ghost-root]")) {
+        setRestHoverGhost((prev) => {
+          if (!prev) return null;
+          const si = s.parts.findIndex((p) => p.id === prev.sel.partId);
+          if (si < 0) return prev;
+          const pitch =
+            pitchAtStaffVerticalInContainer(el, s, si, my) ??
+            midStaffDiatonicPitchInContainer(el, s, si) ??
+            prev.pitch;
+          if (prev.pitch === pitch) return prev;
+          const ax = prev.pos.x + prev.pos.w / 2;
+          const ghostLayout = Number.isFinite(ax)
+            ? restGhostNoteheadLayoutInContainer(el, s, si, ax, pitch)
+            : null;
+          return { ...prev, pitch, ghostLayout };
+        });
+        return;
+      }
+
+      let hit = pickRestHitAt(s, positions, mx, my);
+      if (!hit) {
+        hit = pickRestDomHitAt(el, s, e.clientX, e.clientY, getRsToHfRef.current());
+      }
+      if (!hit) {
+        setRestHoverGhost(null);
+        return;
+      }
+      const pitch =
+        pitchAtStaffVerticalInContainer(el, s, hit.staffIndex, my) ??
+        midStaffDiatonicPitchInContainer(el, s, hit.staffIndex);
+      if (!pitch) {
+        setRestHoverGhost(null);
+        return;
+      }
+      setRestHoverGhost((prev) => {
+        if (
+          prev &&
+          prev.sel.noteId === hit.sel.noteId &&
+          prev.pitch === pitch &&
+          prev.pos.x === hit.pos.x &&
+          prev.pos.y === hit.pos.y
+        ) {
+          return prev;
+        }
+        const ax = hit.pos.x + hit.pos.w / 2;
+        const ghostLayout = Number.isFinite(ax)
+          ? restGhostNoteheadLayoutInContainer(el, s, hit.staffIndex, ax, pitch)
+          : null;
+        return { sel: hit.sel, pos: hit.pos, pitch, ghostLayout };
+      });
+    };
+
+    const onMove = (e: PointerEvent) => {
+      pending = e;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (pending) flush(pending);
+        pending = null;
+      });
+    };
+
+    const onLeave = () => {
+      pending = null;
+      setRestHoverGhost(null);
+    };
+
+    // Capture: RiffScore may stop propagation on the SVG; we still need moves for rest hit-test.
+    el.addEventListener("pointermove", onMove, { capture: true });
+    el.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("pointermove", onMove, { capture: true });
+      el.removeEventListener("pointerleave", onLeave);
+    };
+  }, [isReady, presentation, noteInspectionEnabled, hasScore]);
+
   useEffect(() => {
     onRiffInstanceId?.(instanceId);
   }, [instanceId, onRiffInstanceId]);
@@ -455,6 +684,12 @@ export function RiffScoreEditor({
       },
       editorRedo: () => {
         apiRef.current?.redo();
+      },
+      editorSelectAll: () => {
+        apiRef.current?.selectAll("score");
+      },
+      editorDeselectAll: () => {
+        apiRef.current?.deselectAll();
       },
     };
     onSessionReady(session);
@@ -551,6 +786,43 @@ export function RiffScoreEditor({
     return () => ro.disconnect();
   }, [showNoteNameLabels, presentation, isReady, instanceId, score]);
 
+  useLayoutEffect(() => {
+    if (presentation || !isReady) {
+      setPlaybackScrubContentTopPx(52);
+      return;
+    }
+    const root = containerRef.current;
+    if (!root) return;
+
+    const measure = () => {
+      const content = root.querySelector<HTMLElement>(".riff-ScoreEditor__content");
+      if (!content) {
+        setPlaybackScrubContentTopPx(52);
+        return;
+      }
+      const cr = root.getBoundingClientRect();
+      const er = content.getBoundingClientRect();
+      let top = Math.max(0, Math.round(er.top - cr.top));
+      const strip = root.querySelector<HTMLElement>("[data-hf-inspector-measure-strip]");
+      if (strip) {
+        const sr = strip.getBoundingClientRect();
+        top = Math.max(top, Math.round(sr.bottom - cr.top));
+      }
+      setPlaybackScrubContentTopPx(top);
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    const contentEl = root.querySelector(".riff-ScoreEditor__content");
+    if (contentEl) ro.observe(contentEl);
+    const tb = root.querySelector(".riff-Toolbar");
+    if (tb) ro.observe(tb);
+    const stripEl = root.querySelector("[data-hf-inspector-measure-strip]");
+    if (stripEl) ro.observe(stripEl);
+    return () => ro.disconnect();
+  }, [presentation, isReady, instanceId, score, noteInspectionEnabled, measureCount]);
+
   useEffect(() => {
     if (!noteInputPitchLabelEnabled || !isReady || !score) {
       setInputPreviewLabel(null);
@@ -581,36 +853,41 @@ export function RiffScoreEditor({
     };
   }, [noteInputPitchLabelEnabled, isReady, score]);
 
-  // Subscribe to selection events for onNoteClick + optional measure/part inference
+  // Subscribe to selection events — sync multi-select / marquee to HF; optional inspector region hints
   useEffect(() => {
     const api = apiRef.current;
-    if (!api || (!onNoteClick && !onInspectorInferredRegion)) return;
+    if (!api || (!onEditorSelectionChange && !onNoteClick && !onInspectorInferredRegion)) return;
 
     const unsub = api.on("selection", (sel: unknown) => {
       const rsSel = sel as RsSelection;
-      if (rsSel.selectedNotes.length === 0) return;
       if (!score) return;
 
       const selected = rsSel.selectedNotes;
-      if (
-        noteInspectionEnabled &&
-        onInspectorInferredRegion &&
-        selected.length > 1
-      ) {
+      if (selected.length === 0) {
+        onEditorSelectionChange?.([]);
+        return;
+      }
+
+      if (noteInspectionEnabled && onInspectorInferredRegion && selected.length > 1) {
         const m0 = selected[0]!.measureIndex;
         const allSameMeasure = selected.every((n) => n.measureIndex === m0);
         const staffSet = new Set(selected.map((n) => n.staffIndex));
         if (allSameMeasure && staffSet.size > 1) {
           onInspectorInferredRegion({ kind: "measure", measureIndex: m0 });
-          return;
+        } else {
+          const s0 = selected[0]!.staffIndex;
+          const allSameStaff = selected.every((n) => n.staffIndex === s0);
+          const measureSet = new Set(selected.map((n) => n.measureIndex));
+          if (allSameStaff && measureSet.size > 1) {
+            onInspectorInferredRegion({ kind: "part", staffIndex: s0 });
+          }
         }
-        const s0 = selected[0]!.staffIndex;
-        const allSameStaff = selected.every((n) => n.staffIndex === s0);
-        const measureSet = new Set(selected.map((n) => n.measureIndex));
-        if (allSameStaff && measureSet.size > 1) {
-          onInspectorInferredRegion({ kind: "part", staffIndex: s0 });
-          return;
-        }
+      }
+
+      if (onEditorSelectionChange) {
+        const mapped = mapRiffSelectedNotesToHFSelections(score, selected, getRsToHf());
+        onEditorSelectionChange(mapped);
+        return;
       }
 
       if (!onNoteClick) return;
@@ -618,7 +895,6 @@ export function RiffScoreEditor({
       const first = selected[0]!;
       if (!first.noteId) return;
 
-      // Map RiffScore selection back to HF NoteSelection
       const hfNoteId = getRsToHf().get(first.noteId) ?? first.noteId;
       const found = getNoteById(score, hfNoteId);
       if (found) {
@@ -640,11 +916,10 @@ export function RiffScoreEditor({
       const hfSel: NoteSelection = {
         partId: part.id,
         measureIndex: first.measureIndex,
-        noteIndex: 0, // RiffScore uses eventId, not noteIndex — find it
+        noteIndex: 0,
         noteId: hfNoteId,
       };
 
-      // Find actual noteIndex within the measure
       const measure = part.measures[first.measureIndex];
       if (measure) {
         const idx = measure.notes.findIndex((n) => n.id === hfNoteId);
@@ -659,6 +934,7 @@ export function RiffScoreEditor({
     isReady,
     noteInspectionEnabled,
     onInspectorInferredRegion,
+    onEditorSelectionChange,
     onNoteClick,
     score,
     getRsToHf,
@@ -704,32 +980,13 @@ export function RiffScoreEditor({
     [onPaletteSymbolDrop],
   );
 
-  // Window-level arrow key listener — fires even when focus is inside RiffScore's SVG canvas.
-  // capture:true ensures we intercept before any inner element swallows the event.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (!hasSelection) return;
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      const container = containerRef.current;
-      if (!container) return;
-      // Only transpose when focus is inside the score container (or the container itself)
-      const active = document.activeElement;
-      if (!container.contains(active) && active !== container) return;
-      e.preventDefault();
-      const semitones = e.key === "ArrowUp"
-        ? (e.shiftKey ? 12 : 1)
-        : (e.shiftKey ? -12 : -1);
-      applyOnSelection((cur, ids) => transposeNotes(cur, ids, semitones));
-    };
-    window.addEventListener("keydown", handler, { capture: true });
-    return () => window.removeEventListener("keydown", handler, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSelection, score, selectedNoteIds]);
+  // ↑/↓ pitch (and other score shortcuts): rely on RiffScore interaction.enableKeyboard only.
+  // Document preview never passes HF `selection`, so native behavior matches Configuration there.
+  // A window-level transpose listener here conflicted with RiffScore when `selection` was set (sandbox).
 
   const handleKeyDown = useCallback(
     (_e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Arrow key transposing is handled by the window-level listener above.
-      // This handler remains for any future keyboard shortcuts on the wrapper.
+      // Reserved for wrapper-level shortcuts if needed.
     },
     [],
   );
@@ -749,7 +1006,10 @@ export function RiffScoreEditor({
         className,
       )}
       data-hf-chord-ui={chordUiOn ? "1" : "0"}
-      style={{ position: "relative" }}
+      style={{
+        position: "relative",
+        ...(presentation ? {} : { touchAction: "none" as const }),
+      }}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onDragOverCapture={onPaletteSymbolDrop ? onPaletteDragOverCapture : undefined}
@@ -822,11 +1082,28 @@ export function RiffScoreEditor({
         }
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg text,
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg path {
-          cursor: grab !important;
+          cursor: pointer !important;
         }
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg text:active,
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg path:active {
           cursor: grabbing !important;
+        }
+        /* Toolbar: show caption under native RiffScore tool buttons */
+        .riffscore-hf-wrapper .riff-ToolbarButton {
+          flex-direction: column !important;
+          gap: 1px !important;
+          align-items: center !important;
+        }
+        .riffscore-hf-wrapper .riff-ToolbarButton .riff-ToolbarButton__label {
+          display: block !important;
+          font-size: 8px !important;
+          line-height: 1.05 !important;
+          font-weight: 500 !important;
+          max-width: 64px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          opacity: 0.92;
         }
         /* Iter1 §1: selection should prefer noteheads over stems. Stems render as
            SVG <line> elements; giving them pointer-events:none pushes hit-testing
@@ -880,17 +1157,14 @@ export function RiffScoreEditor({
           notePositions={notePositions}
           measureCount={measureCount}
           isReady={isReady}
-          contentTopPx={
-            noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure
-              ? 92
-              : 52
-          }
+          contentTopPx={playbackScrubContentTopPx}
         />
       )}
 
       {/* Theory Inspector: click bar numbers to focus the whole measure */}
       {!presentation && noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure && (
         <div
+          data-hf-inspector-measure-strip
           className="absolute left-0 right-0 z-[25] flex flex-wrap items-center gap-1 px-2 py-1"
           style={{
             top: 48,
@@ -1151,8 +1425,116 @@ export function RiffScoreEditor({
         </div>
       )}
 
+      {restHoverGhost && onRestInputCommit && (
+        <>
+          {restHoverGhost.ghostLayout &&
+          Number.isFinite(restHoverGhost.ghostLayout.centerX) &&
+          Number.isFinite(restHoverGhost.ghostLayout.centerY) &&
+          Number.isFinite(restHoverGhost.ghostLayout.fontSize) ? (
+            <>
+              {/* Ghost sits above the score canvas but under the hit target; centered on staff pitch. */}
+              <div
+                className="absolute z-[24] pointer-events-none leading-none select-none"
+                style={{
+                  left: restHoverGhost.ghostLayout.centerX,
+                  top: restHoverGhost.ghostLayout.centerY,
+                  transform: "translate(-50%, -52%)",
+                }}
+                aria-hidden="true"
+              >
+                <span
+                  className="block"
+                  style={{
+                    fontFamily: "Bravura, Bravura Text, Leland, serif",
+                    fontSize: restHoverGhost.ghostLayout.fontSize,
+                    lineHeight: 1,
+                    color: "color-mix(in srgb, var(--hf-accent, #c9a227) 35%, var(--hf-text-primary))",
+                    opacity: 0.92,
+                    filter: "drop-shadow(0 0 1px var(--hf-bg)) drop-shadow(0 0 10px color-mix(in srgb, var(--hf-bg) 92%, transparent))",
+                    textShadow:
+                      "0 0 0 2px var(--hf-bg), 0 0 0 3px color-mix(in srgb, var(--hf-accent, #c9a227) 45%, transparent), 0 2px 8px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  {"\uE0A4"}
+                </span>
+              </div>
+              <div
+                className="absolute z-[24] pointer-events-none font-mono font-semibold whitespace-nowrap"
+                style={{
+                  left: restHoverGhost.ghostLayout.centerX + restHoverGhost.ghostLayout.fontSize * 0.52,
+                  top: restHoverGhost.ghostLayout.centerY - restHoverGhost.ghostLayout.fontSize * 0.42,
+                  fontSize: Math.max(12, Math.min(16, restHoverGhost.ghostLayout.fontSize * 0.34)),
+                  color: "var(--hf-text-primary)",
+                  opacity: 0.95,
+                  textShadow:
+                    "0 0 6px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px rgba(0,0,0,0.45)",
+                }}
+                aria-hidden="true"
+              >
+                {formatLearnerLetterName(restHoverGhost.pitch)}
+              </div>
+            </>
+          ) : (
+            <div
+              className="absolute z-[24] flex flex-col items-center justify-center pointer-events-none gap-1"
+              style={{
+                left: restHoverGhost.pos.x + restHoverGhost.pos.w / 2,
+                top: restHoverGhost.pos.y + restHoverGhost.pos.h / 2,
+                transform: "translate(-50%, -50%)",
+              }}
+              aria-hidden="true"
+            >
+              <span
+                className="leading-none block"
+                style={{
+                  fontFamily: "Bravura, Bravura Text, Leland, serif",
+                  fontSize: 34,
+                  lineHeight: 1,
+                  color: "color-mix(in srgb, var(--hf-accent, #c9a227) 40%, var(--hf-text-primary))",
+                  opacity: 0.9,
+                  filter: "drop-shadow(0 0 8px var(--hf-bg))",
+                  textShadow: "0 0 0 2px var(--hf-bg), 0 2px 6px rgba(0,0,0,0.35)",
+                }}
+              >
+                {"\uE0A4"}
+              </span>
+              <span
+                className="font-mono text-[11px] font-semibold leading-none"
+                style={{
+                  color: "var(--hf-text-primary)",
+                  textShadow: "0 0 8px var(--hf-bg), 0 1px 2px rgba(0,0,0,0.4)",
+                }}
+              >
+                {formatLearnerLetterName(restHoverGhost.pitch)}
+              </span>
+            </div>
+          )}
+          {/* Invisible hit target on top so clicks still commit (includes large ghost). */}
+          <button
+            type="button"
+            data-hf-rest-ghost-root
+            className="absolute z-[28] cursor-pointer border-0 p-0 outline-offset-2 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--hf-accent)]"
+            style={{
+              ...restGhostCommitHitBox(restHoverGhost.pos, restHoverGhost.ghostLayout),
+              background: "transparent",
+              opacity: 0.001,
+            }}
+            aria-label={`Place ${restHoverGhost.pitch} on this rest — click to replace`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRestInputCommit(restHoverGhost.sel, restHoverGhost.pitch);
+            }}
+          />
+        </>
+      )}
+
       {/* Rest repitch hint — "Type A–G to place a note here" (Noteflight/MuseScore). */}
-      {restHint && (
+      {restHint && !restHoverGhost && (
         <div
           className="absolute pointer-events-none z-[7] rounded-[4px] font-mono text-[10px] font-semibold px-2 py-1 whitespace-nowrap"
           style={{
@@ -1165,7 +1547,7 @@ export function RiffScoreEditor({
           }}
           aria-live="polite"
         >
-          Type A–G to place a note
+          Hover this rest to preview pitch, click to place, or type A–G
         </div>
       )}
 

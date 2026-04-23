@@ -90,16 +90,17 @@ const CITATION_AND_BREVITY = `Citation and length (apply in every reply):
 - **Format (default):** use **3–5 bullet lines**, each starting with "- ", **one idea per bullet** (rule or observation + optional single source in that line).
 - **Alternative:** if bullets do not fit, use **at most 4 short sentences** total for the main answer (same content cap).
 - For **multiple distinct violations**, keep the **whole reply** within the same cap (combine into one tight bullet list).
+- **No multi-sentence prose paragraphs** for the main answer—stay inside bullets or the ≤4 short sentences cap.
 - Expand only if the user clearly asks to go deeper.`;
 
 function explanationAudienceBlock(level: ExplanationLevel): string {
   switch (level) {
     case "beginner":
-      return `Audience: **Beginner**. Define theory terms when you use them; avoid abbreviations unless you expand them once; **one concept per bullet**; do not assume prior harmony or counterpoint coursework.`;
+      return `Audience: **Beginner** — thorough but concise: cover what matters without overwhelming. The **first time** you use any academic term (e.g. cadence, resolution, voice leading, consonance), add a **short plain-language gloss in parentheses** right after it. Avoid abbreviations unless you expand them once; **one concept per bullet**; do not assume prior harmony or counterpoint coursework. Respect the bullet / short-sentence caps above—no wall of text.`;
     case "intermediate":
       return `Audience: **Intermediate**. Use standard theory vocabulary (chord tones, voice leading, cadence, etc.); relate briefly to common-practice patterns when relevant.`;
     case "professional":
-      return `Audience: **Professional**. Be dense and precise; assume fluency with Roman numerals, SATB vocabulary, and voice-leading jargon; minimal setup—answer the question directly.`;
+      return `Audience: **Professional**. Be dense and precise; assume fluency with Roman numerals, four-part harmony vocabulary, and voice-leading jargon; minimal setup—answer the question directly.`;
   }
 }
 
@@ -113,8 +114,11 @@ function appendExplanationLevel(ctx: PromptContext): string {
  */
 const PROGRESSION_CONTEXT_RULES = `Progression-first analysis (when FACT lines include **PROGRESSION** or **PROGRESSION WINDOW**):
 - Give **at least one sentence** on **voice motion from the previous chord moment to this one** and, when the facts list a next moment, **what happens next**—not only the vertical at the clicked beat.
+- When **before / this / after** chord moments are present in FACTs, consider **sequential cadential pattern** (authentic, half, deceptive, plagal) **only as a hypothesis** tied to the listed bass and soprano motion—**before** treating the clicked moment as an isolated vertical. If the facts do not support a cadence label, say so briefly.
 - Do **not** justify a chord solely by “pleasantness,” generic consonance, or a vague study citation; tie the moment to **sequential** role when facts support it (approach, prolongation, preparation/resolution, standard bass or melody motion between moments).
 - If Roman numerals or harmonic labels are **not** in the facts, describe motion using **the listed pitches** and progression FACTs only—do not invent a full Roman analysis.`;
+
+const TUTOR_CHAT_TAGS_RULE = `Optional **chat tags** (for the app’s tag strip): after <<<SUGGESTIONS>>> / <<<IDEA_ACTIONS>>> blocks, you may add one final line exactly <<<TAGS>>> then a JSON array of **1–4** very short strings (possible follow-up questions), then <<<END_TAGS>>>. Example: <<<TAGS>>>["Try a different tenor pitch","What is the bass doing?"]<<<END_TAGS>>>. Omit entirely if not useful.`;
 
 /** No flattery; acknowledge limits of engine, context, and textbook rules */
 const HONESTY_NO_SYCOPHANCY = `Honesty and tone (not sycophantic):
@@ -224,8 +228,9 @@ Rules:
 - If evidence in the message is thin, say exactly which pieces are missing—not vague uncertainty.
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
-- **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation.
+- **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation—**no** narrative paragraphs outside that cap.
 - **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap). **Each suggestion bullet must state both what to try and why** (tie the reason to FACT lines—use “because” / “so that” / “reason:”).
+${TUTOR_CHAT_TAGS_RULE}
 ${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }
 

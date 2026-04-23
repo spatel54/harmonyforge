@@ -94,6 +94,16 @@ export default function DocumentPage() {
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
   const restoreGenerationConfig = useGenerationConfigStore((s) => s.restoreFromStorage);
   const setDetectedKey = useGenerationConfigStore((s) => s.setDetectedKey);
+  const rhythmDensity = useGenerationConfigStore((s) => s.rhythmDensity);
+
+  const rhythmSummary = React.useMemo(() => {
+    const labels: Record<string, string> = {
+      chordal: "Chordal (slow)",
+      mixed: "Mixed",
+      flowing: "Flowing (active)",
+    };
+    return `Harmony motion: ${labels[rhythmDensity] ?? rhythmDensity} (accompaniment density when you generate).`;
+  }, [rhythmDensity]);
 
   // Client-side PDF rasterization — always renders a visible first page, even
   // when the server OMR pipeline is degraded (Vercel without pdfalto/oemer).
@@ -371,15 +381,19 @@ export default function DocumentPage() {
           );
         }
       }
-      formData.append(
-        "config",
-        JSON.stringify({
-          mood: config.mood,
-          genre: "classical",
-          rhythmDensity: config.rhythmDensity,
-          instruments: config.instruments,
-        })
-      );
+      const configPayload: Record<string, unknown> = {
+        mood: config.mood,
+        genre: "classical",
+        rhythmDensity: config.rhythmDensity,
+        instruments: config.instruments,
+      };
+      if (config.preferInferredChords === true) {
+        configPayload.preferInferredChords = true;
+      }
+      if (typeof config.pickupBeats === "number") {
+        configPayload.pickupBeats = config.pickupBeats;
+      }
+      formData.append("config", JSON.stringify(configPayload));
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
       let res: Response;
@@ -435,6 +449,7 @@ export default function DocumentPage() {
                 ? "Upload a file in a real session to see your score here."
                 : "Traditional • 4 voices • Page 1 of 4")
             }
+            rhythmSummary={reviewerArm ? undefined : rhythmSummary}
             onReupload={() => router.push("/")}
             pdfPreviewUrl={pdfPreview.previewUrl}
             pdfPreviewCaption={pdfPreviewCaption}

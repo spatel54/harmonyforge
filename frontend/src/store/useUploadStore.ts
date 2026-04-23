@@ -9,6 +9,9 @@ export interface UploadState {
   setFile: (file: File | null) => void;
   generatedMusicXML: string | null;
   setGeneratedMusicXML: (xml: string | null) => void;
+  /** Snapshot of the last generated harmony XML — used by sandbox “reset workspace”. */
+  workspaceBaselineXml: string | null;
+  resetWorkspaceToBaseline: () => void;
   /** Server-built MusicXML for Document preview (PDF / MXL / MIDI after intake) */
   previewMusicXML: string | null;
   setPreviewMusicXML: (xml: string | null) => void;
@@ -59,17 +62,32 @@ function schedulePersist(xml: string | null, sourceFileName: string | null): voi
 
 export const useUploadStore = create<UploadState>((set, get) => ({
   file: null,
-  setFile: (file) =>
+  setFile: (file) => {
     set({
       file,
       sourceFileName: file ? file.name.replace(/\.[^/.]+$/, "") : null,
       previewMusicXML: null,
-    }),
+      workspaceBaselineXml: null,
+      generatedMusicXML: null,
+    });
+    schedulePersist(null, null);
+  },
   generatedMusicXML: null,
+  workspaceBaselineXml: null,
   setGeneratedMusicXML: (xml) => {
     const sourceFileName = get().sourceFileName;
-    set({ generatedMusicXML: xml });
+    set({
+      generatedMusicXML: xml,
+      workspaceBaselineXml: xml && xml.length > 0 ? xml : null,
+    });
     schedulePersist(xml, sourceFileName);
+  },
+  resetWorkspaceToBaseline: () => {
+    const baseline = get().workspaceBaselineXml;
+    const sourceFileName = get().sourceFileName;
+    if (!baseline) return;
+    set({ generatedMusicXML: baseline });
+    schedulePersist(baseline, sourceFileName);
   },
   previewMusicXML: null,
   setPreviewMusicXML: (previewMusicXML) => set({ previewMusicXML }),
@@ -82,7 +100,11 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   restoreFromStorage: () => {
     const { xml, sourceFileName } = loadFromStorage();
     if (xml) {
-      set({ generatedMusicXML: xml, sourceFileName: sourceFileName ?? null });
+      set({
+        generatedMusicXML: xml,
+        sourceFileName: sourceFileName ?? null,
+        workspaceBaselineXml: xml,
+      });
       return true;
     }
     return false;

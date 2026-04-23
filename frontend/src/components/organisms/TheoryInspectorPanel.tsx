@@ -16,13 +16,16 @@ import type {
 } from "@/store/useTheoryInspectorStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
-import { resolveStarterPrompts } from "@/lib/ai/starterPrompts";
-import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogyCallout";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
-import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
+import { CHAT_SEED_TAG_PROMPTS } from "@/lib/ai/theoryInspectorTags";
+import { useScoreStore } from "@/store/useScoreStore";
+import { collectNonRestPitchesInMeasure } from "@/lib/music/scoreUtils";
 
 const AI_MODAL_KEY = "hf-inspector-ai-modal-seen";
-const TAGS_VISIBLE_KEY = "hf-suggestion-tags-visible";
+
+export type EditFocusedRegionPayload =
+  | { scope: "measure"; measureIndex: number; lockedPitches: string[] }
+  | { scope: "part"; partId: string; partName: string };
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -69,8 +72,8 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onRejectIdeaAction?: (action: IdeaAction) => void;
   /** Fires when a starter prompt chip is clicked (text passed verbatim to chat). */
   onStarterPromptClick?: (prompt: string) => void;
-  /** Fires when the user clicks "Edit this bar" on the measure focus card. */
-  onEditFocusedRegion?: () => void;
+  /** Measure focus: classical localized regenerate hook (backend optional). */
+  onEditFocusedRegion?: (payload: EditFocusedRegionPayload) => void;
   /** Accept a tutor INTENT (mood/genre/pickup/regenerate/navigation). */
   onApplyIntent?: (msgId: string, intent: import("@/lib/ai/intentRouter").Intent) => void;
   /** Dismiss an INTENT confirmation bubble without applying it. */
@@ -143,8 +146,12 @@ export const TheoryInspectorPanel = React.forwardRef<
     const setShowInspectorRationale = useTheoryInspectorStore(
       (s) => s.setShowInspectorRationale,
     );
-    const explanationLevel = useTheoryInspectorStore((s) => s.explanationLevel);
-    const setExplanationLevel = useTheoryInspectorStore((s) => s.setExplanationLevel);
+    const inspectorActiveTab = useTheoryInspectorStore((s) => s.inspectorActiveTab);
+    const setInspectorActiveTab = useTheoryInspectorStore((s) => s.setInspectorActiveTab);
+    const aiChatTags = useTheoryInspectorStore((s) => s.aiChatTags);
+    const dismissChatTag = useTheoryInspectorStore((s) => s.dismissChatTag);
+    const dismissedChatTags = useTheoryInspectorStore((s) => s.dismissedChatTags);
+    const score = useScoreStore((s) => s.score);
 
     // AI first-visit modal
     const [showAiModal, setShowAiModal] = React.useState(false);
@@ -157,33 +164,28 @@ export const TheoryInspectorPanel = React.forwardRef<
       if (typeof window !== "undefined") localStorage.setItem(AI_MODAL_KEY, "1");
     }, []);
 
-    // Suggestive tags
-    const [tagsVisible, setTagsVisible] = React.useState(() => {
-      if (typeof window === "undefined") return true;
-      return localStorage.getItem(TAGS_VISIBLE_KEY) !== "0";
-    });
-    const [dismissedTags, setDismissedTags] = React.useState<Set<string>>(new Set());
-    const dismissTag = React.useCallback((id: string) => {
-      setDismissedTags((prev) => new Set([...prev, id]));
-    }, []);
-    const toggleTagsVisible = React.useCallback(() => {
-      setTagsVisible((v) => {
-        const next = !v;
-        if (typeof window !== "undefined") localStorage.setItem(TAGS_VISIBLE_KEY, next ? "1" : "0");
-        return next;
-      });
-    }, []);
-
     const suppressSuggestionProse = isMinimalSuggestionExplanation();
     const chatInputLocked = isStreaming && streamingMessageId != null;
-    const starterPrompts = React.useMemo(
-      () => resolveStarterPrompts(inspectorScoreFocus),
-      [inspectorScoreFocus],
-    );
-    const showStarterPrompts =
-      messages.length === 0 && !isStreaming && Boolean(onStarterPromptClick);
+    const visibleChatTags = React.useMemo(() => {
+      const seeds = [...CHAT_SEED_TAG_PROMPTS];
+      const dyn = aiChatTags.filter((t) => !dismissedChatTags.includes(t));
+      const s = seeds.filter((t) => !dismissedChatTags.includes(t));
+      return [...s, ...dyn];
+    }, [aiChatTags, dismissedChatTags]);
 
-    const renderChatMessage = (msg: TheoryInspectorMessage): React.ReactNode => {
+    const violationMessages = messages.filter((m) => m.type === "violation");
+    const suggestionMessages = messages.filter((m) => m.type === "suggestion");
+
+    const renderChatMessage = (
+      msg: TheoryInspectorMessage,
+      mode: "full" | "chatStream",
+    ): React.ReactNode => {
+      if (
+        mode === "chatStream" &&
+        (msg.type === "violation" || msg.type === "suggestion")
+      ) {
+        return null;
+      }
       switch (msg.type) {
         case "divider":
           return (
@@ -316,7 +318,7 @@ export const TheoryInspectorPanel = React.forwardRef<
       if (distance < 120 || isStreaming) {
         el.scrollTop = el.scrollHeight;
       }
-    });
+    }, [isStreaming, inspectorActiveTab, messages.length, noteInsight]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -372,47 +374,6 @@ export const TheoryInspectorPanel = React.forwardRef<
           {/* Spacer — fills remaining width */}
           <div className="flex-1" aria-hidden="true" />
 
-          {/* Explanation level selector */}
-          <div
-            className="flex items-center gap-[2px] rounded-[4px] p-[2px] shrink-0"
-            style={{ backgroundColor: "#00000020" }}
-            role="group"
-            aria-label="Explanation depth"
-          >
-            {(
-              [
-                { level: "beginner" as ExplanationLevel, label: "B" },
-                { level: "intermediate" as ExplanationLevel, label: "S" },
-                { level: "professional" as ExplanationLevel, label: "P" },
-              ] as const
-            ).map(({ level, label }) => (
-              <button
-                key={level}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setExplanationLevel(level)}
-                aria-pressed={explanationLevel === level}
-                aria-label={`Explanation level: ${level}`}
-                title={
-                  level === "beginner"
-                    ? "Beginner — plain language, terms defined"
-                    : level === "intermediate"
-                      ? "Standard — balanced detail"
-                      : "Professional — dense, assumes theory fluency"
-                }
-                className="flex items-center justify-center w-[20px] h-[20px] rounded-[3px] font-mono text-[9px] font-medium transition-colors"
-                style={{
-                  backgroundColor:
-                    explanationLevel === level ? "var(--hf-accent)" : "transparent",
-                  color:
-                    explanationLevel === level ? "#1a0f0c" : "rgba(255,252,250,0.75)",
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
           {/* CloseBtn — x icon */}
           <button
             type="button"
@@ -443,87 +404,44 @@ export const TheoryInspectorPanel = React.forwardRef<
           </div>
         )}
 
-        {/* ── Body: single unified scroll pane ───────────────── */}
-        <div
-          ref={scrollRef}
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
-          aria-label="Theory Inspector — note details and conversation"
-        >
-          {/* Suggestive tags strip */}
-          {tagsVisible ? (
-            <div
-              className="flex items-center gap-[6px] shrink-0 overflow-x-auto py-[2px]"
-              style={{ scrollbarWidth: "none" }}
-              aria-label="Suggested actions"
-            >
-              {/* Show rationale tag */}
-              {!dismissedTags.has("rationale") && noteInsight && (
-                <div className="flex items-center gap-[2px] shrink-0 rounded-full px-[10px] py-[4px]" style={{ background: "color-mix(in srgb, var(--hf-accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--hf-accent) 35%, transparent)" }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowInspectorRationale(!showInspectorRationale)}
-                    className="font-mono text-[10px] whitespace-nowrap"
-                    style={{ color: "var(--hf-accent)" }}
-                  >
-                    {showInspectorRationale ? "Hide rationale" : "Show rationale"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => dismissTag("rationale")}
-                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
-                    aria-label="Dismiss Show rationale tag"
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
-                    <X className="w-[8px] h-[8px]" strokeWidth={2.5} />
-                  </button>
-                </div>
-              )}
-              {/* Starter prompt tags — only when a note is selected and no messages yet */}
-              {noteInsight && messages.length === 0 && [
-                { id: "why", label: "Why this note?", prompt: "Why did HarmonyForge write this note?" },
-                { id: "alt", label: "What else fits here?", prompt: "What other pitches could work at this moment?" },
-                { id: "motion", label: "Show voice motion", prompt: "Explain the voice-leading motion into and out of this note." },
-              ].filter((t) => !dismissedTags.has(t.id)).map((tag) => (
-                <div key={tag.id} className="flex items-center gap-[2px] shrink-0 rounded-full px-[10px] py-[4px]" style={{ background: "color-mix(in srgb, var(--hf-surface) 12%, transparent)", border: "1px solid var(--hf-detail)" }}>
-                  <button
-                    type="button"
-                    onClick={() => onStarterPromptClick?.(tag.prompt)}
-                    className="font-mono text-[10px] whitespace-nowrap"
-                    style={{ color: "var(--hf-text-primary)" }}
-                  >
-                    {tag.label}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => dismissTag(tag.id)}
-                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
-                    aria-label={`Dismiss ${tag.label} tag`}
-                    style={{ color: "var(--hf-text-secondary)" }}
-                  >
-                    <X className="w-[8px] h-[8px]" strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))}
-              {/* Hide all tags button */}
+        <div className="flex flex-col flex-1 min-h-0">
+          <div
+            className="flex gap-[8px] shrink-0 px-[12px] py-[8px] border-b"
+            style={{ borderColor: "var(--hf-detail)" }}
+            role="tablist"
+            aria-label="Inspector view"
+          >
+            {(
+              [
+                { id: "explanation" as const, label: "Explanation" },
+                { id: "chat" as const, label: "Chat" },
+              ] as const
+            ).map(({ id, label }) => (
               <button
+                key={id}
                 type="button"
-                onClick={toggleTagsVisible}
-                className="ml-auto shrink-0 font-mono text-[9px] whitespace-nowrap hover:opacity-70"
-                style={{ color: "var(--hf-text-secondary)" }}
+                role="tab"
+                aria-selected={inspectorActiveTab === id}
+                onClick={() => setInspectorActiveTab(id)}
+                className={cn(
+                  "rounded-full px-[14px] py-[6px] font-mono text-[11px] font-medium transition-colors",
+                  inspectorActiveTab === id
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                    : "bg-transparent text-[var(--hf-text-secondary)] border border-[var(--hf-detail)]",
+                )}
               >
-                Hide tags
+                {label}
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={toggleTagsVisible}
-              className="font-mono text-[9px] self-start hover:opacity-70 shrink-0"
-              style={{ color: "var(--hf-text-secondary)" }}
-            >
-              Show tags
-            </button>
-          )}
+            ))}
+          </div>
+
+          <div
+            ref={scrollRef}
+            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
+            aria-label="Theory Inspector — tab content"
+          >
+            {inspectorActiveTab === "explanation" ? (
+              <>
           {!noteInsight &&
             inspectorScoreFocus &&
             (inspectorScoreFocus.kind === "measure" ||
@@ -552,7 +470,24 @@ export const TheoryInspectorPanel = React.forwardRef<
                   {onEditFocusedRegion && tutorEnabled && (
                     <button
                       type="button"
-                      onClick={onEditFocusedRegion}
+                      onClick={() => {
+                        if (inspectorScoreFocus.kind === "measure" && score) {
+                          onEditFocusedRegion({
+                            scope: "measure",
+                            measureIndex: inspectorScoreFocus.measureIndex,
+                            lockedPitches: collectNonRestPitchesInMeasure(
+                              score,
+                              inspectorScoreFocus.measureIndex,
+                            ),
+                          });
+                        } else if (inspectorScoreFocus.kind === "part") {
+                          onEditFocusedRegion({
+                            scope: "part",
+                            partId: inspectorScoreFocus.partId,
+                            partName: inspectorScoreFocus.partName,
+                          });
+                        }
+                      }}
                       className="shrink-0 rounded-[6px] px-[10px] py-[6px] font-mono text-[11px] font-medium"
                       style={{
                         backgroundColor: "var(--hf-accent)",
@@ -560,11 +495,13 @@ export const TheoryInspectorPanel = React.forwardRef<
                       }}
                       aria-label={
                         inspectorScoreFocus.kind === "measure"
-                          ? "Ask the assistant to suggest edits for this bar"
+                          ? "Regenerate harmony suggestions for this bar"
                           : "Ask the assistant to suggest edits for this part"
                       }
                     >
-                      {inspectorScoreFocus.kind === "measure" ? "Edit this bar" : "Suggest edits"}
+                      {inspectorScoreFocus.kind === "measure"
+                        ? "Regenerate this bar"
+                        : "Suggest edits"}
                     </button>
                   )}
                 </div>
@@ -585,15 +522,9 @@ export const TheoryInspectorPanel = React.forwardRef<
 
           {noteInsight ? (
             <>
-                <div
-                  className="rounded-[6px] p-[12px]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                  }}
-                >
+                <div className="rounded-r-md p-[12px] border-l-4 bg-zinc-800/60 border-[var(--hf-accent)]">
                   <div
-                    className="font-mono text-[10px] mb-[6px]"
+                    className="font-mono text-[10px] mb-[6px] uppercase tracking-wide"
                     style={{ color: "var(--hf-text-secondary)" }}
                   >
                     This note
@@ -745,20 +676,12 @@ export const TheoryInspectorPanel = React.forwardRef<
                   </>
                 )}
 
-                {/* Tutor summary (LLM) — after deterministic blocks; Ideas follow below */}
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                <div className="text-[13px] leading-[1.5] bg-transparent pt-[10px]">
+                  <div
+                    className="font-mono text-[10px] mb-[8px] uppercase tracking-[0.06em]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
                     Tutor summary
-                  </div>
-                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    Short wrap-up after the facts—what you’re hearing, why it matters, and how it connects to the engine’s rules when useful.
                   </div>
                   <div>
                     {isStreaming ? (
@@ -792,19 +715,12 @@ export const TheoryInspectorPanel = React.forwardRef<
                   </div>
                 </div>
 
-                <div
-                  className="rounded-[6px] p-[12px] text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: "var(--hf-bg)",
-                    border: "1px solid var(--hf-detail)",
-                    color: "var(--hf-text-primary)",
-                  }}
-                >
-                  <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
+                <div className="text-[13px] leading-[1.5] bg-transparent pt-[10px]">
+                  <div
+                    className="font-mono text-[10px] mb-[8px] uppercase tracking-[0.06em]"
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
                     Ideas to try next
-                  </div>
-                  <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                    After the summary: practical next tries—each line should say what to change and why, grounded in the facts and export.
                   </div>
                   <div>
                     {!tutorEnabled ? (
@@ -915,54 +831,138 @@ export const TheoryInspectorPanel = React.forwardRef<
                 </div>
               </>
           ) : null}
-          {/* Chat separator */}
-          {messages.length > 0 && (
-            <div className="flex items-center gap-[8px] shrink-0">
-              <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
-              <span className="font-mono text-[9px]" style={{ color: "var(--hf-text-secondary)" }}>Conversation</span>
-              <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
-            </div>
-          )}
-          {showStarterPrompts && (
-            <div
-              className="rounded-[6px] p-[10px]"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--hf-accent) 6%, transparent)",
-                border: "1px dashed var(--hf-detail)",
-              }}
-              aria-label="Suggested starts"
-            >
-              <div className="font-mono text-[10px] mb-[6px]" style={{ color: "var(--hf-text-secondary)" }}>
-                Suggested starts
-              </div>
-              <div className="flex flex-wrap gap-[6px]">
-                {starterPrompts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => onStarterPromptClick?.(p.prompt)}
-                    className="rounded-[999px] px-[10px] py-[4px] font-mono text-[11px] hover:opacity-90"
-                    style={{
-                      backgroundColor: "var(--hf-bg)",
-                      border: "1px solid var(--hf-detail)",
-                      color: "var(--hf-text-primary)",
-                    }}
-                    title={p.prompt}
+                {violationMessages.map((msg) => renderChatMessage(msg, "full"))}
+                {suggestionMessages.map((msg) => renderChatMessage(msg, "full"))}
+              </>
+            ) : (
+              <>
+                {messages.length > 0 && (
+                  <div className="flex items-center gap-[8px] shrink-0">
+                    <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
+                    <span className="font-mono text-[9px]" style={{ color: "var(--hf-text-secondary)" }}>
+                      Conversation
+                    </span>
+                    <div className="flex-1 h-[1px]" style={{ backgroundColor: "var(--hf-detail)" }} />
+                  </div>
+                )}
+                <div
+                  role="log"
+                  aria-live="polite"
+                  aria-label="Theory Inspector — chat"
+                  className="flex flex-col gap-[8px]"
+                >
+                  {messages.map((msg) => renderChatMessage(msg, "chatStream"))}
+                </div>
+                {isStreaming && streamingMessageId != null && (
+                  <div
+                    className="flex items-center gap-[4px] px-[12px] py-[6px]"
+                    aria-label="AI is typing"
+                    role="status"
                   >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div role="log" aria-live="polite" aria-label="Theory Inspector — chat" className="flex flex-col gap-[8px]">
-            {messages.map((msg) => renderChatMessage(msg))}
+                    <span
+                      className="w-[6px] h-[6px] rounded-full animate-pulse"
+                      style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }}
+                    />
+                    <span
+                      className="w-[6px] h-[6px] rounded-full animate-pulse"
+                      style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }}
+                    />
+                    <span
+                      className="w-[6px] h-[6px] rounded-full animate-pulse"
+                      style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
-          {isStreaming && streamingMessageId != null && (
-            <div className="flex items-center gap-[4px] px-[12px] py-[6px]" aria-label="AI is typing" role="status">
-              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "0ms" }} />
-              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "150ms" }} />
-              <span className="w-[6px] h-[6px] rounded-full animate-pulse" style={{ backgroundColor: "var(--hf-accent)", animationDelay: "300ms" }} />
+
+          {inspectorActiveTab === "chat" && visibleChatTags.length > 0 ? (
+            <div
+              className="flex items-center gap-[6px] shrink-0 overflow-x-auto py-[8px] px-[12px] border-t"
+              style={{
+                scrollbarWidth: "none",
+                borderColor: "var(--hf-detail)",
+                backgroundColor: "var(--hf-bg)",
+              }}
+              aria-label="Suggested chats"
+            >
+              {visibleChatTags.map((tag) => (
+                <div
+                  key={tag}
+                  className="flex items-center gap-[2px] shrink-0 rounded-full px-[10px] py-[4px]"
+                  style={{
+                    background: "color-mix(in srgb, var(--hf-surface) 12%, transparent)",
+                    border: "1px solid var(--hf-detail)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onStarterPromptClick?.(tag)}
+                    className="font-mono text-[10px] whitespace-nowrap"
+                    style={{ color: "var(--hf-text-primary)" }}
+                  >
+                    {tag}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissChatTag(tag)}
+                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
+                    aria-label={`Remove tag ${tag}`}
+                    style={{ color: "var(--hf-text-secondary)" }}
+                  >
+                    <X className="w-[8px] h-[8px]" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {inspectorActiveTab === "chat" && (
+            <div
+              className="flex items-center gap-[8px] w-full h-[60px] px-[12px] shrink-0"
+              style={{
+                backgroundColor: "var(--hf-bg)",
+                borderTop: "1px solid var(--hf-detail)",
+              }}
+            >
+              <div
+                className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
+                style={{
+                  backgroundColor: "var(--hf-panel-bg)",
+                  border: "1px solid var(--hf-detail)",
+                }}
+              >
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => onInputChange?.(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    messages.length === 0
+                      ? "Ask anything — tap a suggestion below or type here"
+                      : "Ask a follow-up question"
+                  }
+                  disabled={chatInputLocked}
+                  className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
+                  style={{ color: "var(--hf-text-primary)" }}
+                  aria-label="Theory Inspector message"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={onSend}
+                disabled={chatInputLocked}
+                aria-label="Send message"
+                className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+                style={{ backgroundColor: "var(--hf-surface)" }}
+              >
+                <SendHorizontal
+                  className="w-[14px] h-[14px] text-white"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
           )}
         </div>
@@ -1010,53 +1010,6 @@ export const TheoryInspectorPanel = React.forwardRef<
             </div>
           </div>
         )}
-
-        <div
-          className="flex items-center gap-[8px] w-full h-[60px] px-[12px] shrink-0"
-          style={{
-            backgroundColor: "var(--hf-bg)",
-            borderTop: "1px solid var(--hf-detail)",
-          }}
-        >
-
-          <div
-            className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
-            style={{
-              backgroundColor: "var(--hf-panel-bg)",
-              border: "1px solid var(--hf-detail)",
-            }}
-          >
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => onInputChange?.(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                messages.length === 0
-                  ? "Ask anything about your score — try a Suggested start above"
-                  : "Ask a follow-up question"
-              }
-              disabled={chatInputLocked}
-              className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"
-              style={{ color: "var(--hf-text-primary)" }}
-              aria-label="Theory Inspector message"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={chatInputLocked}
-            aria-label="Send message"
-            className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
-            style={{ backgroundColor: "var(--hf-surface)" }}
-          >
-            <SendHorizontal
-              className="w-[14px] h-[14px] text-white"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-          </button>
-        </div>
       </div>
     );
   },

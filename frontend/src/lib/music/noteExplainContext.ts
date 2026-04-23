@@ -330,44 +330,58 @@ export function buildSatbNoteContextLines(
   return lines;
 }
 
-/** Compact bass + melody motion between adjacent chord moments (Iteration 3: progression-aware FACTs). */
+function progressionSemitoneLabel(d: number): string {
+  if (d === 0) return "unison repeat";
+  if (d > 0) return `+${d} semitones`;
+  return `${d} semitones`;
+}
+
+function appendProgressionPair(
+  lines: string[],
+  auditedSlots: AuditedSlotLike[],
+  fromIdx: number,
+  toIdx: number,
+  opts: SatbNoteContextOptions | undefined,
+  phrase: string,
+): void {
+  const a = auditedSlots[fromIdx];
+  const b = auditedSlots[toIdx];
+  if (!a || !b) return;
+  const db = pitchToMidi(b.voices.bass) - pitchToMidi(a.voices.bass);
+  const ds = pitchToMidi(b.voices.soprano) - pitchToMidi(a.voices.soprano);
+  lines.push(
+    `FACT: PROGRESSION — ${staffLabel("bass", opts)} ${phrase}: ${a.voices.bass} → ${b.voices.bass} (${progressionSemitoneLabel(db)}).`,
+  );
+  lines.push(
+    `FACT: PROGRESSION — ${staffLabel("soprano", opts)} ${phrase}: ${a.voices.soprano} → ${b.voices.soprano} (${progressionSemitoneLabel(ds)}).`,
+  );
+}
+
+/** Compact bass + soprano motion across a ±windowRadius neighborhood (progression-aware FACTs). */
 export function buildProgressionWindowFacts(
   auditedSlots: AuditedSlotLike[],
   slotIndex: number,
   opts?: SatbNoteContextOptions,
+  windowRadius: number = 3,
 ): string[] {
   const cur = auditedSlots[slotIndex];
   if (!cur) return [];
 
+  const n = auditedSlots.length;
+  const lo = Math.max(0, slotIndex - windowRadius);
+  const hi = Math.min(n - 1, slotIndex + windowRadius);
   const lines: string[] = [
-    `FACT: PROGRESSION WINDOW — chord-moment indices (0-based grid): ${slotIndex > 0 ? String(slotIndex - 1) : "—"} → ${slotIndex} → ${slotIndex < auditedSlots.length - 1 ? String(slotIndex + 1) : "—"}.`,
+    `FACT: PROGRESSION WINDOW — chord-moment indices (0-based grid): view ${lo}…${hi} (focus ${slotIndex}).`,
   ];
 
-  if (slotIndex > 0) {
-    const prev = auditedSlots[slotIndex - 1]!;
-    const db =
-      pitchToMidi(cur.voices.bass) - pitchToMidi(prev.voices.bass);
-    const ds =
-      pitchToMidi(cur.voices.soprano) - pitchToMidi(prev.voices.soprano);
-    lines.push(
-      `FACT: PROGRESSION — ${staffLabel("bass", opts)} from previous moment → this: ${prev.voices.bass} → ${cur.voices.bass} (${db === 0 ? "unison repeat" : db > 0 ? `+${db} semitones` : `${db} semitones`}).`,
-    );
-    lines.push(
-      `FACT: PROGRESSION — ${staffLabel("soprano", opts)} from previous moment → this: ${prev.voices.soprano} → ${cur.voices.soprano} (${ds === 0 ? "unison repeat" : ds > 0 ? `+${ds} semitones` : `${ds} semitones`}).`,
-    );
-  }
-
-  if (slotIndex < auditedSlots.length - 1) {
-    const next = auditedSlots[slotIndex + 1]!;
-    const db =
-      pitchToMidi(next.voices.bass) - pitchToMidi(cur.voices.bass);
-    const ds =
-      pitchToMidi(next.voices.soprano) - pitchToMidi(cur.voices.soprano);
-    lines.push(
-      `FACT: PROGRESSION — ${staffLabel("bass", opts)} this moment → next: ${cur.voices.bass} → ${next.voices.bass} (${db === 0 ? "unison repeat" : db > 0 ? `+${db} semitones` : `${db} semitones`}).`,
-    );
-    lines.push(
-      `FACT: PROGRESSION — ${staffLabel("soprano", opts)} this moment → next: ${cur.voices.soprano} → ${next.voices.soprano} (${ds === 0 ? "unison repeat" : ds > 0 ? `+${ds} semitones` : `${ds} semitones`}).`,
+  for (let j = lo; j < hi; j++) {
+    appendProgressionPair(
+      lines,
+      auditedSlots,
+      j,
+      j + 1,
+      opts,
+      `moments ${j}→${j + 1}`,
     );
   }
 
@@ -379,28 +393,40 @@ export function buildProgressionWindowFacts(
   return lines;
 }
 
+/** Signed semitone move for one voice, folded to ±12 (one step within an octave). */
+function progressionStepFolded(from: string, to: string): number {
+  let d = pitchToMidi(to) - pitchToMidi(from);
+  while (d > 12) d -= 12;
+  while (d < -12) d += 12;
+  return d;
+}
+
 function progressionHeuristicTag(
   auditedSlots: AuditedSlotLike[],
   slotIndex: number,
 ): string | null {
+  const hintDoubleFifth = (a: AuditedSlotLike, b: AuditedSlotLike, c: AuditedSlotLike) => {
+    const b1 = progressionStepFolded(a.voices.bass, b.voices.bass);
+    const b2 = progressionStepFolded(b.voices.bass, c.voices.bass);
+    if (b1 === -7 && b2 === -7) {
+      return "Bass descends by fifth into this moment and again to the next—common in cyclic major-key schemas (e.g. ii–V–I-style bass motion); verify by ear and context.";
+    }
+    return null;
+  };
+
+  if (slotIndex >= 2) {
+    const a = auditedSlots[slotIndex - 2]!;
+    const b = auditedSlots[slotIndex - 1]!;
+    const c = auditedSlots[slotIndex]!;
+    const early = hintDoubleFifth(a, b, c);
+    if (early) return early;
+  }
+
   if (slotIndex <= 0 || slotIndex >= auditedSlots.length - 1) return null;
   const a = auditedSlots[slotIndex - 1]!;
   const b = auditedSlots[slotIndex]!;
   const c = auditedSlots[slotIndex + 1]!;
-  /** Signed semitone move, folded to ±12 for one step */
-  const step = (from: string, to: string) => {
-    let d = pitchToMidi(to) - pitchToMidi(from);
-    while (d > 12) d -= 12;
-    while (d < -12) d += 12;
-    return d;
-  };
-  const b1 = step(a.voices.bass, b.voices.bass);
-  const b2 = step(b.voices.bass, c.voices.bass);
-  // Descending fifth in bass (–7 semitones) twice often outlines ii–V–I-style motion; stay conservative.
-  if (b1 === -7 && b2 === -7) {
-    return "Bass descends by fifth into this moment and again to the next—common in cyclic major-key schemas (e.g. ii–V–I-style bass motion); verify by ear and context.";
-  }
-  return null;
+  return hintDoubleFifth(a, b, c);
 }
 
 /** Tutor FACT when the user changed pitch since generation. */

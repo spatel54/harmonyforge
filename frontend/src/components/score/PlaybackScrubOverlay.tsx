@@ -241,7 +241,7 @@ export function PlaybackScrubOverlay({
 
   return (
     <div
-      className="absolute z-[30] pointer-events-none overflow-visible"
+      className="absolute z-[10] pointer-events-none overflow-visible"
       style={{ left: lineLeftPx, top: contentTopPx, bottom: 8, width: 0 }}
     >
       <div

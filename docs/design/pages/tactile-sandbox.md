@@ -27,3 +27,7 @@ draggable note tokens, Red Line violation overlays, and playback controls.
 - Active playhead position must be announced via `aria-live="polite"` at measure boundaries.
 - Keyboard shortcut map for note editing must be surfaced via a `<dialog>` accessible
   via a visible "Keyboard Shortcuts" button in the toolbar.
+
+## Implementation note (RiffScore-first, 2026-04)
+
+The live **`/sandbox`** surface is **RiffScore**-centric (`EditableScore` in Zustand), not the legacy VexFlow layout described above for historical tokens. **Rest → note** affordances include keyboard **A–G** and a **hover ghost** (pitch from pointer Y on the staff; commit preserves the rest’s duration) — see **[progress.md — Sandbox score UX](../progress.md#wl-sandbox-score-ux-2026-04-22)**.

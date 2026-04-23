@@ -1,11 +1,10 @@
 /**
- * Generation config (mood, genre, instruments, rhythm density) persisted across
- * Playground ⇄ Document ⇄ Sandbox navigation. Lifting the Ensemble Builder's
- * local useState into a shared, sessionStorage-backed Zustand store fixes
- * Iter2 §1: "the system drops user parameters when navigating between screens".
+ * Generation config (mood, genre, instruments, rhythm density, pickup) persisted
+ * across Playground ⇄ Document ⇄ Sandbox via Zustand `persist` (localStorage).
  */
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import type { VoiceType } from "@/components/atoms/PartChip";
 
@@ -43,7 +42,7 @@ export interface GenerationConfigState extends GenerationConfigShape {
   setPreferInferredChords: (value: boolean) => void;
   /** Wipe all config back to defaults (used after Upload → change source). */
   reset: () => void;
-  /** Hydrate from sessionStorage; safe to call from effects. */
+  /** Re-read from localStorage; safe to call from effects after navigation. */
   restoreFromStorage: () => void;
 }
 
@@ -60,132 +59,103 @@ const DEFAULT_STATE: GenerationConfigShape = {
   preferInferredChords: false,
 };
 
-function loadFromStorage(): GenerationConfigShape {
-  if (typeof window === "undefined") return { ...DEFAULT_STATE };
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_STATE };
-    const parsed = JSON.parse(raw) as Partial<GenerationConfigShape>;
-    return {
-      mood: parsed.mood === "minor" ? "minor" : "major",
-      genre:
-        parsed.genre === "jazz" || parsed.genre === "pop" ? parsed.genre : "classical",
-      rhythmDensity:
-        parsed.rhythmDensity === "chordal" || parsed.rhythmDensity === "flowing"
-          ? parsed.rhythmDensity
-          : "mixed",
-      instruments: {
-        soprano: Array.isArray(parsed.instruments?.soprano) ? parsed.instruments!.soprano : [],
-        alto: Array.isArray(parsed.instruments?.alto) ? parsed.instruments!.alto : [],
-        tenor: Array.isArray(parsed.instruments?.tenor) ? parsed.instruments!.tenor : [],
-        bass: Array.isArray(parsed.instruments?.bass) ? parsed.instruments!.bass : [],
+function sanitizeFromPersist(data: unknown): Partial<GenerationConfigShape> {
+  if (!data || typeof data !== "object") return {};
+  const parsed = data as Partial<GenerationConfigShape>;
+  return {
+    mood: parsed.mood === "minor" ? "minor" : "major",
+    genre:
+      parsed.genre === "jazz" || parsed.genre === "pop" ? parsed.genre : "classical",
+    rhythmDensity:
+      parsed.rhythmDensity === "chordal" || parsed.rhythmDensity === "flowing"
+        ? parsed.rhythmDensity
+        : "mixed",
+    instruments: {
+      soprano: Array.isArray(parsed.instruments?.soprano) ? parsed.instruments!.soprano : [],
+      alto: Array.isArray(parsed.instruments?.alto) ? parsed.instruments!.alto : [],
+      tenor: Array.isArray(parsed.instruments?.tenor) ? parsed.instruments!.tenor : [],
+      bass: Array.isArray(parsed.instruments?.bass) ? parsed.instruments!.bass : [],
+    },
+    detectedTonic:
+      typeof parsed.detectedTonic === "string" && parsed.detectedTonic.length > 0
+        ? parsed.detectedTonic
+        : null,
+    detectedMode:
+      parsed.detectedMode === "minor" || parsed.detectedMode === "major"
+        ? parsed.detectedMode
+        : null,
+    pickupBeats:
+      typeof parsed.pickupBeats === "number" && Number.isFinite(parsed.pickupBeats)
+        ? (() => {
+            const r = Math.round(parsed.pickupBeats!);
+            return r >= 0 && r <= 3 ? r : null;
+          })()
+        : null,
+    preferInferredChords: parsed.preferInferredChords === true,
+  };
+}
+
+export const useGenerationConfigStore = create<GenerationConfigState>()(
+  persist(
+    (set, get) => ({
+      ...DEFAULT_STATE,
+      setMood: (mood) => set({ mood }),
+      setGenre: (genre) => set({ genre }),
+      setRhythmDensity: (rhythmDensity) => set({ rhythmDensity }),
+      setInstruments: (instruments) => set({ instruments }),
+      toggleInstrument: (voice, instrument) => {
+        const prev = get().instruments;
+        const current = prev[voice];
+        const next: Record<VoiceType, string[]> = {
+          ...prev,
+          [voice]: current.includes(instrument)
+            ? current.filter((i) => i !== instrument)
+            : [...current, instrument],
+        };
+        set({ instruments: next });
       },
-      detectedTonic:
-        typeof parsed.detectedTonic === "string" && parsed.detectedTonic.length > 0
-          ? parsed.detectedTonic
-          : null,
-      detectedMode:
-        parsed.detectedMode === "minor" || parsed.detectedMode === "major"
-          ? parsed.detectedMode
-          : null,
-      pickupBeats:
-        typeof parsed.pickupBeats === "number" && Number.isFinite(parsed.pickupBeats)
-          ? parsed.pickupBeats
-          : null,
-      preferInferredChords: parsed.preferInferredChords === true,
-    };
-  } catch {
-    return { ...DEFAULT_STATE };
-  }
-}
-
-function saveToStorage(state: GenerationConfigShape): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        mood: state.mood,
-        genre: state.genre,
-        rhythmDensity: state.rhythmDensity,
-        instruments: state.instruments,
-        detectedTonic: state.detectedTonic,
-        detectedMode: state.detectedMode,
-        pickupBeats: state.pickupBeats,
-        preferInferredChords: state.preferInferredChords,
+      removeInstrument: (instrument) => {
+        const prev = get().instruments;
+        const next: Record<VoiceType, string[]> = {
+          soprano: prev.soprano.filter((i) => i !== instrument),
+          alto: prev.alto.filter((i) => i !== instrument),
+          tenor: prev.tenor.filter((i) => i !== instrument),
+          bass: prev.bass.filter((i) => i !== instrument),
+        };
+        set({ instruments: next });
+      },
+      setDetectedKey: (tonic, mode) =>
+        set({ detectedTonic: tonic, detectedMode: mode }),
+      setPickupBeats: (pickupBeats) => set({ pickupBeats }),
+      setPreferInferredChords: (preferInferredChords) => set({ preferInferredChords }),
+      reset: () => {
+        set({ ...DEFAULT_STATE });
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          // ignore
+        }
+      },
+      restoreFromStorage: () => {
+        void useGenerationConfigStore.persist.rehydrate();
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      partialize: (s) => ({
+        mood: s.mood,
+        genre: s.genre,
+        rhythmDensity: s.rhythmDensity,
+        instruments: s.instruments,
+        detectedTonic: s.detectedTonic,
+        detectedMode: s.detectedMode,
+        pickupBeats: s.pickupBeats,
+        preferInferredChords: s.preferInferredChords,
       }),
-    );
-  } catch {
-    // Private-mode / quota errors — silently ignore; in-memory state still works.
-  }
-}
-
-function persistingUpdate(
-  set: (fn: (s: GenerationConfigState) => Partial<GenerationConfigState>) => void,
-  get: () => GenerationConfigState,
-  patch: Partial<GenerationConfigShape>,
-): void {
-  set(() => patch);
-  queueMicrotask(() => {
-    const s = get();
-    saveToStorage({
-      mood: s.mood,
-      genre: s.genre,
-      rhythmDensity: s.rhythmDensity,
-      instruments: s.instruments,
-      detectedTonic: s.detectedTonic,
-      detectedMode: s.detectedMode,
-      pickupBeats: s.pickupBeats,
-      preferInferredChords: s.preferInferredChords,
-    });
-  });
-}
-
-export const useGenerationConfigStore = create<GenerationConfigState>((set, get) => ({
-  ...DEFAULT_STATE,
-  setMood: (mood) => persistingUpdate(set, get, { mood }),
-  setGenre: (genre) => persistingUpdate(set, get, { genre }),
-  setRhythmDensity: (rhythmDensity) => persistingUpdate(set, get, { rhythmDensity }),
-  setInstruments: (instruments) => persistingUpdate(set, get, { instruments }),
-  toggleInstrument: (voice, instrument) => {
-    const prev = get().instruments;
-    const current = prev[voice];
-    const next: Record<VoiceType, string[]> = {
-      ...prev,
-      [voice]: current.includes(instrument)
-        ? current.filter((i) => i !== instrument)
-        : [...current, instrument],
-    };
-    persistingUpdate(set, get, { instruments: next });
-  },
-  removeInstrument: (instrument) => {
-    const prev = get().instruments;
-    const next: Record<VoiceType, string[]> = {
-      soprano: prev.soprano.filter((i) => i !== instrument),
-      alto: prev.alto.filter((i) => i !== instrument),
-      tenor: prev.tenor.filter((i) => i !== instrument),
-      bass: prev.bass.filter((i) => i !== instrument),
-    };
-    persistingUpdate(set, get, { instruments: next });
-  },
-  setDetectedKey: (tonic, mode) =>
-    persistingUpdate(set, get, { detectedTonic: tonic, detectedMode: mode }),
-  setPickupBeats: (beats) =>
-    persistingUpdate(set, get, { pickupBeats: beats }),
-  setPreferInferredChords: (preferInferredChords) =>
-    persistingUpdate(set, get, { preferInferredChords }),
-  reset: () => {
-    set(() => ({ ...DEFAULT_STATE }));
-    if (typeof window !== "undefined") {
-      try {
-        sessionStorage.removeItem(STORAGE_KEY);
-      } catch {
-        // ignore
-      }
-    }
-  },
-  restoreFromStorage: () => {
-    const loaded = loadFromStorage();
-    set(() => loaded);
-  },
-}));
+      merge: (persisted, current) => {
+        const shape = sanitizeFromPersist(persisted);
+        return { ...current, ...shape };
+      },
+    },
+  ),
+);

@@ -11,6 +11,11 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import { parseIntentBlock } from "@/lib/ai/intentRouter";
+import {
+  parseTagsBlock,
+  parseTagsThenIntent,
+  stripPartialTagsForDisplay,
+} from "@/lib/ai/theoryInspectorTags";
 import type {
   NoteInsight,
   NoteInsightKind,
@@ -104,7 +109,8 @@ const NOTE_EXPLAIN_TUTOR_BRIEF =
   "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
   "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
   "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.” " +
-  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\",\"staffIndex\":<int>}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). **staffIndex** is the integer from the matching `STAFF_HINT=<n>` on that line — include it so the app can resolve duplicates even when the suggestion's part name is ambiguous. Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet).";
+  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\",\"staffIndex\":<int>}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). **staffIndex** is the integer from the matching `STAFF_HINT=<n>` on that line — include it so the app can resolve duplicates even when the suggestion's part name is ambiguous. Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet). " +
+  "Optionally, on the last line, output <<<TAGS>>> then a JSON array of 1–4 short follow-up prompts, then <<<END_TAGS>>> (e.g. <<<TAGS>>>[\"Check the bass motion\",\"Try a smoother alto\"]<<<END_TAGS>>>). Omit if not useful.";
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -1008,7 +1014,10 @@ export function useTheoryInspector() {
             chips?: string[];
             source?: string;
           };
-          store.updateMessage(aiMsgId, { content: data.content });
+          const raw = data.content ?? "";
+          const { tags, intent, cleaned } = parseTagsThenIntent(raw);
+          if (tags.length) store.addAiChatTags(tags);
+          store.updateMessage(aiMsgId, { content: cleaned, intent });
         } else {
           // Streaming mode
           const reader = response.body?.getReader();
@@ -1021,9 +1030,13 @@ export function useTheoryInspector() {
             const { done, value } = await reader.read();
             if (done) break;
             accumulated += decoder.decode(value, { stream: true });
-            const { intent, cleaned } = parseIntentBlock(accumulated);
+            const forDisplay = stripPartialTagsForDisplay(accumulated);
+            const { intent, cleaned } = parseIntentBlock(forDisplay);
             store.updateMessage(aiMsgId, { content: cleaned, intent });
           }
+          const { tags, intent, cleaned } = parseTagsThenIntent(accumulated);
+          if (tags.length) store.addAiChatTags(tags);
+          store.updateMessage(aiMsgId, { content: cleaned, intent });
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -1347,9 +1360,9 @@ export function useTheoryInspector() {
           throw new Error(data.error ?? `HTTP ${response.status}`);
         }
         const contentType = response.headers.get("Content-Type") ?? "";
-        const mergeInsightFromRaw = (raw: string) => {
+        const mergeInsightFromDisplayText = (text: string) => {
           const { explanation, suggestions, ideaActions } =
-            splitNoteInsightAiContent(raw);
+            splitNoteInsightAiContent(text);
           const prev = useTheoryInspectorStore.getState().selectedNoteInsight;
           const preservedStatuses =
             prev && base.noteId === prev.noteId && prev.ideaActionStatuses
@@ -1375,7 +1388,9 @@ export function useTheoryInspector() {
         if (contentType.includes("application/json")) {
           const data = (await response.json()) as { content?: string };
           const raw = data.content ?? "";
-          mergeInsightFromRaw(raw);
+          const { tags, cleaned } = parseTagsBlock(raw);
+          if (tags.length) store.addAiChatTags(tags);
+          mergeInsightFromDisplayText(cleaned);
         } else {
           const reader = response.body?.getReader();
           if (!reader) throw new Error("No response body");
@@ -1385,8 +1400,13 @@ export function useTheoryInspector() {
             const { done, value } = await reader.read();
             if (done) break;
             accumulated += decoder.decode(value, { stream: true });
-            mergeInsightFromRaw(accumulated);
+            mergeInsightFromDisplayText(
+              stripPartialTagsForDisplay(accumulated),
+            );
           }
+          const { tags, cleaned } = parseTagsBlock(accumulated);
+          if (tags.length) store.addAiChatTags(tags);
+          mergeInsightFromDisplayText(cleaned);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
@@ -1406,19 +1426,19 @@ export function useTheoryInspector() {
   );
 
   const explainNotePitch = useCallback(
-    async (score: EditableScore, noteId: string, partId: string) => {
-      if (store.isStreaming) return;
+    async (score: EditableScore, noteId: string, partId: string): Promise<boolean> => {
+      if (store.isStreaming) return false;
 
       flushEditorToZustand();
       const live = useScoreStore.getState().score ?? score;
 
       const found = getNoteById(live, noteId);
-      if (!found || found.note.isRest) return;
+      if (!found || found.note.isRest) return false;
 
       logStudyEvent("theory_inspector_note_click", { noteId, partId });
 
       const partIndex = live.parts.findIndex((p) => p.id === partId);
-      if (partIndex < 0) return;
+      if (partIndex < 0) return false;
 
       const {
         generationBaselineHarmonyPitches: baselinePitches,
@@ -1434,10 +1454,15 @@ export function useTheoryInspector() {
         baselineTrace,
         baselineAuditedSlots,
       );
-      if (!insight) return;
+      if (!insight) return false;
 
       store.setSelectedNoteInsight(insight);
-      await streamTutorNoteInsight(insight, insight.evidenceLines.join("\n"));
+      try {
+        await streamTutorNoteInsight(insight, insight.evidenceLines.join("\n"));
+        return true;
+      } catch {
+        return false;
+      }
     },
     [store, streamTutorNoteInsight, flushEditorToZustand],
   );

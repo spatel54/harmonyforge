@@ -105,6 +105,10 @@ export function parseConfig(body: unknown): GenerationConfig | null {
     if (Object.keys(valid).length > 0) config.instruments = valid as Record<Voice, string[]>;
   }
   if (o.preferInferredChords === true) config.preferInferredChords = true;
+  if (typeof o.pickupBeats === "number" && Number.isFinite(o.pickupBeats)) {
+    const pb = Math.round(o.pickupBeats);
+    if (pb >= 0 && pb <= 3) config.pickupBeats = pb;
+  }
   return Object.keys(config).length > 0 ? config : null;
 }
 
@@ -185,7 +189,14 @@ export function runGenerateFromFile(
   const resolved = resolveParsedScore(file, pageImages, true);
   if (!resolved.ok) return resolved;
   const parsed = resolved.parsed;
-  const withChords = ensureChords(parsed, config?.mood, config?.genre, {
+  const parsedForGen =
+    config?.pickupBeats !== undefined
+      ? {
+          ...parsed,
+          pickupBeats: config.pickupBeats === 0 ? undefined : config.pickupBeats,
+        }
+      : parsed;
+  const withChords = ensureChords(parsedForGen, config?.mood, config?.genre, {
     preferInferredChords: config?.preferInferredChords === true,
   });
   const leadSheet: LeadSheet = {

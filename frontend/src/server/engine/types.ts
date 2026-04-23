@@ -42,6 +42,11 @@ export interface GenerationConfig {
    * embedded in the uploaded file.
    */
   preferInferredChords?: boolean;
+  /**
+   * Optional pickup/anacrusis length in quarter-note beats (0–3) to impose on intake
+   * before harmony generation; overrides parser-detected pickup when set.
+   */
+  pickupBeats?: number;
 }
 
 export interface KeyContext {

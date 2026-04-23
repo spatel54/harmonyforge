@@ -48,7 +48,7 @@ The template only defines:
 OPENAI_API_KEY=
 ```
 
-Set it if you use the Theory Inspector LLM; leave blank for offline fallbacks. Advanced tuning (solver limits, OMR paths, etc.) is optional and documented in code comments and [docs/deployment.md](../docs/deployment.md) — not in `.env.example` on purpose.
+Set it if you use the Theory Inspector LLM; leave blank for offline fallbacks. A **base URL is not required**: the client uses OpenAI’s default API when `OPENAI_BASE_URL` / `OPENAI_URL` are omitted. Advanced tuning (solver limits, OMR paths, etc.) is optional and documented in code comments and [docs/deployment.md](../docs/deployment.md) — not in `.env.example` on purpose.
 
 ---
 

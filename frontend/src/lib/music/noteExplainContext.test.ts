@@ -194,12 +194,34 @@ describe("buildProgressionWindowFacts", () => {
       },
     ];
     const lines = buildProgressionWindowFacts(slots, 1);
-    expect(lines.some((l) => l.includes("PROGRESSION WINDOW"))).toBe(true);
+    expect(lines.some((l) => l.includes("PROGRESSION WINDOW") && l.includes("view 0…2"))).toBe(
+      true,
+    );
+    expect(lines.some((l) => l.includes("moments 0→1") && l.includes("PROGRESSION —"))).toBe(
+      true,
+    );
+    expect(lines.some((l) => l.includes("moments 1→2"))).toBe(true);
     expect(lines.some((l) => l.includes("PROGRESSION —") && l.includes("bass"))).toBe(
       true,
     );
     expect(lines.some((l) => l.includes("PROGRESSION —") && l.includes("soprano"))).toBe(
       true,
+    );
+  });
+
+  it("uses windowRadius to include neighbors within ±3 indices", () => {
+    const slots = Array.from({ length: 7 }, (_, i) => ({
+      voices: {
+        soprano: `C${4 + (i % 3)}`,
+        alto: "E4",
+        tenor: "G3",
+        bass: `C${3 + (i % 2)}`,
+      },
+    }));
+    const lines = buildProgressionWindowFacts(slots, 3, undefined, 3);
+    expect(lines.some((l) => l.includes("view 0…6") && l.includes("focus 3"))).toBe(true);
+    expect(lines.filter((l) => l.startsWith("FACT: PROGRESSION —")).length).toBeGreaterThanOrEqual(
+      4,
     );
   });
 

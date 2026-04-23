@@ -58,20 +58,16 @@ export function shouldShowChordNotation(score: EditableScore): boolean {
 // Clef maps
 // ---------------------------------------------------------------------------
 
-/** SATB part name -> RiffScore clef */
-const PART_CLEF_MAP: Record<string, "treble" | "bass" | "alto" | "tenor"> = {
-  soprano: "treble",
-  alto: "treble",
-  tenor: "tenor",
-  bass: "bass",
-};
-
+/**
+ * Map HarmonyForge `part.clef` (staff clef type) → RiffScore staff clef.
+ * Must not treat `"alto"` as SATB voice: viola uses alto **C-clef** (`part.clef === "alto"`).
+ */
 function hfClefToRs(clef: string): "treble" | "bass" | "alto" | "tenor" {
   const lower = clef.toLowerCase();
-  if (lower in PART_CLEF_MAP) return PART_CLEF_MAP[lower];
   if (lower === "treble" || lower === "bass" || lower === "alto" || lower === "tenor") {
-    return lower as "treble" | "bass" | "alto" | "tenor";
+    return lower;
   }
+  if (lower === "soprano") return "treble";
   return "treble";
 }
 
@@ -161,6 +157,10 @@ export function buildIdMap(hfScore: EditableScore, rsScore: RsScore): { hfToRs: 
         if (hfNote && rsNote) {
           hfToRs.set(hfNote.id, rsNote.id);
           rsToHf.set(rsNote.id, hfNote.id);
+          // Rest hit targets use `data-testid="rest-{event.id}"` (e.g. rse-…) — not `rs-…` note ids.
+          if (rsEvent.id) {
+            rsToHf.set(rsEvent.id, hfNote.id);
+          }
         }
       }
     }

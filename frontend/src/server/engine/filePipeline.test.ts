@@ -4,6 +4,7 @@
 
 import { ensureChords } from "./chordInference";
 import { parseChord } from "./chordParser";
+import { parseConfig } from "./runtime";
 import { generateSATB } from "./solver";
 import { satbToMusicXML } from "./satbToMusicXML";
 import type { ParsedScore } from "./types";
@@ -450,5 +451,22 @@ describe("File pipeline", () => {
     expect(xml).toContain("<dot/>");
     expect(xml).toContain("<type>quarter</type>");
     expect(xml).toContain("<type>eighth</type>");
+  });
+});
+
+describe("parseConfig", () => {
+  it("accepts pickupBeats between 0 and 3", () => {
+    expect(parseConfig({ pickupBeats: 0 })).toEqual({ pickupBeats: 0 });
+    expect(parseConfig({ pickupBeats: 3 })).toEqual({ pickupBeats: 3 });
+    expect(parseConfig({ pickupBeats: 2.4 })).toEqual({ pickupBeats: 2 });
+  });
+
+  it("ignores out-of-range pickupBeats", () => {
+    expect(parseConfig({ pickupBeats: 4 })).toBeNull();
+    expect(parseConfig({ pickupBeats: -1 })).toBeNull();
+  });
+
+  it("keeps other fields when pickupBeats is invalid", () => {
+    expect(parseConfig({ mood: "minor", pickupBeats: 9 })).toEqual({ mood: "minor" });
   });
 });

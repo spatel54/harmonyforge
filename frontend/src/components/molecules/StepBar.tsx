@@ -8,11 +8,13 @@ import { cn } from "@/lib/utils";
 export interface StepBarProps extends React.HTMLAttributes<HTMLDivElement> {
   /** 1 = Playground, 2 = Document, 3 = Sandbox */
   currentStep: 1 | 2 | 3;
+  /** Narrow pills (step number only); full step name in title/aria-label */
+  compact?: boolean;
 }
 
 const STEPS = [
   { n: 1, label: "Playground", href: "/" },
-  { n: 2, label: "Arrange", href: "/document" },
+  { n: 2, label: "Edit configuration", href: "/document" },
   { n: 3, label: "Sandbox", href: "/sandbox" },
 ] as const;
 
@@ -23,7 +25,7 @@ const STEPS = [
  * Steps < currentStep → done. Step === currentStep → active. Steps > currentStep → pending.
  */
 export const StepBar = React.forwardRef<HTMLDivElement, StepBarProps>(
-  ({ currentStep, className, ...props }, ref) => {
+  ({ currentStep, compact = false, className, ...props }, ref) => {
     const router = useRouter();
     return (
       <div
@@ -44,9 +46,12 @@ export const StepBar = React.forwardRef<HTMLDivElement, StepBarProps>(
               <div
                 role="listitem"
                 aria-current={isActive ? "step" : undefined}
+                aria-label={`${step.n} ${step.label}`}
+                title={`${step.n} ${step.label}`}
                 onClick={isDone ? () => router.push(step.href) : undefined}
                 className={cn(
-                  "flex items-center gap-[5px] rounded-full px-[12px] py-[6px]",
+                  "flex items-center gap-[5px] rounded-full py-[6px]",
+                  compact ? "px-[8px]" : "px-[12px]",
                   "font-mono text-[11px] font-medium leading-none whitespace-nowrap",
                   isDone &&
                     "bg-[var(--hf-accent)] cursor-pointer hover:opacity-85 transition-opacity",
@@ -80,14 +85,14 @@ export const StepBar = React.forwardRef<HTMLDivElement, StepBarProps>(
                         : "var(--hf-text-sub)",
                   }}
                 >
-                  {step.n} {step.label}
+                  {compact ? step.n : `${step.n} ${step.label}`}
                 </span>
               </div>
 
               {/* Connector line between steps */}
               {i < STEPS.length - 1 && (
                 <div
-                  className="w-[24px] h-[1px] shrink-0"
+                  className={cn("h-[1px] shrink-0", compact ? "w-[12px]" : "w-[24px]")}
                   style={{
                     backgroundColor:
                       step.n < currentStep

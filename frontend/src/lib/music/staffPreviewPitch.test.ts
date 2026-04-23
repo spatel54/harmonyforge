@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStaffAnchorYs,
   pitchFromStaffGeometry,
+  staffAnchorYForPitch,
 } from "./staffPreviewPitch";
 
 describe("buildStaffAnchorYs", () => {
@@ -27,5 +28,19 @@ describe("pitchFromStaffGeometry", () => {
     const lines = [0, 8, 16, 24, 32];
     const midFirstSpace = 4;
     expect(pitchFromStaffGeometry("bass", lines, midFirstSpace)).toBe("G3");
+  });
+});
+
+describe("staffAnchorYForPitch", () => {
+  it("inverts treble pitch→Y for staff anchors", () => {
+    const lines = [10, 18, 26, 34, 42];
+    expect(staffAnchorYForPitch("treble", lines, "E5")).toBe(14);
+    expect(staffAnchorYForPitch("treble", lines, "F5")).toBe(10);
+    expect(staffAnchorYForPitch("treble", lines, "E4")).toBe(42);
+  });
+
+  it("returns null when anchor Y would be non-finite", () => {
+    const lines = [NaN, 18, 26, 34, 42];
+    expect(staffAnchorYForPitch("treble", lines, "F5")).toBeNull();
   });
 });

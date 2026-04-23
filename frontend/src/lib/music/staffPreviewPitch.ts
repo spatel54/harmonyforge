@@ -61,3 +61,20 @@ export function pitchFromStaffGeometry(
   }
   return anchors[best] ?? null;
 }
+
+/** Vertical center (container Y) for a diatonic anchor pitch on the staff, inverse of `pitchFromStaffGeometry`. */
+export function staffAnchorYForPitch(
+  clefRaw: string,
+  lineYsFive: number[],
+  pitch: string,
+): number | null {
+  if (lineYsFive.length < 5) return null;
+  const clef = normalizeClef(clefRaw);
+  const anchors = ANCHOR_PITCHES[clef];
+  const idx = anchors.indexOf(pitch);
+  if (idx < 0) return null;
+  const ys = buildStaffAnchorYs([...lineYsFive].sort((a, b) => a - b));
+  if (ys.length !== 9) return null;
+  const y = ys[idx];
+  return typeof y === "number" && Number.isFinite(y) ? y : null;
+}

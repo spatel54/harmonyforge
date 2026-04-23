@@ -6,6 +6,9 @@ import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
+import { mergeAiChatTags } from "@/lib/ai/theoryInspectorTags";
+
+export type InspectorPanelTab = "explanation" | "chat";
 
 export type Persona = "auditor" | "tutor" | "stylist";
 export type Genre = "classical" | "jazz" | "pop";
@@ -116,9 +119,8 @@ export interface TheoryInspectorState {
   showInspectorRationale: boolean;
   setShowInspectorRationale: (v: boolean) => void;
 
-  /** Explanation depth sent to the LLM — beginner avoids jargon, professional is terse. */
+  /** Explanation depth sent to the LLM (fixed beginner tone in product UI). */
   explanationLevel: ExplanationLevel;
-  setExplanationLevel: (level: ExplanationLevel) => void;
 
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
@@ -144,6 +146,17 @@ export interface TheoryInspectorState {
     baselineAuditedSlots: AuditedSlot[] | null;
   }) => void;
   clearGenerationBaseline: () => void;
+
+  inspectorActiveTab: InspectorPanelTab;
+  setInspectorActiveTab: (tab: InspectorPanelTab) => void;
+
+  /** AI-suggested chat tags (seeds are constants in UI). Max 3 after merge. */
+  aiChatTags: string[];
+  addAiChatTags: (tags: string[]) => void;
+  removeAiChatTag: (tag: string) => void;
+  /** Tags hidden for this session (× on strip). */
+  dismissedChatTags: string[];
+  dismissChatTag: (tag: string) => void;
 }
 
 export const useTheoryInspectorStore = create<TheoryInspectorState>(
@@ -185,8 +198,7 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
     showInspectorRationale: false,
     setShowInspectorRationale: (showInspectorRationale) => set({ showInspectorRationale }),
 
-    explanationLevel: "intermediate",
-    setExplanationLevel: (explanationLevel) => set({ explanationLevel }),
+    explanationLevel: "beginner",
 
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),
@@ -244,5 +256,25 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
         generationBaselineSatbTrace: null,
         generationBaselineAuditedSlots: null,
       }),
+
+    inspectorActiveTab: "explanation",
+    setInspectorActiveTab: (inspectorActiveTab) => set({ inspectorActiveTab }),
+
+    aiChatTags: [],
+    addAiChatTags: (incoming) =>
+      set((s) => ({
+        aiChatTags: mergeAiChatTags(s.aiChatTags, incoming),
+      })),
+    removeAiChatTag: (tag) =>
+      set((s) => ({
+        aiChatTags: s.aiChatTags.filter((t) => t !== tag),
+      })),
+    dismissedChatTags: [],
+    dismissChatTag: (tag) =>
+      set((s) =>
+        s.dismissedChatTags.includes(tag)
+          ? s
+          : { dismissedChatTags: [...s.dismissedChatTags, tag] },
+      ),
   }),
 );

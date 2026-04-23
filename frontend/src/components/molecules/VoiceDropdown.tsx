@@ -43,6 +43,51 @@ const VOICE_LABELS: Record<VoiceType, string> = {
   bass: "Bass",
 };
 
+type InstrumentFamily = "Voices" | "Woodwinds" | "Brass" | "Strings";
+
+const FAMILY_ORDER: InstrumentFamily[] = ["Voices", "Woodwinds", "Brass", "Strings"];
+
+function instrumentFamily(name: string): InstrumentFamily {
+  const n = name.toLowerCase();
+  if (/\b(voice|vocal)\b/.test(n) || n.endsWith(" voice")) return "Voices";
+  if (/\b(flute|oboe|clarinet|bassoon|saxophone|sax|piccolo|recorder)\b/.test(n)) return "Woodwinds";
+  if (/\b(trumpet|horn|trombone|tuba|cornet|bugle|flugelhorn)\b/.test(n)) return "Brass";
+  if (/\b(violin|viola|cello|string|guitar|harp|double bass|contrabass|lute)\b/.test(n))
+    return "Strings";
+  return "Strings";
+}
+
+/** Same fragment keys as RiffScoreEditor — small icons in the picker. */
+const INSTRUMENT_IMAGE_MAP: Array<{ keys: string[]; src: string }> = [
+  { keys: ["soprano voice", "soprano"], src: "/instruments/soprano_voice.svg" },
+  { keys: ["flute"], src: "/instruments/flute.svg" },
+  { keys: ["oboe"], src: "/instruments/oboe.svg" },
+  { keys: ["violin"], src: "/instruments/violin_i.svg" },
+  { keys: ["alto voice", "alto"], src: "/instruments/alto_voice.svg" },
+  { keys: ["clarinet"], src: "/instruments/clarinet.svg" },
+  { keys: ["viola"], src: "/instruments/viola.svg" },
+  { keys: ["french horn", "horn"], src: "/instruments/french_horn.svg" },
+  { keys: ["tenor voice", "tenor"], src: "/instruments/tenor_voice.svg" },
+  { keys: ["trumpet"], src: "/instruments/trumpet.svg" },
+  { keys: ["cello"], src: "/instruments/cello.svg" },
+  { keys: ["trombone"], src: "/instruments/trombone.svg" },
+  { keys: ["bass voice", "bass"], src: "/instruments/bass_voice.svg" },
+  { keys: ["bassoon"], src: "/instruments/bassoon.svg" },
+  { keys: ["double bass", "contrabass"], src: "/instruments/double_bass.svg" },
+  { keys: ["tuba"], src: "/instruments/tuba.svg" },
+];
+
+function instrumentIconSrc(name: string): string | null {
+  const n = name.toLowerCase();
+  const sorted = [...INSTRUMENT_IMAGE_MAP].sort(
+    (a, b) => Math.max(...b.keys.map((k) => k.length)) - Math.max(...a.keys.map((k) => k.length)),
+  );
+  for (const entry of sorted) {
+    if (entry.keys.some((k) => n.includes(k))) return entry.src;
+  }
+  return null;
+}
+
 export interface VoiceDropdownProps {
   voice: VoiceType;
   instruments: string[];
@@ -197,55 +242,82 @@ export const VoiceDropdown = React.forwardRef<
           )}
           style={{ backgroundColor: "var(--hf-bg)" }}
         >
-          {instruments.map((instrument) => {
-            const isSelected = selected.includes(instrument);
+          {FAMILY_ORDER.map((family) => {
+            const items = instruments.filter((i) => instrumentFamily(i) === family);
+            if (items.length === 0) return null;
             return (
-              <div
-                key={instrument}
-                role="option"
-                tabIndex={0}
-                aria-selected={isSelected}
-                onClick={() => onToggle(instrument)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onToggle(instrument);
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-[10px] px-[16px] py-[10px]",
-                  "cursor-pointer",
-                  "transition-colors duration-100",
-                  "hover:bg-[var(--hf-surface)]/5",
-                  "focus-visible:outline-none focus-visible:bg-[var(--hf-surface)]/10",
-                )}
-              >
-                {/* Checkmark — visible when selected */}
-                <Check
-                  className={cn(
-                    "w-[14px] h-[14px] shrink-0 transition-opacity duration-150",
-                    isSelected ? "opacity-100" : "opacity-0",
-                  )}
-                  style={{ color: styles.textColor }}
-                  aria-hidden="true"
-                  strokeWidth={2.5}
-                />
-                <div className="flex flex-col gap-[2px] min-w-0">
-                  <span
-                    className="font-mono text-[11px] font-normal leading-none"
-                    style={{ color: "var(--hf-text-primary)" }}
-                  >
-                    {instrument}
-                  </span>
-                  {descriptions?.[instrument] && (
-                    <span
-                      className="font-mono text-[9px] leading-tight opacity-55"
-                      style={{ color: "var(--hf-text-secondary)" }}
-                    >
-                      {descriptions[instrument]}
-                    </span>
-                  )}
+              <div key={family} className="flex flex-col">
+                <div
+                  className="px-[16px] py-[6px] font-mono text-[9px] font-semibold uppercase tracking-wider"
+                  style={{
+                    color: "var(--hf-text-secondary)",
+                    backgroundColor: "color-mix(in srgb, var(--hf-surface) 12%, transparent)",
+                  }}
+                >
+                  {family}
                 </div>
+                {items.map((instrument) => {
+                  const isSelected = selected.includes(instrument);
+                  const src = instrumentIconSrc(instrument);
+                  return (
+                    <div
+                      key={instrument}
+                      role="option"
+                      tabIndex={0}
+                      aria-selected={isSelected}
+                      onClick={() => onToggle(instrument)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onToggle(instrument);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-[10px] px-[16px] py-[10px]",
+                        "cursor-pointer",
+                        "transition-colors duration-100",
+                        "hover:bg-[var(--hf-surface)]/5",
+                        "focus-visible:outline-none focus-visible:bg-[var(--hf-surface)]/10",
+                      )}
+                    >
+                      <Check
+                        className={cn(
+                          "w-[14px] h-[14px] shrink-0 transition-opacity duration-150",
+                          isSelected ? "opacity-100" : "opacity-0",
+                        )}
+                        style={{ color: styles.textColor }}
+                        aria-hidden="true"
+                        strokeWidth={2.5}
+                      />
+                      {src ? (
+                        <img
+                          src={src}
+                          alt=""
+                          className="w-[22px] h-[22px] shrink-0 object-contain opacity-90"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <span className="w-[22px] h-[22px] shrink-0" aria-hidden="true" />
+                      )}
+                      <div className="flex flex-col gap-[2px] min-w-0">
+                        <span
+                          className="font-mono text-[11px] font-normal leading-none"
+                          style={{ color: "var(--hf-text-primary)" }}
+                        >
+                          {instrument}
+                        </span>
+                        {descriptions?.[instrument] && (
+                          <span
+                            className="font-mono text-[9px] leading-tight opacity-55"
+                            style={{ color: "var(--hf-text-secondary)" }}
+                          >
+                            {descriptions[instrument]}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

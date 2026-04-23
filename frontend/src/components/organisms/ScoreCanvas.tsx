@@ -20,6 +20,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   selection?: NoteSelection[];
   /** Called when user clicks a note */
   onNoteClick?: (sel: NoteSelection, shiftKey: boolean) => void;
+  /** Editor-native selection (marquee, Ctrl/Cmd+A, shift-range) */
+  onEditorSelectionChange?: (selections: NoteSelection[]) => void;
   /** Pending AI corrections to render as ghost note overlays */
   pendingCorrections?: ScoreCorrection[];
   onAcceptCorrection?: (correctionId: string) => void;
@@ -38,6 +40,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   noteInputPitchLabelEnabled?: boolean;
   /** Dropped notation-panel symbols apply the same tool id as a palette click. */
   onPaletteSymbolDrop?: (toolId: string) => void;
+  /** Commit note-input ghost over a selected rest (pitch + duration handled by parent). */
+  onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
 }
 
 /**
@@ -52,6 +56,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onCanvasClick,
       selection = [],
       onNoteClick,
+      onEditorSelectionChange,
       pendingCorrections,
       onAcceptCorrection,
       onRejectCorrection,
@@ -64,6 +69,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onRiffScoreSessionReady,
       noteInputPitchLabelEnabled = false,
       onPaletteSymbolDrop,
+      onRestInputCommit,
       className,
       ...props
     },
@@ -420,6 +426,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               className="w-full h-full"
               selection={selection}
               onNoteClick={onNoteClick}
+              onEditorSelectionChange={onEditorSelectionChange}
               onError={(e) => handleRiffScoreError(e)}
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={onAcceptCorrection}
@@ -434,6 +441,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
               showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}
+              onRestInputCommit={onRestInputCommit}
             />
           </div>
         )}

@@ -38,8 +38,8 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
         </h2>
       </div>
 
-      {/* Preview Area — RiffScoreEditor when musicXML provided, else placeholder */}
-      <div className="flex-1 relative overflow-hidden bg-[#F8F3EA] dark:bg-[#1A1110] min-h-0">
+      {/* Preview Area — always paper-colored so black notation stays legible (incl. dark app theme). */}
+      <div className="flex-1 relative overflow-hidden min-h-0 bg-[#F8F3EA] [color-scheme:light]">
         {score ? (
           <div ref={previewRootRef} className="absolute inset-0 overflow-auto">
             <RiffScoreEditor

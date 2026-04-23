@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editableScoreToRsScore, riffScoreToEditableScore } from "./riffscoreAdapter";
+import { buildIdMap, editableScoreToRsScore, riffScoreToEditableScore } from "./riffscoreAdapter";
 import type { EditableScore } from "./scoreTypes";
 
 const measure = {
@@ -106,5 +106,48 @@ describe("riffscoreAdapter", () => {
     expect(hf.chords?.length).toBe(2);
     expect(hf.chords?.[0]?.symbol).toBe("Cmaj7");
     expect(hf.chords?.[1]?.symbol).toBe("F7");
+  });
+
+  it("maps viola alto C-clef to RiffScore alto staff (not SATB voice default treble)", () => {
+    const score: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P2",
+          name: "Viola",
+          clef: "alto",
+          measures: [measure],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(score);
+    expect(rs.staves[0]?.clef).toBe("alto");
+  });
+
+  it("buildIdMap maps RiffScore event id (rse-…) for rests to HF note id", () => {
+    const hfScore: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "p1",
+          name: "S",
+          clef: "treble",
+          measures: [
+            {
+              id: "m0",
+              notes: [{ id: "rest-a", pitch: "B4", duration: "q", isRest: true }],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(hfScore);
+    const { rsToHf } = buildIdMap(hfScore, rs);
+    const eventId = rs.staves[0]!.measures[0]!.events[0]!.id;
+    expect(eventId).toMatch(/^rse-rest-a/);
+    expect(rsToHf.get(eventId)).toBe("rest-a");
+    expect(rsToHf.get("rs-rest-a")).toBe("rest-a");
   });
 });
