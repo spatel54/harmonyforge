@@ -10,7 +10,6 @@ import {
   getViolationLabel,
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
-import { DEFAULT_EXPLANATION_LEVEL } from "@/lib/ai/explanationLevel";
 import { parseIntentBlock } from "@/lib/ai/intentRouter";
 import type {
   NoteInsight,
@@ -989,7 +988,7 @@ export function useTheoryInspector() {
             conversationHistory,
             ...(musicalGoal ? { musicalGoal } : {}),
             ...(gate.hasApiKey
-              ? { explanationLevel: DEFAULT_EXPLANATION_LEVEL }
+              ? { explanationLevel: useTheoryInspectorStore.getState().explanationLevel }
               : {}),
           }),
           signal: controller.signal,
@@ -1201,7 +1200,7 @@ export function useTheoryInspector() {
             genre: store.genre,
             violationType,
             scoreContext: scopedScoreContext,
-            explanationLevel: DEFAULT_EXPLANATION_LEVEL,
+            explanationLevel: useTheoryInspectorStore.getState().explanationLevel,
             suggestionExplanationMode: getSuggestionExplanationMode(),
           }),
         });
@@ -1340,7 +1339,7 @@ export function useTheoryInspector() {
             theoryInspectorNoteMode: base.inspectorMode,
             userMessage: `${evidence}\n\n---\n**Response rules** (apply after reading the notation block above):\n${NOTE_EXPLAIN_TUTOR_BRIEF}`,
             scoreSelectionContext: evidence,
-            explanationLevel: DEFAULT_EXPLANATION_LEVEL,
+            explanationLevel: useTheoryInspectorStore.getState().explanationLevel,
           }),
         });
         if (!response.ok) {

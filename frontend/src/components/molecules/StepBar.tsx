@@ -12,7 +12,7 @@ export interface StepBarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const STEPS = [
   { n: 1, label: "Playground", href: "/" },
-  { n: 2, label: "Document", href: "/document" },
+  { n: 2, label: "Arrange", href: "/document" },
   { n: 3, label: "Sandbox", href: "/sandbox" },
 ] as const;
 

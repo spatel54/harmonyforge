@@ -5,6 +5,7 @@ import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
+import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
 
 export type Persona = "auditor" | "tutor" | "stylist";
 export type Genre = "classical" | "jazz" | "pop";
@@ -115,6 +116,10 @@ export interface TheoryInspectorState {
   showInspectorRationale: boolean;
   setShowInspectorRationale: (v: boolean) => void;
 
+  /** Explanation depth sent to the LLM — beginner avoids jargon, professional is terse. */
+  explanationLevel: ExplanationLevel;
+  setExplanationLevel: (level: ExplanationLevel) => void;
+
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
   clearIssueHighlights: () => void;
@@ -179,6 +184,9 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     showInspectorRationale: false,
     setShowInspectorRationale: (showInspectorRationale) => set({ showInspectorRationale }),
+
+    explanationLevel: "intermediate",
+    setExplanationLevel: (explanationLevel) => set({ explanationLevel }),
 
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),

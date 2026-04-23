@@ -19,6 +19,7 @@ import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
 import { resolveStarterPrompts } from "@/lib/ai/starterPrompts";
 import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogyCallout";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
+import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
 
 export interface TheoryInspectorMessage {
   id: string;
@@ -138,6 +139,8 @@ export const TheoryInspectorPanel = React.forwardRef<
     const setShowInspectorRationale = useTheoryInspectorStore(
       (s) => s.setShowInspectorRationale,
     );
+    const explanationLevel = useTheoryInspectorStore((s) => s.explanationLevel);
+    const setExplanationLevel = useTheoryInspectorStore((s) => s.setExplanationLevel);
     const [goalEditing, setGoalEditing] = React.useState(false);
     const [goalDraft, setGoalDraft] = React.useState(musicalGoal);
     React.useEffect(() => {
@@ -342,6 +345,46 @@ export const TheoryInspectorPanel = React.forwardRef<
 
           {/* Spacer — fills remaining width */}
           <div className="flex-1" aria-hidden="true" />
+
+          {/* Explanation level selector */}
+          <div
+            className="flex items-center gap-[2px] rounded-[4px] p-[2px] shrink-0"
+            style={{ backgroundColor: "#00000020" }}
+            role="group"
+            aria-label="Explanation depth"
+          >
+            {(
+              [
+                { level: "beginner" as ExplanationLevel, label: "B" },
+                { level: "intermediate" as ExplanationLevel, label: "S" },
+                { level: "professional" as ExplanationLevel, label: "P" },
+              ] as const
+            ).map(({ level, label }) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setExplanationLevel(level)}
+                aria-pressed={explanationLevel === level}
+                aria-label={`Explanation level: ${level}`}
+                title={
+                  level === "beginner"
+                    ? "Beginner — plain language, terms defined"
+                    : level === "intermediate"
+                      ? "Standard — balanced detail"
+                      : "Professional — dense, assumes theory fluency"
+                }
+                className="flex items-center justify-center w-[20px] h-[20px] rounded-[3px] font-mono text-[9px] font-medium transition-colors"
+                style={{
+                  backgroundColor:
+                    explanationLevel === level ? "var(--hf-accent)" : "transparent",
+                  color:
+                    explanationLevel === level ? "#1a0f0c" : "rgba(255,252,250,0.75)",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {/* CloseBtn — x icon */}
           <button

@@ -44,7 +44,7 @@ const STEPS: StepDef[] = [
     step: 2,
     route: "/document",
     title: "Build your ensemble",
-    body: "Assign voices, select voice types, and add or remove parts. The arrangement engine reads this configuration.",
+    body: "Choose mood, backing density, and instruments for your arrangement. The engine uses these settings to build the harmony.",
     caretSide: "right",
   },
   {

@@ -48,6 +48,7 @@ export interface VoiceDropdownProps {
   instruments: string[];
   selected: string[];
   onToggle: (instrument: string) => void;
+  descriptions?: Record<string, string>;
   className?: string;
 }
 
@@ -60,7 +61,7 @@ export interface VoiceDropdownProps {
 export const VoiceDropdown = React.forwardRef<
   HTMLDivElement,
   VoiceDropdownProps
->(({ voice, instruments, selected, onToggle, className }, ref) => {
+>(({ voice, instruments, selected, onToggle, descriptions, className }, ref) => {
   const [open, setOpen] = React.useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -229,12 +230,22 @@ export const VoiceDropdown = React.forwardRef<
                   aria-hidden="true"
                   strokeWidth={2.5}
                 />
-                <span
-                  className="font-mono text-[11px] font-normal leading-none"
-                  style={{ color: "var(--hf-text-primary)" }}
-                >
-                  {instrument}
-                </span>
+                <div className="flex flex-col gap-[2px] min-w-0">
+                  <span
+                    className="font-mono text-[11px] font-normal leading-none"
+                    style={{ color: "var(--hf-text-primary)" }}
+                  >
+                    {instrument}
+                  </span>
+                  {descriptions?.[instrument] && (
+                    <span
+                      className="font-mono text-[9px] leading-tight opacity-55"
+                      style={{ color: "var(--hf-text-secondary)" }}
+                    >
+                      {descriptions[instrument]}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

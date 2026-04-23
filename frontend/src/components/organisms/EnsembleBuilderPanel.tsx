@@ -21,6 +21,25 @@ const VOICE_INSTRUMENTS: Record<VoiceType, string[]> = {
   bass: ["Bass Voice", "Bassoon", "Double Bass", "Tuba"],
 };
 
+const INSTRUMENT_DESCRIPTIONS: Record<string, string> = {
+  "Soprano Voice": "Highest human voice range",
+  "Flute": "Bright, breathy woodwind — no reed",
+  "Oboe": "Nasal woodwind with double reed",
+  "Violin I": "Highest string, singing tone",
+  "Alto Voice": "Second-highest voice range",
+  "Clarinet": "Warm woodwind, Bb transposing",
+  "Viola": "Mid-range string, mellow tone",
+  "French Horn": "Brass, mellow & warm, F transposing",
+  "Tenor Voice": "Second-lowest voice range",
+  "Trumpet": "Bright brass, Bb transposing",
+  "Cello": "Rich low string, bass clef",
+  "Trombone": "Slide brass, bass range",
+  "Bass Voice": "Lowest voice range",
+  "Bassoon": "Dark, reedy low woodwind",
+  "Double Bass": "Lowest string instrument",
+  "Tuba": "Lowest brass instrument",
+};
+
 const VOICE_ORDER: VoiceType[] = ["soprano", "alto", "tenor", "bass"];
 
 export type Genre = "classical" | "jazz" | "pop";
@@ -80,6 +99,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
   const toggleInstrument = useGenerationConfigStore((s) => s.toggleInstrument);
   const removeInstrument = useGenerationConfigStore((s) => s.removeInstrument);
   const restoreFromStorage = useGenerationConfigStore((s) => s.restoreFromStorage);
+  const reset = useGenerationConfigStore((s) => s.reset);
 
   React.useEffect(() => {
     restoreFromStorage();
@@ -291,10 +311,20 @@ export const EnsembleBuilderPanel = React.forwardRef<
               instruments={VOICE_INSTRUMENTS[voice]}
               selected={selections[voice]}
               onToggle={(instrument) => handleToggle(voice, instrument)}
+              descriptions={INSTRUMENT_DESCRIPTIONS}
             />
           ))}
         </div>
       </section>
+
+      <button
+        type="button"
+        onClick={reset}
+        className="self-start font-mono text-[11px] opacity-60 hover:opacity-90 bg-transparent border-0 p-0 cursor-pointer underline-offset-2 hover:underline"
+        style={{ color: "var(--hf-text-secondary)" }}
+      >
+        Reset to defaults
+      </button>
 
       {/* Divider — Node IPbv5 */}
       <div

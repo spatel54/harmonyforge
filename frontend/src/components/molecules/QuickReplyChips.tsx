@@ -8,10 +8,10 @@ export interface QuickReplyChipsProps extends React.HTMLAttributes<HTMLDivElemen
 }
 
 const DEFAULT_CHIPS = [
-  "Explain this chord",
-  "Why parallel 5th?",
-  "Suggest correction",
-  "Schenker analysis",
+  "Does this sound good together?",
+  "Why did you pick this note?",
+  "What would sound better here?",
+  "Check my voice leading",
 ];
 
 /**
