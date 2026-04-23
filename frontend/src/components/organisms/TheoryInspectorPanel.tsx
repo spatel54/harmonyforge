@@ -51,7 +51,6 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   isStreaming?: boolean;
   /** When set with isStreaming, shows chat typing dots (note-insight streams clear this id). */
   streamingMessageId?: string | null;
-  debugStatus?: string;
   onInputChange?: (value: string) => void;
   onSend?: () => void;
   onChipClick?: (chip: string) => void;
@@ -115,7 +114,6 @@ export const TheoryInspectorPanel = React.forwardRef<
       inputValue = "",
       isStreaming = false,
       streamingMessageId = null,
-      debugStatus,
       onInputChange,
       onSend,
       onChipClick,
@@ -390,19 +388,6 @@ export const TheoryInspectorPanel = React.forwardRef<
             />
           </button>
         </div>
-
-        {debugStatus && (
-          <div
-            className="px-[12px] py-[6px] font-mono text-[10px] leading-tight shrink-0"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--hf-accent) 10%, transparent)",
-              borderBottom: "1px solid var(--hf-detail)",
-              color: "var(--hf-text-primary)",
-            }}
-          >
-            {debugStatus}
-          </div>
-        )}
 
         <div className="flex flex-col flex-1 min-h-0">
           <div

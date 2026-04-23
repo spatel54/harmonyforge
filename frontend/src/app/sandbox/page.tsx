@@ -217,28 +217,34 @@ function TactileSandboxPageInner({
     (s) => s.patchSelectedNoteInsight,
   );
 
+  const [noteExplainToast, setNoteExplainToast] = React.useState<string | null>(null);
+
+  const showInspectorToast = React.useCallback((message: string) => {
+    setNoteExplainToast(message);
+    window.setTimeout(() => setNoteExplainToast(null), 4000);
+  }, []);
+
   const handleAcceptIdeaAction = React.useCallback(
     (action: IdeaAction) => {
       riffSessionRef.current?.flushToZustand();
       const live = useScoreStore.getState().score;
       if (!live) {
-        setInspectorDebugStatus("Could not apply: no score loaded.");
+        showInspectorToast("Could not apply: no score loaded.");
         return;
       }
       const insight = useTheoryInspectorStore.getState().selectedNoteInsight;
       const resolvedNoteId = resolveIdeaActionNoteId(live, action, insight);
       if (!resolvedNoteId) {
-        setInspectorDebugStatus(
+        showInspectorToast(
           `Could not apply: note id "${action.noteId}" not in score. Re-open this note so the tutor sees NOTE_IDS_FOR_IDEA_ACTIONS, or use a summary that names the target staff (e.g. Clarinet).`,
         );
         return;
       }
       const found = getNoteById(live, resolvedNoteId);
       if (!found) {
-        setInspectorDebugStatus("Could not apply: resolved note disappeared.");
+        showInspectorToast("Could not apply: resolved note disappeared.");
         return;
       }
-      setInspectorDebugStatus("");
       logStudyEvent("idea_action_accepted", {
         actionId: action.id,
         noteId: resolvedNoteId,
@@ -263,7 +269,7 @@ function TactileSandboxPageInner({
         },
       });
     },
-    [applyScore, patchSelectedNoteInsight],
+    [applyScore, patchSelectedNoteInsight, showInspectorToast],
   );
 
   const handleRejectIdeaAction = React.useCallback(
@@ -299,7 +305,7 @@ function TactileSandboxPageInner({
         navigate: (path) => router.push(path),
       });
       if (!handled) {
-        setInspectorDebugStatus("Could not apply that action yet — open Document to adjust manually.");
+        showInspectorToast("Could not apply that action yet — open Document to adjust manually.");
         return;
       }
       // Clear the INTENT from the message so the bubble collapses.
@@ -307,7 +313,7 @@ function TactileSandboxPageInner({
         useTheoryInspectorStore.getState().updateMessage(msgId, { intent: null });
       }
     },
-    [router],
+    [router, showInspectorToast],
   );
 
   const handleDismissIntent = React.useCallback(
@@ -341,9 +347,7 @@ function TactileSandboxPageInner({
   const [sandboxIntroOpen, setSandboxIntroOpen] = React.useState(false);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
-  const [noteExplainToast, setNoteExplainToast] = React.useState<string | null>(null);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
-  const [inspectorDebugStatus, setInspectorDebugStatus] = React.useState("");
   const lastExplainedRef = React.useRef<{ noteId: string; at: number } | null>(null);
   /** Prevents runAudit on every score object identity change (RiffScore sync); audit once per inspector open. */
   const auditRunWhileInspectorOpenRef = React.useRef(false);
@@ -1521,21 +1525,14 @@ function TactileSandboxPageInner({
   }, [inspectorScoreFocus]);
 
   const runInspectorNoteExplain = React.useCallback(
-    (sel: NoteSelection, source: "overlay" | "editor") => {
+    (sel: NoteSelection) => {
       if (!isInspectorOpen || !score) return;
-      const partIndex = score.parts.findIndex((part) => part.id === sel.partId);
       const now = Date.now();
       const last = lastExplainedRef.current;
       if (last && last.noteId === sel.noteId && now - last.at < 1200) {
-        setInspectorDebugStatus(
-          `${source} throttled noteId=${sel.noteId} partId=${sel.partId} partIndex=${partIndex}`,
-        );
         return;
       }
       lastExplainedRef.current = { noteId: sel.noteId, at: now };
-      setInspectorDebugStatus(
-        `${source} noteId=${sel.noteId} partId=${sel.partId} partIndex=${partIndex} invoking explainGeneratedNote`,
-      );
       void explainGeneratedNote(score, sel.noteId, sel.partId).then((ok) => {
         if (ok) return;
         setNoteExplainToast("Couldn’t open a note explanation for this click.");
@@ -1548,7 +1545,7 @@ function TactileSandboxPageInner({
   const handleEditorSelectionChange = React.useCallback(
     (sels: NoteSelection[]) => {
       setSelection(sels);
-      if (sels.length === 1) runInspectorNoteExplain(sels[0]!, "editor");
+      if (sels.length === 1) runInspectorNoteExplain(sels[0]!);
     },
     [setSelection, runInspectorNoteExplain],
   );
@@ -1556,7 +1553,7 @@ function TactileSandboxPageInner({
   const handleScoreNoteClick = React.useCallback(
     (sel: NoteSelection, shiftKey: boolean) => {
       toggleNoteSelection(sel, shiftKey);
-      runInspectorNoteExplain(sel, "overlay");
+      runInspectorNoteExplain(sel);
     },
     [toggleNoteSelection, runInspectorNoteExplain],
   );
@@ -1854,7 +1851,6 @@ function TactileSandboxPageInner({
               streamingMessageId={inspectorStreamingMessageId}
               noteInsight={selectedNoteInsight}
               inspectorScoreFocus={inspectorScoreFocus}
-              debugStatus={inspectorDebugStatus}
               onClose={() => setIsInspectorOpen(false)}
               suggestionBatches={suggestionBatchMap}
               correctionStatuses={suggestionStore.correctionStatuses}
