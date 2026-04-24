@@ -119,12 +119,13 @@ export function ActionTooltip({
     throw new Error("ActionTooltip expects a single React element child");
   }
 
+  const childProps = children.props as Record<string, unknown>;
   const existingDescribedBy =
     typeof children.props === "object" &&
     children.props !== null &&
     "aria-describedby" in children.props &&
-    typeof (children.props as { "aria-describedby"?: string }).aria-describedby === "string"
-      ? (children.props as { "aria-describedby": string }).aria-describedby
+    typeof childProps["aria-describedby"] === "string"
+      ? (childProps["aria-describedby"] as string)
       : undefined;
 
   const describedBy = visible
