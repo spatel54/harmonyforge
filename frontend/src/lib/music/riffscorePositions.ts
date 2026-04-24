@@ -86,6 +86,180 @@ export function mapRiffSelectedNotesToHFSelections(
   return out;
 }
 
+type MeasureBBox = { minX: number; maxX: number; minY: number; maxY: number };
+
+const MEASURE_CLICK_Y_MARGIN = 28;
+
+function resolveMeasureColumnFromCanvasPoint(
+  positions: readonly NotePosition[],
+  mx: number,
+  my: number,
+): number | null {
+  const NOTE_PAD = 14;
+  for (const pos of positions) {
+    if (
+      mx >= pos.x - NOTE_PAD &&
+      mx <= pos.x + pos.w + NOTE_PAD &&
+      my >= pos.y - NOTE_PAD &&
+      my <= pos.y + pos.h + NOTE_PAD
+    ) {
+      return null;
+    }
+  }
+
+  const byM = new Map<number, MeasureBBox>();
+  for (const pos of positions) {
+    const m = pos.selection.measureIndex;
+    const x1 = pos.x - 2;
+    const x2 = pos.x + pos.w + 2;
+    const y1 = pos.y - 6;
+    const y2 = pos.y + pos.h + 6;
+    const cur = byM.get(m);
+    if (!cur) {
+      byM.set(m, { minX: x1, maxX: x2, minY: y1, maxY: y2 });
+    } else {
+      cur.minX = Math.min(cur.minX, x1);
+      cur.maxX = Math.max(cur.maxX, x2);
+      cur.minY = Math.min(cur.minY, y1);
+      cur.maxY = Math.max(cur.maxY, y2);
+    }
+  }
+  if (byM.size === 0) return null;
+
+  let globalMinY = Infinity;
+  let globalMaxY = -Infinity;
+  for (const b of byM.values()) {
+    globalMinY = Math.min(globalMinY, b.minY);
+    globalMaxY = Math.max(globalMaxY, b.maxY);
+  }
+  if (
+    my < globalMinY - MEASURE_CLICK_Y_MARGIN ||
+    my > globalMaxY + MEASURE_CLICK_Y_MARGIN
+  ) {
+    return null;
+  }
+
+  const hits: number[] = [];
+  for (const [m, b] of byM) {
+    if (
+      mx >= b.minX - 8 &&
+      mx <= b.maxX + 8 &&
+      my >= b.minY - MEASURE_CLICK_Y_MARGIN &&
+      my <= b.maxY + MEASURE_CLICK_Y_MARGIN
+    ) {
+      hits.push(m);
+    }
+  }
+  if (hits.length === 1) return hits[0]!;
+  if (hits.length > 1) {
+    let best = hits[0]!;
+    let bestD = Infinity;
+    for (const m of hits) {
+      const b = byM.get(m)!;
+      const cx = (b.minX + b.maxX) / 2;
+      const d = Math.abs(mx - cx);
+      if (d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  const sorted = [...byM.entries()].sort((a, b) => a[1].minX - b[1].minX);
+  for (let i = 0; i < sorted.length; i++) {
+    const [m, b] = sorted[i]!;
+    const left = i === 0 ? b.minX - 48 : (sorted[i - 1]![1].maxX + b.minX) / 2;
+    const right =
+      i === sorted.length - 1 ? b.maxX + 48 : (b.maxX + sorted[i + 1]![1].minX) / 2;
+    if (
+      mx >= left &&
+      mx <= right &&
+      my >= globalMinY - MEASURE_CLICK_Y_MARGIN &&
+      my <= globalMaxY + MEASURE_CLICK_Y_MARGIN
+    ) {
+      return m;
+    }
+  }
+  return null;
+}
+
+function pickPartIdInMeasureColumn(
+  positions: readonly NotePosition[],
+  measureIndex: number,
+  my: number,
+): string | null {
+  type YBox = { minY: number; maxY: number };
+  const byPart = new Map<string, YBox>();
+  for (const pos of positions) {
+    if (pos.selection.measureIndex !== measureIndex) continue;
+    const pid = pos.selection.partId;
+    const y1 = pos.y - 6;
+    const y2 = pos.y + pos.h + 6;
+    const cur = byPart.get(pid);
+    if (!cur) byPart.set(pid, { minY: y1, maxY: y2 });
+    else {
+      cur.minY = Math.min(cur.minY, y1);
+      cur.maxY = Math.max(cur.maxY, y2);
+    }
+  }
+  if (byPart.size === 0) return null;
+
+  const Y_MARGIN = MEASURE_CLICK_Y_MARGIN;
+  const containing: string[] = [];
+  for (const [partId, b] of byPart) {
+    if (my >= b.minY - Y_MARGIN && my <= b.maxY + Y_MARGIN) {
+      containing.push(partId);
+    }
+  }
+  if (containing.length === 1) return containing[0]!;
+  if (containing.length > 1) {
+    let best = containing[0]!;
+    let bestD = Infinity;
+    for (const partId of containing) {
+      const b = byPart.get(partId)!;
+      const cy = (b.minY + b.maxY) / 2;
+      const d = Math.abs(my - cy);
+      if (d < bestD) {
+        bestD = d;
+        best = partId;
+      }
+    }
+    return best;
+  }
+
+  let bestPart: string | null = null;
+  let bestDist = Infinity;
+  for (const [partId, b] of byPart) {
+    const lo = b.minY - Y_MARGIN;
+    const hi = b.maxY + Y_MARGIN;
+    const dist =
+      my >= lo && my <= hi ? 0 : Math.min(Math.abs(my - lo), Math.abs(my - hi));
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestPart = partId;
+    }
+  }
+  return bestPart;
+}
+
+/**
+ * When the user clicks the score canvas in the "gutter" of a measure (not on a notehead/rest bbox),
+ * map the point to a measure index **and** the staff (part) whose vertical band matches the click.
+ * Used to select one instrument’s bar only (not the full vertical slice).
+ */
+export function measurePartFromCanvasPoint(
+  positions: readonly NotePosition[],
+  mx: number,
+  my: number,
+): { measureIndex: number; partId: string } | null {
+  const mi = resolveMeasureColumnFromCanvasPoint(positions, mx, my);
+  if (mi == null) return null;
+  const partId = pickPartIdInMeasureColumn(positions, mi, my);
+  if (!partId) return null;
+  return { measureIndex: mi, partId };
+}
+
 /**
  * Extract note positions from the RiffScore rendered SVG.
  *
@@ -628,6 +802,147 @@ export interface NoteInputPreviewLayout {
   top: number;
 }
 
+const STAFF_LINE_MIN_GAP_PX = 1.5;
+const STAFF_NEAR_HORIZ_EPS = 1.5;
+
+/** One horizontal staff/ledger line: vertical center Y plus the longest segment width at that Y. */
+export type StaffHorizLineCluster = { y: number; maxWidth: number };
+
+type StaffLineWindowCandidate = {
+  ys: number[];
+  meanGap: number;
+  widthSum: number;
+};
+
+/**
+ * Pick five staff line Ys from clustered horizontal `<line>` geometry (top → bottom).
+ * Ledger lines often share spacing with the staff but are shorter; we prefer the 5-line window
+ * with the highest total line width, then break ties with `preferredY` when provided.
+ */
+export function selectMainStaffFiveLineYsFromClusters(
+  clusters: ReadonlyArray<StaffHorizLineCluster>,
+  preferredY?: number,
+): number[] | null {
+  if (clusters.length < 5) return null;
+
+  const cands: StaffLineWindowCandidate[] = [];
+
+  for (let start = 0; start <= clusters.length - 5; start++) {
+    const slice = clusters.slice(start, start + 5);
+    const ys = slice.map((c) => c.y);
+    const g0 = ys[1]! - ys[0]!;
+    const g1 = ys[2]! - ys[1]!;
+    const g2 = ys[3]! - ys[2]!;
+    const g3 = ys[4]! - ys[3]!;
+    const meanGap = (g0 + g1 + g2 + g3) / 4;
+    if (meanGap < 1.2) continue;
+    const maxDev = Math.max(
+      Math.abs(g0 - meanGap),
+      Math.abs(g1 - meanGap),
+      Math.abs(g2 - meanGap),
+      Math.abs(g3 - meanGap),
+    );
+    if (maxDev > Math.max(2, meanGap * 0.45)) continue;
+    const widthSum = slice.reduce((s, c) => s + c.maxWidth, 0);
+    cands.push({ ys, meanGap, widthSum });
+  }
+
+  if (cands.length === 0) {
+    return clusters.slice(0, 5).map((c) => c.y);
+  }
+
+  const maxWidthSum = Math.max(...cands.map((c) => c.widthSum));
+  const widthFloor = maxWidthSum * 0.92;
+  const finalists = cands.filter((c) => c.widthSum >= widthFloor);
+  const pool = finalists.length > 0 ? finalists : cands;
+
+  if (preferredY == null || !Number.isFinite(preferredY)) {
+    pool.sort((a, b) => b.widthSum - a.widthSum || a.ys[0]! - b.ys[0]!);
+    return pool[0]!.ys;
+  }
+
+  let best = pool[0]!;
+  let bestScore = Infinity;
+  for (const c of pool) {
+    const top = c.ys[0]!;
+    const bot = c.ys[4]!;
+    const margin = c.meanGap * 1.5;
+    let geoScore: number;
+    if (preferredY >= top - margin && preferredY <= bot + margin) {
+      geoScore = Math.abs(preferredY - (top + bot) / 2) * 0.1;
+    } else if (preferredY < top) {
+      geoScore = top - preferredY + 1000;
+    } else {
+      geoScore = preferredY - bot + 1000;
+    }
+    const score = geoScore - c.widthSum * 1e-6;
+    if (score < bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best.ys;
+}
+
+function collectStaffHorizLineClusters(
+  staffGroup: Element,
+  containerRect: DOMRectReadOnly,
+): StaffHorizLineCluster[] {
+  const horizLines = [...staffGroup.querySelectorAll("line")].filter((l) => {
+    const y1 = parseFloat(l.getAttribute("y1") || "NaN");
+    const y2 = parseFloat(l.getAttribute("y2") || "NaN");
+    return Number.isFinite(y1) && Number.isFinite(y2) && Math.abs(y1 - y2) < STAFF_NEAR_HORIZ_EPS;
+  });
+
+  const samples = horizLines
+    .map((l) => {
+      const r = l.getBoundingClientRect();
+      const cy = r.top + r.height / 2 - containerRect.top;
+      return { cy, w: Math.max(r.width, 0) };
+    })
+    .filter((s) => Number.isFinite(s.cy));
+
+  samples.sort((a, b) => a.cy - b.cy);
+
+  const clusters: StaffHorizLineCluster[] = [];
+  for (const s of samples) {
+    const last = clusters[clusters.length - 1];
+    if (!last || Math.abs(s.cy - last.y) > STAFF_LINE_MIN_GAP_PX) {
+      clusters.push({ y: s.cy, maxWidth: s.w });
+    } else {
+      last.maxWidth = Math.max(last.maxWidth, s.w);
+    }
+  }
+  return clusters;
+}
+
+function staffLineYsFiveFromStaffGroup(
+  staffGroup: Element,
+  containerRect: DOMRectReadOnly,
+  preferredY?: number,
+): number[] | null {
+  const clusters = collectStaffHorizLineClusters(staffGroup, containerRect);
+  return selectMainStaffFiveLineYsFromClusters(clusters, preferredY);
+}
+
+function getStaffGroupInContainer(
+  container: HTMLElement,
+  staffIndex: number,
+): { staffGroup: Element; containerRect: DOMRectReadOnly } | null {
+  const svg =
+    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
+    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
+    container.querySelector<SVGSVGElement>("svg");
+
+  if (!svg) return null;
+
+  const staffGroups = svg.querySelectorAll("g.staff");
+  const staffGroup = staffGroups[staffIndex];
+  if (!staffGroup) return null;
+
+  return { staffGroup, containerRect: container.getBoundingClientRect() };
+}
+
 /**
  * Finds RiffScore’s pointer-events-none preview notehead and maps its vertical
  * position to scientific pitch using staff line geometry (container coordinates).
@@ -672,37 +987,12 @@ export function findNoteInputPreviewLayout(
     }
     if (!previewEl) continue;
 
-    const horizLines = [...staffGroup.querySelectorAll("line")].filter((l) => {
-      const y1 = parseFloat(l.getAttribute("y1") || "NaN");
-      const y2 = parseFloat(l.getAttribute("y2") || "NaN");
-      return Number.isFinite(y1) && Number.isFinite(y2) && Math.abs(y1 - y2) < 1.5;
-    });
-
-    const lineCenters = horizLines
-      .map((l) => {
-        const r = l.getBoundingClientRect();
-        return r.top + r.height / 2 - containerRect.top;
-      })
-      .sort((a, b) => a - b);
-
-    const lineYsFive: number[] = [];
-    for (const y of lineCenters) {
-      if (
-        lineYsFive.length === 0 ||
-        Math.abs(y - lineYsFive[lineYsFive.length - 1]) > 1.5
-      ) {
-        lineYsFive.push(y);
-      }
-    }
-    if (lineYsFive.length < 5) continue;
-
     const rect = (previewEl as SVGGraphicsElement).getBoundingClientRect();
     const centerY = rect.top + rect.height / 2 - containerRect.top;
-    const pitch = pitchFromStaffGeometry(
-      part.clef,
-      lineYsFive.slice(0, 5),
-      centerY,
-    );
+    const lineYsFive = staffLineYsFiveFromStaffGroup(staffGroup, containerRect, centerY);
+    if (!lineYsFive) continue;
+
+    const pitch = pitchFromStaffGeometry(part.clef, lineYsFive, centerY);
     if (!pitch) continue;
 
     const left = rect.right - containerRect.left + 4;
@@ -718,45 +1008,11 @@ export function findNoteInputPreviewLayout(
 export function staffLineYsFiveInContainer(
   container: HTMLElement,
   staffIndex: number,
+  preferredY?: number,
 ): number[] | null {
-  const svg =
-    container.querySelector<SVGSVGElement>("svg.riff-ScoreCanvas__svg") ??
-    container.querySelector<SVGSVGElement>(".riff-ScoreCanvas svg") ??
-    container.querySelector<SVGSVGElement>("svg");
-
-  if (!svg) return null;
-
-  const staffGroups = svg.querySelectorAll("g.staff");
-  const staffGroup = staffGroups[staffIndex];
-  if (!staffGroup) return null;
-
-  const containerRect = container.getBoundingClientRect();
-
-  const horizLines = [...staffGroup.querySelectorAll("line")].filter((l) => {
-    const y1 = parseFloat(l.getAttribute("y1") || "NaN");
-    const y2 = parseFloat(l.getAttribute("y2") || "NaN");
-    return Number.isFinite(y1) && Number.isFinite(y2) && Math.abs(y1 - y2) < 1.5;
-  });
-
-  const lineCenters = horizLines
-    .map((l) => {
-      const r = l.getBoundingClientRect();
-      return r.top + r.height / 2 - containerRect.top;
-    })
-    .sort((a, b) => a - b);
-
-  const lineYsFive: number[] = [];
-  for (const y of lineCenters) {
-    if (!Number.isFinite(y)) continue;
-    if (
-      lineYsFive.length === 0 ||
-      Math.abs(y - lineYsFive[lineYsFive.length - 1]!) > 1.5
-    ) {
-      lineYsFive.push(y);
-    }
-  }
-  if (lineYsFive.length < 5) return null;
-  return lineYsFive.slice(0, 5);
+  const got = getStaffGroupInContainer(container, staffIndex);
+  if (!got) return null;
+  return staffLineYsFiveFromStaffGroup(got.staffGroup, got.containerRect, preferredY);
 }
 
 /** Center + size for a rest-hover preview notehead (container coordinates). */
@@ -776,11 +1032,16 @@ export function restGhostNoteheadLayoutInContainer(
   staffIndex: number,
   anchorXContainer: number,
   pitch: string,
+  verticalHintY?: number,
 ): RestGhostNoteheadLayout | null {
   if (!Number.isFinite(anchorXContainer)) return null;
   const part = score.parts[staffIndex];
   if (!part) return null;
-  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
+  const lineYsFive = staffLineYsFiveInContainer(
+    container,
+    staffIndex,
+    verticalHintY,
+  );
   if (!lineYsFive) return null;
   const centerY = staffAnchorYForPitch(part.clef, lineYsFive, pitch);
   if (centerY == null || !Number.isFinite(centerY)) return null;
@@ -801,11 +1062,17 @@ export function midStaffDiatonicPitchInContainer(
   staffIndex: number,
 ): string | null {
   const part = score.parts[staffIndex];
-  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
-  if (!part || !lineYsFive) return null;
-  const sorted = [...lineYsFive].sort((a, b) => a - b);
-  if (!Number.isFinite(sorted[0]) || !Number.isFinite(sorted[4])) return null;
-  const midY = (sorted[0]! + sorted[4]!) / 2;
+  const got = getStaffGroupInContainer(container, staffIndex);
+  if (!part || !got) return null;
+
+  const clusters = collectStaffHorizLineClusters(got.staffGroup, got.containerRect);
+  const rough = selectMainStaffFiveLineYsFromClusters(clusters, undefined);
+  if (!rough) return null;
+  const sortedRough = [...rough].sort((a, b) => a - b);
+  if (!Number.isFinite(sortedRough[0]) || !Number.isFinite(sortedRough[4])) return null;
+  const midY = (sortedRough[0]! + sortedRough[4]!) / 2;
+  const lineYsFive =
+    selectMainStaffFiveLineYsFromClusters(clusters, midY) ?? rough;
   return pitchFromStaffGeometry(part.clef, lineYsFive, midY);
 }
 
@@ -823,7 +1090,11 @@ export function pitchAtStaffVerticalInContainer(
   const part = score.parts[staffIndex];
   if (!part) return null;
 
-  const lineYsFive = staffLineYsFiveInContainer(container, staffIndex);
+  const lineYsFive = staffLineYsFiveInContainer(
+    container,
+    staffIndex,
+    centerYContainer,
+  );
   if (!lineYsFive) return null;
 
   return pitchFromStaffGeometry(part.clef, lineYsFive, centerYContainer);

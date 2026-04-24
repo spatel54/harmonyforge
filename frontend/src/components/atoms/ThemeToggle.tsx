@@ -35,7 +35,9 @@ export const ThemeToggle = React.forwardRef<
       ref={ref}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={cn(
-        "relative flex items-center w-[72px] h-[32px] rounded-full p-[1px] transition-colors duration-200",
+        "hf-pressable relative flex items-center w-[72px] h-[32px] rounded-full p-[1px] transition-colors duration-200",
+        "hover:brightness-[1.04] active:brightness-[0.96]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]",
         isDark
           ? "bg-[#2D1817] ring-1 ring-inset ring-[#A55B3766]"
           : "bg-[#C8B8B6] ring-1 ring-inset ring-[#D2B48C]",

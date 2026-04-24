@@ -30,6 +30,13 @@ export type Genre = "classical" | "jazz" | "pop";
  */
 export type RhythmDensity = "chordal" | "mixed" | "flowing";
 
+/**
+ * Bass line rhythm vs inner voices (Iteration 6):
+ * - "follow": bass uses the same rhythmDensity subdivisions as alto/tenor (melody-locked when mixed/flowing).
+ * - "pedal": bass holds one chord-tone per chord slot (slot-long spans) while inner voices keep rhythmDensity.
+ */
+export type BassRhythmMode = "follow" | "pedal";
+
 /** Config for generation: mood + genre affect chord inference/voice-leading; instruments used for MusicXML part names */
 export interface GenerationConfig {
   mood?: "major" | "minor";
@@ -37,6 +44,8 @@ export interface GenerationConfig {
   instruments?: Record<Voice, string[]>;
   /** Optional harmony rhythm density; default "mixed". */
   rhythmDensity?: RhythmDensity;
+  /** Bass independence from melody onsets; default "follow". */
+  bassRhythmMode?: BassRhythmMode;
   /**
    * When true, infer chords from the melody (genre/mood) instead of using chord symbols
    * embedded in the uploaded file.

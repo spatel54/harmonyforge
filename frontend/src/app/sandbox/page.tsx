@@ -33,6 +33,10 @@ import {
   setLineOnSelection,
   setNoteLyric,
   setNoteChordSymbol,
+  applySuggestion,
+  applySuggestions,
+  measureRangeForLocalizedHarmonyRegenerate,
+  spliceHarmonyMeasuresFromAddonScore,
 } from "@/lib/music/scoreUtils";
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
@@ -54,6 +58,7 @@ import { useTheoryInspector } from "@/hooks/useTheoryInspector";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import {
   buildMeasureFocusFacts,
+  buildMeasurePartFocusFacts,
   buildPartFocusFacts,
 } from "@/lib/music/regionExplainContext";
 import {
@@ -61,7 +66,6 @@ import {
   captureGenerationBaseline,
 } from "@/lib/music/theoryInspectorBaseline";
 import { useSuggestionStore } from "@/store/useSuggestionStore";
-import { applySuggestion, applySuggestions } from "@/lib/music/scoreUtils";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { OnboardingOverlay } from "@/components/organisms/OnboardingOverlay";
 import { TheoryInspectorFabHint } from "@/components/organisms/TheoryInspectorFabHint";
@@ -92,6 +96,58 @@ import {
 import { isTypingTarget } from "@/lib/ui/isTypingTarget";
 
 const ENGINE_URL = "";
+
+const INSPECTOR_DOCK_STORAGE_KEY = "hf-inspector-dock";
+const INSPECTOR_FLOAT_POS_KEY = "hf-inspector-float-pos";
+
+const FLOAT_INSPECTOR_DEFAULT_W = 380;
+const FLOAT_INSPECTOR_DEFAULT_H = 560;
+const FLOAT_INSPECTOR_MIN_W = 280;
+const FLOAT_INSPECTOR_MIN_H = 320;
+
+type InspectorFloatResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+function clampInspectorFloatLayout(
+  left: number,
+  top: number,
+  w: number,
+  h: number,
+): { left: number; top: number; width: number; height: number } {
+  const pad = 8;
+  const maxW = window.innerWidth - 2 * pad;
+  const maxH = window.innerHeight - 2 * pad;
+  const width = Math.max(FLOAT_INSPECTOR_MIN_W, Math.min(w, maxW));
+  const height = Math.max(FLOAT_INSPECTOR_MIN_H, Math.min(h, maxH));
+  const leftClamped = Math.min(Math.max(pad, left), window.innerWidth - width - pad);
+  const topClamped = Math.min(Math.max(pad, top), window.innerHeight - height - pad);
+  return { left: leftClamped, top: topClamped, width, height };
+}
+
+function applyFloatResizeDelta(
+  edge: InspectorFloatResizeEdge,
+  dx: number,
+  dy: number,
+  startLeft: number,
+  startTop: number,
+  startW: number,
+  startH: number,
+): { left: number; top: number; w: number; h: number } {
+  let left = startLeft;
+  let top = startTop;
+  let w = startW;
+  let h = startH;
+  if (edge === "e" || edge === "ne" || edge === "se") w = startW + dx;
+  if (edge === "w" || edge === "nw" || edge === "sw") {
+    w = startW - dx;
+    left = startLeft + dx;
+  }
+  if (edge === "s" || edge === "se" || edge === "sw") h = startH + dy;
+  if (edge === "n" || edge === "ne" || edge === "nw") {
+    h = startH - dy;
+    top = startTop + dy;
+  }
+  return { left, top, w, h };
+}
 
 const DURATION_TOOL_ORDER = [
   "duration-32nd",
@@ -353,6 +409,7 @@ function TactileSandboxPageInner({
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
+  const [inspectorDockMode, setInspectorDockMode] = React.useState<"sidebar" | "floating">("sidebar");
   const lastExplainedRef = React.useRef<{ noteId: string; at: number } | null>(null);
   /** Prevents runAudit on every score object identity change (RiffScore sync); audit once per inspector open. */
   const auditRunWhileInspectorOpenRef = React.useRef(false);
@@ -360,6 +417,7 @@ function TactileSandboxPageInner({
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
   const exportPreviewRef = React.useRef<HTMLDivElement | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
+  const notationMode = "edit" as const;
   const [showExpressiveSovereigntyCallout, setShowExpressiveSovereigntyCallout] = React.useState(
     () =>
       typeof window !== "undefined" &&
@@ -383,6 +441,238 @@ function TactileSandboxPageInner({
     }
     setInspectorFabHintLoaded(true);
   }, []);
+
+  React.useEffect(() => {
+    try {
+      if (localStorage.getItem(INSPECTOR_DOCK_STORAGE_KEY) === "floating") {
+        setInspectorDockMode("floating");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const inspectorFloatWrapRef = React.useRef<HTMLDivElement | null>(null);
+  const [inspectorFloatPos, setInspectorFloatPos] = React.useState<{ left: number; top: number } | null>(
+    null,
+  );
+  const [inspectorFloatSize, setInspectorFloatSize] = React.useState({
+    width: FLOAT_INSPECTOR_DEFAULT_W,
+    height: FLOAT_INSPECTOR_DEFAULT_H,
+  });
+  const inspectorFloatPosRef = React.useRef(inspectorFloatPos);
+  inspectorFloatPosRef.current = inspectorFloatPos;
+  const inspectorFloatSizeRef = React.useRef(inspectorFloatSize);
+  inspectorFloatSizeRef.current = inspectorFloatSize;
+
+  const setInspectorDockModePersisted = React.useCallback(
+    (mode: "sidebar" | "floating") => {
+      if (mode === "floating") {
+        setInspectorFloatSize((s) => ({ ...s, width: inspectorWidth }));
+      } else {
+        const fw = inspectorFloatSizeRef.current.width;
+        setInspectorWidth(Math.max(280, Math.min(600, fw)));
+      }
+      setInspectorDockMode(mode);
+      try {
+        localStorage.setItem(INSPECTOR_DOCK_STORAGE_KEY, mode);
+      } catch {
+        /* ignore */
+      }
+    },
+    [inspectorWidth],
+  );
+
+  const inspectorFloatDragRef = React.useRef<{
+    pointerId: number;
+    grabX: number;
+    grabY: number;
+  } | null>(null);
+  const inspectorFloatPosDuringDragRef = React.useRef<{ left: number; top: number } | null>(null);
+  const inspectorFloatResizeRef = React.useRef<{
+    pointerId: number;
+    edge: InspectorFloatResizeEdge;
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+  const inspectorFloatLayoutAfterResizeRef = React.useRef<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (inspectorDockMode !== "floating") return;
+    try {
+      const raw = localStorage.getItem(INSPECTOR_FLOAT_POS_KEY);
+      if (!raw) return;
+      const p = JSON.parse(raw) as { left?: unknown; top?: unknown; width?: unknown; height?: unknown };
+      if (
+        typeof p.left === "number" &&
+        typeof p.top === "number" &&
+        Number.isFinite(p.left) &&
+        Number.isFinite(p.top)
+      ) {
+        setInspectorFloatPos({ left: p.left, top: p.top });
+      }
+      setInspectorFloatSize((prev) => ({
+        width:
+          typeof p.width === "number" && Number.isFinite(p.width) && p.width >= FLOAT_INSPECTOR_MIN_W
+            ? p.width
+            : prev.width,
+        height:
+          typeof p.height === "number" && Number.isFinite(p.height) && p.height >= FLOAT_INSPECTOR_MIN_H
+            ? p.height
+            : prev.height,
+      }));
+    } catch {
+      /* ignore */
+    }
+  }, [inspectorDockMode]);
+
+  const persistInspectorFloatLayout = React.useCallback(
+    (p: { left: number; top: number; width: number; height: number }) => {
+      try {
+        localStorage.setItem(INSPECTOR_FLOAT_POS_KEY, JSON.stringify(p));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  const handleInspectorFloatHeaderPointerDown = React.useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (inspectorDockMode !== "floating") return;
+      const target = e.target as HTMLElement;
+      if (target.closest("button")) return;
+      const wrap = inspectorFloatWrapRef.current;
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const left0 = inspectorFloatPos?.left ?? rect.left;
+      const top0 = inspectorFloatPos?.top ?? rect.top;
+      if (inspectorFloatPos == null) {
+        setInspectorFloatPos({ left: left0, top: top0 });
+      }
+      inspectorFloatDragRef.current = {
+        pointerId: e.pointerId,
+        grabX: e.clientX - left0,
+        grabY: e.clientY - top0,
+      };
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        const d = inspectorFloatDragRef.current;
+        if (!d || ev.pointerId !== d.pointerId) return;
+        const w = wrap.offsetWidth;
+        const h = wrap.offsetHeight;
+        let left = ev.clientX - d.grabX;
+        let top = ev.clientY - d.grabY;
+        const pad = 8;
+        left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
+        top = Math.max(pad, Math.min(top, window.innerHeight - h - pad));
+        const next = { left, top };
+        inspectorFloatPosDuringDragRef.current = next;
+        setInspectorFloatPos(next);
+      };
+      const onUp = (ev: PointerEvent) => {
+        const d = inspectorFloatDragRef.current;
+        if (!d || ev.pointerId !== d.pointerId) return;
+        inspectorFloatDragRef.current = null;
+        try {
+          el.releasePointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onUp);
+        el.removeEventListener("pointercancel", onUp);
+        const last = inspectorFloatPosDuringDragRef.current;
+        inspectorFloatPosDuringDragRef.current = null;
+        if (last) {
+          const { width, height } = inspectorFloatSizeRef.current;
+          persistInspectorFloatLayout({ ...last, width, height });
+        }
+      };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", onUp);
+      el.addEventListener("pointercancel", onUp);
+    },
+    [inspectorDockMode, inspectorFloatPos, persistInspectorFloatLayout],
+  );
+
+  const handleInspectorFloatResizePointerDown = React.useCallback(
+    (edge: InspectorFloatResizeEdge) => (e: React.PointerEvent<HTMLDivElement>) => {
+      if (inspectorDockMode !== "floating") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = inspectorFloatWrapRef.current;
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const left0 = inspectorFloatPosRef.current?.left ?? rect.left;
+      const top0 = inspectorFloatPosRef.current?.top ?? rect.top;
+      if (inspectorFloatPosRef.current == null) {
+        setInspectorFloatPos({ left: left0, top: top0 });
+      }
+      const { width: startW, height: startH } = inspectorFloatSizeRef.current;
+      inspectorFloatResizeRef.current = {
+        pointerId: e.pointerId,
+        edge,
+        startX: e.clientX,
+        startY: e.clientY,
+        startLeft: left0,
+        startTop: top0,
+        startW,
+        startH,
+      };
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        const r = inspectorFloatResizeRef.current;
+        if (!r || ev.pointerId !== r.pointerId) return;
+        const dx = ev.clientX - r.startX;
+        const dy = ev.clientY - r.startY;
+        const raw = applyFloatResizeDelta(
+          r.edge,
+          dx,
+          dy,
+          r.startLeft,
+          r.startTop,
+          r.startW,
+          r.startH,
+        );
+        const c = clampInspectorFloatLayout(raw.left, raw.top, raw.w, raw.h);
+        inspectorFloatLayoutAfterResizeRef.current = c;
+        setInspectorFloatPos({ left: c.left, top: c.top });
+        setInspectorFloatSize({ width: c.width, height: c.height });
+      };
+      const onUp = (ev: PointerEvent) => {
+        const r = inspectorFloatResizeRef.current;
+        if (!r || ev.pointerId !== r.pointerId) return;
+        inspectorFloatResizeRef.current = null;
+        try {
+          el.releasePointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onUp);
+        el.removeEventListener("pointercancel", onUp);
+        const laidOut = inspectorFloatLayoutAfterResizeRef.current;
+        inspectorFloatLayoutAfterResizeRef.current = null;
+        if (laidOut) persistInspectorFloatLayout(laidOut);
+      };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", onUp);
+      el.addEventListener("pointercancel", onUp);
+    },
+    [inspectorDockMode, persistInspectorFloatLayout],
+  );
 
   React.useEffect(() => {
     if (!isInspectorOpen || !inspectorFabHintLoaded) return;
@@ -473,8 +763,10 @@ function TactileSandboxPageInner({
   }, []);
 
   const applyAccidentalToSelection = React.useCallback((accidental: "#" | "b" | "natural") => {
-    if (!score || selection.length === 0) return;
-    const ids = new Set(selection.map((s) => s.noteId));
+    if (!score) return;
+    const ids =
+      riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+    if (ids.size === 0) return;
     const next = cloneScore(score);
     for (const part of next.parts) {
       for (const measure of part.measures) {
@@ -697,7 +989,8 @@ function TactileSandboxPageInner({
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
       } else if (pitchHandlers[toolId] !== undefined && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
         const next = transposeNotes(score, noteIds, pitchHandlers[toolId]);
         applyScore(next);
       } else if (toolId === "pitch-accidental-sharp") {
@@ -973,52 +1266,53 @@ function TactileSandboxPageInner({
     const onKeyDown = (e: KeyboardEvent) => {
       const typing = isTypingTarget(e.target);
       const keyLower = e.key.toLowerCase();
+      const allowEdit = notationMode === "edit";
 
       if (!typing) {
         if (e.key === "Escape") {
           riffSessionRef.current?.editorDeselectAll?.();
           clearSelection();
         }
-        if (e.key === "Delete" || e.key === "Backspace") {
+        if (allowEdit && (e.key === "Delete" || e.key === "Backspace")) {
           if (selection.length > 0 && score) {
             e.preventDefault();
             e.stopPropagation();
             handleToolSelect("edit-delete");
           }
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "z") {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "z") {
           e.preventDefault();
           e.stopPropagation();
           if (e.shiftKey) riffSessionRef.current?.editorRedo();
           else riffSessionRef.current?.editorUndo();
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "y") {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "y") {
           e.preventDefault();
           e.stopPropagation();
           riffSessionRef.current?.editorRedo();
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "c") {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "c") {
           if (selection.length > 0 && score) {
             e.preventDefault();
             e.stopPropagation();
             handleToolSelect("edit-copy");
           }
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "x") {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "x") {
           if (selection.length > 0 && score) {
             e.preventDefault();
             e.stopPropagation();
             handleToolSelect("edit-cut");
           }
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "v") {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "v") {
           if (getClipboard().length > 0 && score) {
             e.preventDefault();
             e.stopPropagation();
             handleToolSelect("edit-paste");
           }
         }
-        if ((e.metaKey || e.ctrlKey) && keyLower === "a" && score) {
+        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "a" && score) {
           e.preventDefault();
           e.stopPropagation();
           const all = score.parts.flatMap((part) =>
@@ -1038,13 +1332,18 @@ function TactileSandboxPageInner({
 
       // 2g.3: MuseScore-style keyboard shortcuts (when not typing in a field/editor text)
       if (typing) return;
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && keyLower === "n") {
-        e.preventDefault();
-        setActiveTool("duration-quarter");
-      }
       if (e.key === "F9" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setIsPaletteOpen((open) => !open);
+      }
+      if (!allowEdit) return;
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && keyLower === "r" && score) {
+        e.preventDefault();
+        setActiveTool(activeTool === "mode-repitch" ? "duration-quarter" : "mode-repitch");
+      }
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && keyLower === "n") {
+        e.preventDefault();
+        setActiveTool("duration-quarter");
       }
       const inputDurationMap: Record<string, "w" | "h" | "q" | "8" | "16" | "32"> = {
         "duration-whole": "w",
@@ -1174,17 +1473,32 @@ function TactileSandboxPageInner({
           moveCursorHorizontally(1);
           return;
         }
-        if (isNoteInputMode && e.key === "ArrowUp") {
+        if ((isNoteInputMode || isRepitchMode) && e.key === "ArrowUp") {
           e.preventDefault();
           moveCursorVertically(-1);
           return;
         }
-        if (isNoteInputMode && e.key === "ArrowDown") {
+        if ((isNoteInputMode || isRepitchMode) && e.key === "ArrowDown") {
           e.preventDefault();
           moveCursorVertically(1);
         }
       }
       if (selection.length > 0 && score) {
+        if (
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          (e.key === "ArrowUp" || e.key === "ArrowDown")
+        ) {
+          const noteIds =
+            riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+          if (noteIds.size >= 2) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            applyScore(transposeNotes(score, noteIds, e.key === "ArrowUp" ? 1 : -1));
+            return;
+          }
+        }
         const key = e.key.toUpperCase();
         let digit: string | null = null;
         if (/^[1-9]$/.test(key)) digit = key;
@@ -1212,7 +1526,8 @@ function TactileSandboxPageInner({
           }
         } else if (["A", "B", "C", "D", "E", "F", "G"].includes(key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
           e.preventDefault();
-          const noteIds = new Set(selection.map((s) => s.noteId));
+          const noteIds =
+            riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
           applyScore(setPitchByLetter(score, noteIds, key));
         } else if (e.key === "," || e.code === "Comma") {
           e.preventDefault();
@@ -1251,6 +1566,8 @@ function TactileSandboxPageInner({
     durationToBeats,
     setCursor,
     setSelection,
+    notationMode,
+    setIsPaletteOpen,
   ]);
 
   React.useEffect(() => {
@@ -1299,13 +1616,14 @@ function TactileSandboxPageInner({
 
   const handleResizeStart = React.useCallback(
     (e: React.MouseEvent) => {
+      if (inspectorDockMode === "floating") return;
       isResizing.current = true;
       startX.current = e.clientX;
       startWidth.current = inspectorWidth;
       document.body.style.userSelect = "none";
       document.body.style.cursor = "col-resize";
     },
-    [inspectorWidth],
+    [inspectorWidth, inspectorDockMode],
   );
 
   React.useEffect(() => {
@@ -1351,6 +1669,7 @@ function TactileSandboxPageInner({
     "duration-16th",
     "duration-32nd",
   ].includes(activeTool ?? "");
+  const isRepitchMode = activeTool === "mode-repitch";
 
   const handleRestInputCommit = React.useCallback(
     (sel: NoteSelection, pitch: string) => {
@@ -1504,17 +1823,117 @@ function TactileSandboxPageInner({
   }, [isInspectorOpen, score, runAudit]);
 
   const handleInspectorSelectMeasure = React.useCallback(
-    (measureIndex: number) => {
+    (measureIndex: number, partId?: string) => {
       if (!score) return;
-      const { lines, noteIds } = buildMeasureFocusFacts(score, measureIndex);
+      const { lines, noteIds } = partId
+        ? buildMeasurePartFocusFacts(score, measureIndex, partId)
+        : buildMeasureFocusFacts(score, measureIndex);
       setInspectorScoreFocus({
         kind: "measure",
         measureIndex,
+        ...(partId ? { partId } : {}),
         evidenceLines: lines,
         noteIds,
       });
     },
     [score, setInspectorScoreFocus],
+  );
+
+  const handleRegenerateHarmonyForRange = React.useCallback(
+    async (startMeasure: number, endMeasure: number) => {
+      riffSessionRef.current?.flushToZustand();
+      const live = useScoreStore.getState().score;
+      if (!live || live.parts.length <= 1) {
+        setNoteExplainToast("Add harmony parts first, or generate from Document.");
+        window.setTimeout(() => setNoteExplainToast(null), 4000);
+        return;
+      }
+      const start = Math.min(startMeasure, endMeasure);
+      const end = Math.max(startMeasure, endMeasure);
+      const cfg = useGenerationConfigStore.getState();
+      const xml = scoreToMusicXML(live);
+      try {
+        const res = await fetch("/api/generate-harmony-range", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            musicXml: xml,
+            startMeasure: start,
+            endMeasure: end,
+            config: {
+              mood: cfg.mood,
+              genre: "classical",
+              rhythmDensity: cfg.rhythmDensity,
+              bassRhythmMode: cfg.bassRhythmMode,
+              instruments: cfg.instruments,
+              preferInferredChords: cfg.preferInferredChords,
+              pickupBeats: cfg.pickupBeats ?? undefined,
+            },
+          }),
+        });
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          setNoteExplainToast(
+            typeof err.error === "string" ? err.error : `Harmony regenerate failed (${res.status})`,
+          );
+          window.setTimeout(() => setNoteExplainToast(null), 5000);
+          return;
+        }
+        const outXml = await res.text();
+        const addon = parseMusicXML(outXml);
+        if (!addon) {
+          setNoteExplainToast("Could not parse generated harmony slice.");
+          window.setTimeout(() => setNoteExplainToast(null), 4000);
+          return;
+        }
+        const merged = spliceHarmonyMeasuresFromAddonScore(live, addon, start);
+        if (!merged.ok) {
+          setNoteExplainToast(merged.reason);
+          window.setTimeout(() => setNoteExplainToast(null), 6000);
+          return;
+        }
+        applyScore(merged.score);
+        riffSessionRef.current?.editorDeselectAll?.();
+        clearSelection();
+        const focusAfter = useTheoryInspectorStore.getState().inspectorScoreFocus;
+        if (focusAfter?.kind === "measure") {
+          const s = useScoreStore.getState().score;
+          if (s) {
+            const { lines, noteIds } = focusAfter.partId
+              ? buildMeasurePartFocusFacts(s, focusAfter.measureIndex, focusAfter.partId)
+              : buildMeasureFocusFacts(s, focusAfter.measureIndex);
+            setInspectorScoreFocus({
+              ...focusAfter,
+              evidenceLines: lines,
+              noteIds,
+            });
+          }
+        }
+        if (merged.partialMerge && merged.skippedHarmonyPartNames?.length) {
+          setNoteExplainToast(
+            `Harmony updated for bars ${start + 1}–${end + 1}; unchanged staves: ${merged.skippedHarmonyPartNames.join(", ")}`,
+          );
+          window.setTimeout(() => setNoteExplainToast(null), 6000);
+        }
+        queueMicrotask(() => {
+          const s = useScoreStore.getState().score;
+          if (!s) return;
+          void captureGenerationBaseline(s, ENGINE_URL).then((payload) => {
+            const stamped = applyOriginalGeneratedPitches(s, payload.harmonyNotePitches);
+            useScoreStore.getState().applyScore(stamped);
+            useTheoryInspectorStore.getState().setGenerationBaseline({
+              harmonyNotePitches: payload.harmonyNotePitches,
+              satbTrace: payload.satbTrace,
+              baselineAuditedSlots: payload.baselineAuditedSlots,
+            });
+          });
+        });
+      } catch {
+        setNoteExplainToast("Harmony regenerate request failed.");
+        window.setTimeout(() => setNoteExplainToast(null), 4000);
+      }
+    },
+    [applyScore, clearSelection, setInspectorScoreFocus],
   );
 
   const handleInspectorSelectPart = React.useCallback(
@@ -1536,10 +1955,10 @@ function TactileSandboxPageInner({
 
   const handleInspectorInferredRegion = React.useCallback(
     (region:
-      | { kind: "measure"; measureIndex: number }
+      | { kind: "measure"; measureIndex: number; partId?: string }
       | { kind: "part"; staffIndex: number }) => {
       if (region.kind === "measure") {
-        handleInspectorSelectMeasure(region.measureIndex);
+        handleInspectorSelectMeasure(region.measureIndex, region.partId);
       } else {
         handleInspectorSelectPart(region.staffIndex);
       }
@@ -1590,7 +2009,8 @@ function TactileSandboxPageInner({
   const clearScoreSelection = React.useCallback(() => {
     riffSessionRef.current?.editorDeselectAll?.();
     clearSelection();
-  }, [clearSelection]);
+    setInspectorScoreFocus(null);
+  }, [clearSelection, setInspectorScoreFocus]);
 
   const handleExport = async (format: string) => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
@@ -1696,11 +2116,11 @@ function TactileSandboxPageInner({
       <AudioUnlockBanner />
       {noteExplainToast && (
         <div
-          className="hf-print-hide fixed bottom-4 left-1/2 -translate-x-1/2 z-[180] px-4 py-2 rounded-lg font-mono text-xs max-w-md text-center shadow-lg border"
+          className="hf-toast-animate hf-print-hide fixed bottom-4 left-1/2 -translate-x-1/2 z-[180] px-4 py-2.5 rounded-xl font-mono text-xs max-w-md text-center shadow-[0_8px_30px_rgba(45,24,23,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.35)] border backdrop-blur-sm"
           style={{
-            backgroundColor: "var(--hf-panel-bg)",
+            backgroundColor: "color-mix(in srgb, var(--hf-panel-bg) 92%, transparent)",
             color: "var(--hf-text-primary)",
-            borderColor: "var(--hf-detail)",
+            borderColor: "color-mix(in srgb, var(--hf-detail) 55%, transparent)",
           }}
           role="status"
         >
@@ -1710,17 +2130,28 @@ function TactileSandboxPageInner({
 
       {!reviewerStudyArm && score && score.parts.length > 1 && showExpressiveSovereigntyCallout && (
         <div
-          className="hf-print-hide flex flex-wrap items-start justify-between gap-2 px-4 py-2 border-b border-[var(--hf-detail)]"
-          style={{ backgroundColor: "var(--hf-surface)" }}
+          className="hf-banner-animate hf-print-hide flex flex-wrap items-start justify-between gap-2 px-4 py-2.5 border-b"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--hf-surface) 82%, var(--hf-bg))",
+            borderColor: "color-mix(in srgb, var(--hf-detail) 45%, transparent)",
+          }}
         >
-          <p className="font-mono text-[11px] max-w-[52rem] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-            <strong style={{ color: "var(--hf-text-primary)" }}>Expressive sovereignty:</strong> HarmonyForge fills in{" "}
-            <strong>chord framework</strong> only—phrasing, dynamics, and articulation stay yours. Use the{" "}
-            <strong>Notation (beta)</strong> panel (F9) to layer expression after harmony.
+          <p
+            className="font-mono text-[11px] sm:text-xs max-w-[52rem] leading-snug font-medium"
+            style={{
+              color: "var(--hf-text-primary)",
+              textShadow:
+                "0 1px 2px color-mix(in srgb, var(--hf-bg) 55%, transparent)",
+            }}
+          >
+            <strong className="font-semibold">Expressive sovereignty:</strong> HarmonyForge fills in{" "}
+            <strong className="font-semibold">chord framework</strong> only—phrasing, dynamics, and articulation stay
+            yours. Use the <strong className="font-semibold">Notation (beta)</strong> panel (F9) to layer expression
+            after harmony.
           </p>
           <button
             type="button"
-            className="shrink-0 font-mono text-[11px] underline opacity-80 hover:opacity-100"
+            className="hf-pressable shrink-0 font-mono text-[11px] underline underline-offset-2 opacity-90 hover:opacity-100 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
             style={{ color: "var(--hf-text-primary)" }}
             onClick={() => {
               try {
@@ -1756,20 +2187,23 @@ function TactileSandboxPageInner({
               pendingCorrections={pendingCorrections}
               onAcceptCorrection={handleAcceptCorrection}
               onRejectCorrection={handleRejectCorrection}
-              issueHighlights={issueHighlights}
+              issueHighlights={isInspectorOpen ? issueHighlights : []}
               noteInspectionEnabled={isInspectorOpen}
-              focusHighlightNoteIds={inspectorFocusHighlightNoteIds}
+              enableScoreEditing={notationMode === "edit"}
+              focusHighlightNoteIds={
+                isInspectorOpen ? inspectorFocusHighlightNoteIds : []
+              }
               onInspectorSelectMeasure={
-                isInspectorOpen ? handleInspectorSelectMeasure : undefined
+                scoreForCanvas ? handleInspectorSelectMeasure : undefined
               }
               onInspectorSelectPart={
-                isInspectorOpen ? handleInspectorSelectPart : undefined
+                scoreForCanvas ? handleInspectorSelectPart : undefined
               }
               onInspectorInferredRegion={
-                isInspectorOpen ? handleInspectorInferredRegion : undefined
+                scoreForCanvas ? handleInspectorInferredRegion : undefined
               }
               onRiffScoreSessionReady={handleRiffScoreSessionReady}
-              noteInputPitchLabelEnabled={isNoteInputMode}
+              noteInputPitchLabelEnabled={isNoteInputMode || isRepitchMode}
               onPaletteSymbolDrop={(toolId) => {
                 handleToolSelect(toolId);
               }}
@@ -1827,14 +2261,14 @@ function TactileSandboxPageInner({
                 <ChatFAB onClick={() => setIsInspectorOpen(true)} />
               </div>
             )}
-            {/* Palette panel toggle — shown when the panel is hidden */}
-            {!isPaletteOpen && (
+            {/* Palette panel toggle — shown when the panel is hidden (edit mode only) */}
+            {!isPaletteOpen && notationMode === "edit" && (
               <button
                 type="button"
                 onClick={() => setIsPaletteOpen(true)}
                 title="Show notation panel (F9)"
                 aria-label="Show notation panel (beta)"
-                className="hf-print-hide absolute top-[72px] right-[16px] z-50 flex items-center gap-1.5 h-[32px] px-3 rounded-[6px] border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)] hover:border-[var(--hf-accent)] transition-colors"
+                className="hf-print-hide hf-pressable absolute top-[72px] right-[16px] z-[70] flex items-center gap-1.5 h-[32px] px-3 rounded-[6px] border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)] shadow-sm hover:shadow-md hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,var(--hf-panel-bg))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-canvas-bg)]"
               >
                 <PaletteIcon className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
                 <span className="font-mono text-[11px]" style={{ color: "var(--hf-text-primary)" }}>
@@ -1846,7 +2280,7 @@ function TactileSandboxPageInner({
         </div>
 
         {/* Middle column: Palette panel */}
-        {isPaletteOpen && (
+        {isPaletteOpen && notationMode === "edit" && (
           <SandboxPalettePanel
             className="hf-print-hide"
             hasSelection={selection.length > 0}
@@ -1855,28 +2289,125 @@ function TactileSandboxPageInner({
           />
         )}
 
-        {/* Right column: Theory Inspector — resizable */}
+        {/* Theory Inspector — sidebar (resizable) or floating card */}
         {isInspectorOpen && (
           <div
+            ref={inspectorDockMode === "floating" ? inspectorFloatWrapRef : undefined}
             data-coachmark="step-4"
-            className="hf-print-hide relative shrink-0 h-full overflow-hidden flex"
-            style={{ width: inspectorWidth }}
+            className={
+              inspectorDockMode === "floating"
+                ? `hf-print-hide hf-inspector-enter-float fixed z-[100] flex flex-col rounded-[6px] overflow-visible shadow-2xl border${
+                    inspectorFloatPos == null ? " bottom-5 right-5" : ""
+                  }`
+                : "hf-print-hide hf-inspector-enter-sidebar relative shrink-0 h-full overflow-hidden flex"
+            }
+            style={{
+              width: inspectorDockMode === "floating" ? inspectorFloatSize.width : inspectorWidth,
+              height: inspectorDockMode === "floating" ? inspectorFloatSize.height : undefined,
+              borderColor: "var(--hf-detail)",
+              backgroundColor: "var(--hf-panel-bg)",
+              ...(inspectorDockMode === "floating" && inspectorFloatPos != null
+                ? {
+                    left: inspectorFloatPos.left,
+                    top: inspectorFloatPos.top,
+                    right: "auto",
+                    bottom: "auto",
+                  }
+                : {}),
+            }}
           >
-            {/* Drag handle — left edge */}
-            <div
-              className="absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-10 group"
-              onMouseDown={handleResizeStart}
-              title="Drag to resize"
-            >
-              {/* Visual indicator on hover */}
+            {inspectorDockMode === "floating" && (
+              <>
+                <div
+                  className="absolute -top-1.5 left-4 right-4 h-3 z-[110] cursor-ns-resize touch-none rounded-sm hover:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]"
+                  onPointerDown={handleInspectorFloatResizePointerDown("n")}
+                  title="Resize height"
+                  role="separator"
+                  aria-orientation="horizontal"
+                />
+                <div
+                  className="absolute -bottom-1.5 left-4 right-4 h-3 z-[110] cursor-ns-resize touch-none rounded-sm hover:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]"
+                  onPointerDown={handleInspectorFloatResizePointerDown("s")}
+                  title="Resize height"
+                  role="separator"
+                  aria-orientation="horizontal"
+                />
+                <div
+                  className="absolute -left-1.5 top-4 bottom-4 w-3 z-[110] cursor-ew-resize touch-none rounded-sm hover:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]"
+                  onPointerDown={handleInspectorFloatResizePointerDown("w")}
+                  title="Resize width"
+                  role="separator"
+                  aria-orientation="vertical"
+                />
+                <div
+                  className="absolute -right-1.5 top-4 bottom-4 w-3 z-[110] cursor-ew-resize touch-none rounded-sm hover:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]"
+                  onPointerDown={handleInspectorFloatResizePointerDown("e")}
+                  title="Resize width"
+                  role="separator"
+                  aria-orientation="vertical"
+                />
+                <div
+                  className="absolute -left-1 -top-1 z-[110] h-4 w-4 cursor-nwse-resize touch-none"
+                  onPointerDown={handleInspectorFloatResizePointerDown("nw")}
+                  title="Resize"
+                  aria-hidden
+                />
+                <div
+                  className="absolute -right-1 -top-1 z-[110] h-4 w-4 cursor-nesw-resize touch-none"
+                  onPointerDown={handleInspectorFloatResizePointerDown("ne")}
+                  title="Resize"
+                  aria-hidden
+                />
+                <div
+                  className="absolute -left-1 -bottom-1 z-[110] h-4 w-4 cursor-nesw-resize touch-none"
+                  onPointerDown={handleInspectorFloatResizePointerDown("sw")}
+                  title="Resize"
+                  aria-hidden
+                />
+                <div
+                  className="absolute -right-1 -bottom-1 z-[110] h-4 w-4 cursor-nwse-resize touch-none"
+                  onPointerDown={handleInspectorFloatResizePointerDown("se")}
+                  title="Resize"
+                  aria-hidden
+                />
+              </>
+            )}
+            {inspectorDockMode === "sidebar" && (
               <div
-                className="absolute left-[2px] top-[50%] -translate-y-[50%] w-[1px] h-[40px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ backgroundColor: "var(--hf-accent)" }}
-              />
-            </div>
+                className="absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-10 group"
+                onMouseDown={handleResizeStart}
+                title="Drag to resize"
+              >
+                <div
+                  className="absolute left-[2px] top-[50%] -translate-y-[50%] w-[1px] h-[40px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: "var(--hf-accent)" }}
+                />
+              </div>
+            )}
 
-            <TheoryInspectorPanel
-              className="h-full flex-1"
+            <div
+              className={
+                inspectorDockMode === "floating"
+                  ? "flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden rounded-[6px] h-full"
+                  : "contents"
+              }
+            >
+              <TheoryInspectorPanel
+                className={
+                  inspectorDockMode === "floating" ? "h-full min-h-0 flex-1" : "h-full flex-1"
+                }
+                inspectorDockMode={inspectorDockMode}
+                onInspectorDockModeChange={setInspectorDockModePersisted}
+                floatingHeaderDrag={
+                  inspectorDockMode === "floating"
+                    ? {
+                        onPointerDown: handleInspectorFloatHeaderPointerDown,
+                        className: "cursor-grab active:cursor-grabbing select-none",
+                        title:
+                          "Drag header to move. Drag edges or corners to resize. Dock, Float, and Close still click normally.",
+                      }
+                    : undefined
+                }
               messages={inspectorMessages}
               inputValue={inspectorInputValue}
               onInputChange={setInspectorInputValue}
@@ -1910,12 +2441,11 @@ function TactileSandboxPageInner({
                 score
                   ? (payload) => {
                       if (payload.scope === "measure") {
-                        // Phase 3: localized bar regenerate — backend not wired; log + stylist region suggest.
-                        console.info(
-                          "[harmonyforge] Regenerate bar (stub)",
+                        const { startMeasure, endMeasure } = measureRangeForLocalizedHarmonyRegenerate(
+                          useToolStore.getState().selection,
                           payload.measureIndex,
-                          payload.lockedPitches,
                         );
+                        void handleRegenerateHarmonyForRange(startMeasure, endMeasure);
                       }
                       void requestRegionSuggestion(score);
                     }
@@ -1923,7 +2453,9 @@ function TactileSandboxPageInner({
               }
               onApplyIntent={handleApplyIntent}
               onDismissIntent={handleDismissIntent}
-            />
+              editorSelection={selection}
+              />
+            </div>
           </div>
         )}
       </div>

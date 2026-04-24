@@ -366,6 +366,44 @@ describe("File pipeline", () => {
     expect(countNotes(flowingXml, "P2")).toBeGreaterThan(countNotes(chordalXml, "P2"));
   });
 
+  it("bassRhythmMode='pedal' yields fewer bass attacks than inner voices with rhythmDensity='mixed'", () => {
+    const parsed: ParsedScore = {
+      key: { tonic: "C", mode: "major" },
+      melody: [
+        { pitch: "C5", beat: 0, duration: 0.5 },
+        { pitch: "D5", beat: 0.5, duration: 0.5 },
+        { pitch: "E5", beat: 1, duration: 1 },
+        { pitch: "F5", beat: 2, duration: 2 },
+      ],
+      timeSignature: { beats: 4, beatType: 4 },
+      totalBeats: 4,
+      totalMeasures: 1,
+    };
+    const withChords = ensureChords(parsed);
+    const result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+    expect(result).not.toBeNull();
+    const countPitches = (xml: string, partId: string): number => {
+      const body = xml.match(new RegExp(`<part id="${partId}">[\\s\\S]*?</part>`))?.[0] ?? "";
+      return (body.match(/<pitch>/g) ?? []).length;
+    };
+    const pedalXml = satbToMusicXML(result!, undefined, withChords, {
+      format: "partwise",
+      rhythmDensity: "mixed",
+      bassRhythmMode: "pedal",
+    });
+    const followXml = satbToMusicXML(result!, undefined, withChords, {
+      format: "partwise",
+      rhythmDensity: "mixed",
+      bassRhythmMode: "follow",
+    });
+    expect(countPitches(pedalXml, "P4")).toBeLessThan(countPitches(followXml, "P4"));
+    expect(countPitches(pedalXml, "P2")).toBe(countPitches(followXml, "P2"));
+  });
+
   it("anacrusis: ensureChords skips chord placement inside the pickup", () => {
     const parsed: ParsedScore = {
       key: { tonic: "C", mode: "major" },

@@ -256,6 +256,8 @@ export function editableScoreToRiffConfig(
   options?: {
     theme?: "DARK" | "LIGHT";
     scale?: number;
+    /** Defaults to `true`. When `false`, score is display/playback only (no note editing or typing on canvas). */
+    enableScoreEditing?: boolean;
     /** Defaults to `true`. Set `false` to hide the RiffScore toolbar (export/print capture). */
     showToolbar?: boolean;
     toolbarPlugins?: Array<{
@@ -277,6 +279,7 @@ export function editableScoreToRiffConfig(
   const timeSignature = firstMeasure?.timeSignature ?? "4/4";
   const keySignature = hfKeySigToRs(firstMeasure?.keySignature);
   const showToolbar = options?.showToolbar ?? true;
+  const editing = options?.enableScoreEditing ?? true;
 
   // `toolbarPlugins` is injected into RiffScore's UI config by patch-package
   // (see frontend/patches/riffscore+*.patch). Upstream types do not yet declare
@@ -294,8 +297,8 @@ export function editableScoreToRiffConfig(
   const base: Partial<RiffScoreConfig> = {
     ui,
     interaction: {
-      isEnabled: true,
-      enableKeyboard: true,
+      isEnabled: editing,
+      enableKeyboard: editing,
       enablePlayback: true,
     },
     score: {

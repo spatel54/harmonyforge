@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
+import Image from "next/image";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VoiceType } from "@/components/atoms/PartChip";
@@ -50,8 +51,9 @@ const FAMILY_ORDER: InstrumentFamily[] = ["Voices", "Woodwinds", "Brass", "Strin
 function instrumentFamily(name: string): InstrumentFamily {
   const n = name.toLowerCase();
   if (/\b(voice|vocal)\b/.test(n) || n.endsWith(" voice")) return "Voices";
-  if (/\b(flute|oboe|clarinet|bassoon|saxophone|sax|piccolo|recorder)\b/.test(n)) return "Woodwinds";
-  if (/\b(trumpet|horn|trombone|tuba|cornet|bugle|flugelhorn)\b/.test(n)) return "Brass";
+  if (/\b(flute|oboe|english horn|clarinet|bassoon|saxophone|sax|piccolo|recorder)\b/.test(n))
+    return "Woodwinds";
+  if (/\b(trumpet|horn|trombone|tuba|euphonium|cornet|bugle|flugelhorn)\b/.test(n)) return "Brass";
   if (/\b(violin|viola|cello|string|guitar|harp|double bass|contrabass|lute)\b/.test(n))
     return "Strings";
   return "Strings";
@@ -290,9 +292,11 @@ export const VoiceDropdown = React.forwardRef<
                         strokeWidth={2.5}
                       />
                       {src ? (
-                        <img
+                        <Image
                           src={src}
                           alt=""
+                          width={22}
+                          height={22}
                           className="w-[22px] h-[22px] shrink-0 object-contain opacity-90"
                           aria-hidden="true"
                         />

@@ -7,18 +7,43 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Mic, Wind, Bell, Music, Music2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useTheme as useNextTheme } from "next-themes";
 import "riffscore/styles.css";
 import type { MusicEditorAPI, Selection as RsSelection } from "riffscore";
+
+function selectEventsInMeasureOnStaff(
+  api: MusicEditorAPI,
+  measureIndex: number,
+  staffIndex: number,
+  eventCount: number,
+) {
+  api.deselectAll();
+  if (eventCount <= 0) {
+    api.select(measureIndex + 1, staffIndex, 0);
+    return;
+  }
+  api.select(measureIndex + 1, staffIndex, 0);
+  for (let e = 1; e < eventCount; e++) {
+    api.addToSelection(measureIndex + 1, staffIndex, e);
+  }
+}
 import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
-import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import { laySummaryForIssueHighlight, type ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import {
+  DEFAULT_NOTE_HIGHLIGHT_PAD,
+  tightNoteHighlightRect,
+} from "@/lib/music/noteHighlightRect";
 import type { NoteSelection } from "@/store/useScoreStore";
 import { useScoreStore } from "@/store/useScoreStore";
+import { useToolStore } from "@/store/useToolStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import {
   editableScoreToRiffConfig,
@@ -39,6 +64,7 @@ import {
   midStaffDiatonicPitchInContainer,
   restGhostNoteheadLayoutInContainer,
   mapRiffSelectedNotesToHFSelections,
+  measurePartFromCanvasPoint,
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
@@ -166,6 +192,28 @@ function restGhostCommitHitBox(
   };
 }
 
+/** Padding around extracted note/rest boxes — matches gutter hit slop in riffscorePositions. */
+const NOTE_OR_REST_CANVAS_HIT_PAD = 14;
+
+function canvasPointHitsAnyNoteOrRest(
+  mx: number,
+  my: number,
+  positions: readonly NotePosition[],
+  pad = NOTE_OR_REST_CANVAS_HIT_PAD,
+): boolean {
+  for (const pos of positions) {
+    if (
+      mx >= pos.x - pad &&
+      mx <= pos.x + pos.w + pad &&
+      my >= pos.y - pad &&
+      my <= pos.y + pos.h + pad
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
   () => import("riffscore").then((mod) => mod.RiffScore),
@@ -187,14 +235,14 @@ export interface RiffScoreEditorProps {
   issueHighlights?: ScoreIssueHighlight[];
   /** Theory Inspector: tint these note ids (measure/part focus), separate from violation highlights */
   focusHighlightNoteIds?: readonly string[];
-  /** User picked a measure in the inspector strip — parent should set Zustand focus + facts */
-  onInspectorSelectMeasure?: (measureIndex: number) => void;
+  /** User picked a measure on the canvas — parent sets Zustand focus + facts (optional part = one staff only). */
+  onInspectorSelectMeasure?: (measureIndex: number, partId?: string) => void;
   /** User picked a staff label — 0-based staff index aligned with score.parts */
   onInspectorSelectPart?: (staffIndex: number) => void;
   /** Multi-select in RiffScore inferred measure- or part-wide focus */
   onInspectorInferredRegion?: (
     region:
-      | { kind: "measure"; measureIndex: number }
+      | { kind: "measure"; measureIndex: number; partId?: string }
       | { kind: "part"; staffIndex: number },
   ) => void;
   /** Exposes flush + RiffScore-native undo/redo for sandbox / Theory Inspector. */
@@ -208,8 +256,10 @@ export interface RiffScoreEditorProps {
    * Never set on export/print roots.
    */
   allowNoteNameLabelsInPresentation?: boolean;
-  /** Present-only flag: hide editor chrome (toolbar, bars strip, fabs) for export/print capture. */
+  /** Present-only flag: hide editor chrome (toolbar, fabs) for export/print capture. */
   presentation?: boolean;
+  /** When false, RiffScore does not accept edits (View mode in sandbox). Default true. */
+  enableScoreEditing?: boolean;
   /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
   onPaletteSymbolDrop?: (toolId: string) => void;
   /** Fired when the RiffScore editor API is ready (e.g. document preview playback). */
@@ -221,6 +271,11 @@ export interface RiffScoreEditorProps {
    * (MuseScore / Noteflight-style). Parent should use the slot’s duration/dots, not a toolbar duration.
    */
   onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
+  /**
+   * Pointer went down on “empty” score canvas (not a note/rest hit, not measure-bar pick).
+   * Parent should clear tool selection, RiffScore selection, and any inspector score focus tint.
+   */
+  onScoreBackgroundInteract?: () => void;
 }
 
 export function RiffScoreEditor({
@@ -244,10 +299,12 @@ export function RiffScoreEditor({
   showNoteNameLabels = false,
   allowNoteNameLabelsInPresentation = false,
   presentation = false,
+  enableScoreEditing = true,
   onPaletteSymbolDrop,
   onEditorApiReady,
   onRiffInstanceId,
   onRestInputCommit,
+  onScoreBackgroundInteract,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -259,15 +316,18 @@ export function RiffScoreEditor({
   notePositionsHoverRef.current = notePositions;
   const onRestInputCommitRef = useRef(onRestInputCommit);
   onRestInputCommitRef.current = onRestInputCommit;
+  const onScoreBackgroundInteractRef = useRef(onScoreBackgroundInteract);
+  onScoreBackgroundInteractRef.current = onScoreBackgroundInteract;
   const [staffLabelLayouts, setStaffLabelLayouts] = useState<StaffLabelLayout[]>([]);
   const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const restHoverGateRef = useRef({
     presentation,
     noteInspectionEnabled,
+    enableScoreEditing,
     isReady,
   });
-  restHoverGateRef.current = { presentation, noteInspectionEnabled, isReady };
+  restHoverGateRef.current = { presentation, noteInspectionEnabled, enableScoreEditing, isReady };
   const hasScore = score != null;
   const [inputPreviewLabel, setInputPreviewLabel] = useState<{
     pitch: string;
@@ -276,9 +336,15 @@ export function RiffScoreEditor({
   } | null>(null);
   /** Pixels to clip from the top of the learner overlay so labels never paint over `.riff-Toolbar`. */
   const [learnerClipTopPx, setLearnerClipTopPx] = useState(0);
+  /** Same inset for theory/selection/focus pills — overlays are sibling to RiffScore and would otherwise paint over the toolbar when scrolling. */
+  const [scoreOverlayClipTopPx, setScoreOverlayClipTopPx] = useState(0);
   /** Mount target for playback scrub (inside `.riff-ScoreEditor__content`, below the toolbar). */
   const [playbackScrubPortalHost, setPlaybackScrubPortalHost] = useState<HTMLElement | null>(null);
   const prevScoreRef = useRef<EditableScore | null>(null);
+  /** HF ids from the last true multi-select; retained while RiffScore reports only the dragged primary note. */
+  const pitchGroupRef = useRef<Set<string>>(new Set());
+  /** Score snapshot at pointerdown for live multi-note pitch drag (propagate vs frozen baseline). */
+  const multiPitchBaselineRef = useRef<EditableScore | null>(null);
 
   const { resolvedTheme } = useNextTheme();
   /** Print / export preview must stay on light “paper” so RiffScore’s black glyphs remain visible. */
@@ -286,9 +352,26 @@ export function RiffScoreEditor({
     presentation || resolvedTheme !== "dark" ? ("LIGHT" as const) : ("DARK" as const);
   const applyScore = useScoreStore((s) => s.applyScore);
 
-  const { pushToRiffScore, getRsToHf, flushToZustand } = useRiffScoreSync(apiRef, score);
+  const getPitchGroupNoteIds = useCallback((): Set<string> => {
+    const fromSel = new Set(selection.map((s) => s.noteId));
+    if (fromSel.size >= 2) {
+      pitchGroupRef.current = new Set(fromSel);
+      return new Set(pitchGroupRef.current);
+    }
+    if (pitchGroupRef.current.size >= 2) return new Set(pitchGroupRef.current);
+    return fromSel;
+  }, [selection]);
+
+  const { pushToRiffScore, getRsToHf, flushToZustand, syncMultiPitchFromBaseline, resetMultiPitchDragSync } =
+    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds);
+  const flushToZustandRef = useRef(flushToZustand);
+  flushToZustandRef.current = flushToZustand;
   const getRsToHfRef = useRef(getRsToHf);
   getRsToHfRef.current = getRsToHf;
+  const syncMultiPitchFromBaselineRef = useRef(syncMultiPitchFromBaseline);
+  syncMultiPitchFromBaselineRef.current = syncMultiPitchFromBaseline;
+  const getPitchGroupNoteIdsRef = useRef(getPitchGroupNoteIds);
+  getPitchGroupNoteIdsRef.current = getPitchGroupNoteIds;
   const selectedNoteIds = useMemo(() => new Set(selection.map((s) => s.noteId)), [selection]);
   const hasSelection = selectedNoteIds.size > 0;
   const focusHighlightSet = useMemo(
@@ -296,6 +379,17 @@ export function RiffScoreEditor({
     [focusHighlightNoteIds],
   );
   const measureCount = score?.parts[0]?.measures.length ?? 0;
+  const notePositionsRef = useRef(notePositions);
+  notePositionsRef.current = notePositions;
+  const issueHighlightsRef = useRef(issueHighlights);
+  issueHighlightsRef.current = issueHighlights;
+  const [issueHighlightTooltip, setIssueHighlightTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const onInspectorSelectMeasureRef = useRef(onInspectorSelectMeasure);
+  onInspectorSelectMeasureRef.current = onInspectorSelectMeasure;
 
   const downloadXml = () => {
     if (!score) return;
@@ -305,13 +399,6 @@ export function RiffScoreEditor({
     anchor.download = "harmony-forge-score.xml";
     anchor.click();
     URL.revokeObjectURL(anchor.href);
-  };
-
-  const runSelectMeasureInRiffScore = (measureIndex: number) => {
-    const api = apiRef.current;
-    if (!api) return;
-    api.select(measureIndex + 1, 0, 0);
-    api.selectAll("measure");
   };
 
   const runSelectStaffInRiffScore = (staffIndex: number) => {
@@ -502,9 +589,10 @@ export function RiffScoreEditor({
             theme: rsTheme,
             toolbarPlugins: presentation ? [] : toolbarPlugins,
             showToolbar: !presentation,
+            enableScoreEditing: presentation ? false : enableScoreEditing,
           })
         : undefined,
-    [score, rsTheme, toolbarPlugins, presentation],
+    [score, rsTheme, toolbarPlugins, presentation, enableScoreEditing],
   );
 
   /**
@@ -538,6 +626,7 @@ export function RiffScoreEditor({
     if (
       gate.presentation ||
       gate.noteInspectionEnabled ||
+      !gate.enableScoreEditing ||
       !scoreHoverRef.current ||
       !gate.isReady ||
       !hasScore
@@ -555,7 +644,7 @@ export function RiffScoreEditor({
       const g = restHoverGateRef.current;
       const commitFn = onRestInputCommitRef.current;
       const s = scoreHoverRef.current;
-      if (!commitFn || g.presentation || g.noteInspectionEnabled || !s || !g.isReady) {
+      if (!commitFn || g.presentation || g.noteInspectionEnabled || !g.enableScoreEditing || !s || !g.isReady) {
         setRestHoverGhost(null);
         return;
       }
@@ -577,7 +666,7 @@ export function RiffScoreEditor({
           if (prev.pitch === pitch) return prev;
           const ax = prev.pos.x + prev.pos.w / 2;
           const ghostLayout = Number.isFinite(ax)
-            ? restGhostNoteheadLayoutInContainer(el, s, si, ax, pitch)
+            ? restGhostNoteheadLayoutInContainer(el, s, si, ax, pitch, my)
             : null;
           return { ...prev, pitch, ghostLayout };
         });
@@ -611,7 +700,7 @@ export function RiffScoreEditor({
         }
         const ax = hit.pos.x + hit.pos.w / 2;
         const ghostLayout = Number.isFinite(ax)
-          ? restGhostNoteheadLayoutInContainer(el, s, hit.staffIndex, ax, pitch)
+          ? restGhostNoteheadLayoutInContainer(el, s, hit.staffIndex, ax, pitch, my)
           : null;
         return { sel: hit.sel, pos: hit.pos, pitch, ghostLayout };
       });
@@ -627,6 +716,12 @@ export function RiffScoreEditor({
       });
     };
 
+    /** Touch has no hover—run one hit-test on contact so the rest ghost appears immediately. */
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      flush(e);
+    };
+
     const onLeave = () => {
       pending = null;
       setRestHoverGhost(null);
@@ -634,17 +729,147 @@ export function RiffScoreEditor({
 
     // Capture: RiffScore may stop propagation on the SVG; we still need moves for rest hit-test.
     el.addEventListener("pointermove", onMove, { capture: true });
+    el.addEventListener("pointerdown", onDown, { capture: true });
     el.addEventListener("pointerleave", onLeave);
     return () => {
       cancelAnimationFrame(raf);
       el.removeEventListener("pointermove", onMove, { capture: true });
+      el.removeEventListener("pointerdown", onDown, { capture: true });
       el.removeEventListener("pointerleave", onLeave);
     };
-  }, [isReady, presentation, noteInspectionEnabled, hasScore]);
+  }, [isReady, presentation, noteInspectionEnabled, enableScoreEditing, hasScore]);
+
+  /** Hover tooltip for Theory Inspector issue tints — pointer-events stay on the score for editing. */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || presentation || issueHighlights.length === 0) {
+      setIssueHighlightTooltip(null);
+      return;
+    }
+    let raf = 0;
+    const flush = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const positions = notePositionsRef.current;
+      for (const h of issueHighlightsRef.current) {
+        const pos = positions.find((p) => p.selection.noteId === h.noteId);
+        if (!pos) continue;
+        const box = tightNoteHighlightRect(pos, DEFAULT_NOTE_HIGHLIGHT_PAD, DEFAULT_NOTE_HIGHLIGHT_PAD);
+        if (
+          mx >= box.left &&
+          mx <= box.left + box.width &&
+          my >= box.top &&
+          my <= box.top + box.height
+        ) {
+          setIssueHighlightTooltip({
+            text: laySummaryForIssueHighlight(h),
+            x: e.clientX,
+            y: e.clientY,
+          });
+          return;
+        }
+      }
+      setIssueHighlightTooltip(null);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        flush(e);
+      });
+    };
+    const onLeave = () => setIssueHighlightTooltip(null);
+    el.addEventListener("pointermove", onMove, { capture: true });
+    el.addEventListener("pointerleave", onLeave);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      el.removeEventListener("pointermove", onMove, { capture: true });
+      el.removeEventListener("pointerleave", onLeave);
+      setIssueHighlightTooltip(null);
+    };
+  }, [presentation, issueHighlights.length, isReady]);
 
   useEffect(() => {
     onRiffInstanceId?.(instanceId);
   }, [instanceId, onRiffInstanceId]);
+
+  /**
+   * Multi-note pitch drag: capture a baseline on pointerdown, sync on RiffScore `score` events so every
+   * selected note moves with the dragged one, then flush once on pointerup.
+   */
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !isReady || presentation) return;
+    let moveRaf = 0;
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      resetMultiPitchDragSync();
+      const toolLen = useToolStore.getState().selection.length;
+      const groupOk = pitchGroupRef.current.size >= 2 || toolLen >= 2;
+      if (!groupOk) {
+        multiPitchBaselineRef.current = null;
+        return;
+      }
+      const live = useScoreStore.getState().score;
+      multiPitchBaselineRef.current = live ? cloneScore(live) : null;
+    };
+    const onMove = (e: PointerEvent) => {
+      if ((e.buttons & 1) === 0) return;
+      const baseline = multiPitchBaselineRef.current;
+      if (!baseline) return;
+      if (moveRaf) return;
+      moveRaf = requestAnimationFrame(() => {
+        moveRaf = 0;
+        const b = multiPitchBaselineRef.current;
+        if (!b) return;
+        const groupIds = getPitchGroupNoteIdsRef.current();
+        if (groupIds.size < 2) return;
+        syncMultiPitchFromBaselineRef.current(b, groupIds);
+      });
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      multiPitchBaselineRef.current = null;
+      resetMultiPitchDragSync();
+      const toolLen = useToolStore.getState().selection.length;
+      if (pitchGroupRef.current.size < 2 && toolLen < 2) return;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => flushToZustandRef.current());
+      });
+    };
+    root.addEventListener("pointerdown", onDown, { capture: true });
+    root.addEventListener("pointermove", onMove, { capture: true });
+    root.addEventListener("pointerup", onUp, { capture: true });
+    return () => {
+      if (moveRaf) cancelAnimationFrame(moveRaf);
+      root.removeEventListener("pointerdown", onDown, { capture: true });
+      root.removeEventListener("pointermove", onMove, { capture: true });
+      root.removeEventListener("pointerup", onUp, { capture: true });
+    };
+  }, [isReady, presentation, resetMultiPitchDragSync]);
+
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !isReady || presentation || !enableScoreEditing) return;
+    let raf = 0;
+    const onScore = () => {
+      const baseline = multiPitchBaselineRef.current;
+      if (!baseline) return;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const groupIds = getPitchGroupNoteIds();
+        if (groupIds.size < 2) return;
+        syncMultiPitchFromBaseline(baseline, groupIds);
+      });
+    };
+    const unsub = api.on("score", onScore);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      unsub();
+    };
+  }, [isReady, presentation, enableScoreEditing, getPitchGroupNoteIds, syncMultiPitchFromBaseline]);
 
   // Acquire the API handle once RiffScore mounts
   useEffect(() => {
@@ -695,9 +920,10 @@ export function RiffScoreEditor({
       editorDeselectAll: () => {
         apiRef.current?.deselectAll();
       },
+      getPitchGroupNoteIds,
     };
     onSessionReady(session);
-  }, [isReady, onSessionReady, flushToZustand]);
+  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds]);
 
   useEffect(() => {
     if (!isReady || !onEditorApiReady) return;
@@ -811,8 +1037,9 @@ export function RiffScoreEditor({
   }, [isReady, score, getRsToHf, showNoteNameLabels]);
 
   useLayoutEffect(() => {
-    if (!showNoteNameLabels || presentation) {
+    if (presentation) {
       setLearnerClipTopPx(0);
+      setScoreOverlayClipTopPx(0);
       return;
     }
     const root = containerRef.current;
@@ -822,11 +1049,14 @@ export function RiffScoreEditor({
       const tb = root.querySelector(".riff-Toolbar");
       if (!tb) {
         setLearnerClipTopPx(0);
+        setScoreOverlayClipTopPx(0);
         return;
       }
       const cr = root.getBoundingClientRect();
       const br = tb.getBoundingClientRect();
-      setLearnerClipTopPx(Math.max(0, Math.round(br.bottom - cr.top)));
+      const clipTop = Math.max(0, Math.round(br.bottom - cr.top));
+      setScoreOverlayClipTopPx(clipTop);
+      setLearnerClipTopPx(showNoteNameLabels ? clipTop : 0);
     };
 
     measure();
@@ -899,16 +1129,27 @@ export function RiffScoreEditor({
 
       const selected = rsSel.selectedNotes;
       if (selected.length === 0) {
+        pitchGroupRef.current = new Set();
         onEditorSelectionChange?.([]);
         return;
       }
 
-      if (noteInspectionEnabled && onInspectorInferredRegion && selected.length > 1) {
+      if (noteInspectionEnabled && onInspectorInferredRegion && selected.length > 1 && score) {
         const m0 = selected[0]!.measureIndex;
         const allSameMeasure = selected.every((n) => n.measureIndex === m0);
-        const staffSet = new Set(selected.map((n) => n.staffIndex));
-        if (allSameMeasure && staffSet.size > 1) {
-          onInspectorInferredRegion({ kind: "measure", measureIndex: m0 });
+        if (allSameMeasure) {
+          const staffSet = new Set(selected.map((n) => n.staffIndex));
+          if (staffSet.size === 1) {
+            const si = selected[0]!.staffIndex;
+            const partId = score.parts[si]?.id;
+            onInspectorInferredRegion({
+              kind: "measure",
+              measureIndex: m0,
+              ...(partId ? { partId } : {}),
+            });
+          } else {
+            onInspectorInferredRegion({ kind: "measure", measureIndex: m0 });
+          }
         } else {
           const s0 = selected[0]!.staffIndex;
           const allSameStaff = selected.every((n) => n.staffIndex === s0);
@@ -921,6 +1162,19 @@ export function RiffScoreEditor({
 
       if (onEditorSelectionChange) {
         const mapped = mapRiffSelectedNotesToHFSelections(score, selected, getRsToHf());
+        const ids = mapped.map((m) => m.noteId);
+        if (ids.length >= 2) {
+          pitchGroupRef.current = new Set(ids);
+        } else if (ids.length === 1) {
+          const id = ids[0]!;
+          if (pitchGroupRef.current.size >= 2 && pitchGroupRef.current.has(id)) {
+            /* keep group — RiffScore often collapses to the dragged primary note */
+          } else {
+            pitchGroupRef.current = new Set(ids);
+          }
+        } else {
+          pitchGroupRef.current = new Set();
+        }
         onEditorSelectionChange(mapped);
         return;
       }
@@ -988,6 +1242,62 @@ export function RiffScoreEditor({
     return unsub;
   }, [isReady, onError]);
 
+  /**
+   * Measure gutter: select full bar on that staff. Empty canvas: dismiss HF + RiffScore selection
+   * and inspector tint (parent `onScoreBackgroundInteract`). Clicks rarely bubble to ScoreCanvas.
+   */
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !isReady || presentation || !score) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as Node | null;
+      if (root.querySelector(".riff-Toolbar")?.contains(t)) return;
+      if (t instanceof Element && t.closest("[data-hf-rest-ghost-root]")) return;
+      if (t instanceof Element && t.closest("button,a,input,textarea,select,[role='button']")) {
+        return;
+      }
+
+      const rect = root.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (enableScoreEditing && measureCount > 0) {
+        const hit = measurePartFromCanvasPoint(notePositionsRef.current, mx, my);
+        if (hit) {
+          const staffIndex = score.parts.findIndex((p) => p.id === hit.partId);
+          if (staffIndex >= 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            const api = apiRef.current;
+            const nEvents =
+              score.parts[staffIndex]?.measures[hit.measureIndex]?.notes.length ?? 0;
+            if (api) {
+              selectEventsInMeasureOnStaff(api, hit.measureIndex, staffIndex, nEvents);
+            }
+            onInspectorSelectMeasureRef.current?.(hit.measureIndex, hit.partId);
+            return;
+          }
+        }
+      }
+
+      const dismiss = onScoreBackgroundInteractRef.current;
+      if (!dismiss) return;
+      const positionsNow = notePositionsRef.current;
+      if (positionsNow.length === 0) return;
+      if (canvasPointHitsAnyNoteOrRest(mx, my, positionsNow)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      dismiss();
+    };
+
+    root.addEventListener("pointerdown", onPointerDown, { capture: true });
+    return () => root.removeEventListener("pointerdown", onPointerDown, { capture: true });
+  }, [isReady, presentation, enableScoreEditing, measureCount, score]);
+
   const onPaletteDragOverCapture = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       if (!onPaletteSymbolDrop) return;
@@ -1019,12 +1329,9 @@ export function RiffScoreEditor({
   // Document preview never passes HF `selection`, so native behavior matches Configuration there.
   // A window-level transpose listener here conflicted with RiffScore when `selection` was set (sandbox).
 
-  const handleKeyDown = useCallback(
-    (_e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Reserved for wrapper-level shortcuts if needed.
-    },
-    [],
-  );
+  const handleKeyDown = useCallback(() => {
+    // Reserved for wrapper-level shortcuts if needed.
+  }, []);
 
   if (!score || !config) return null;
 
@@ -1032,7 +1339,13 @@ export function RiffScoreEditor({
 
   const chordUiOn = Boolean(score && shouldShowChordNotation(score));
 
+  const clipUnderRiffToolbarStyle: CSSProperties | undefined =
+    !presentation && scoreOverlayClipTopPx > 0
+      ? { clipPath: `inset(${scoreOverlayClipTopPx}px 0 0 0)` }
+      : undefined;
+
   return (
+    <>
     <div
       ref={containerRef}
       className={cn(
@@ -1081,6 +1394,13 @@ export function RiffScoreEditor({
           position: relative !important;
           overflow: auto !important;
           min-height: 0 !important;
+          scroll-behavior: smooth !important;
+          overscroll-behavior: contain !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .riffscore-hf-wrapper .riff-ScoreEditor__content {
+            scroll-behavior: auto !important;
+          }
         }
         .riffscore-hf-wrapper .riff-ScoreCanvas {
           background: transparent !important;
@@ -1125,6 +1445,13 @@ export function RiffScoreEditor({
           cursor: grabbing !important;
         }
         /* Toolbar: show caption under native RiffScore tool buttons */
+        /* Keep native toolbar above HF absolute overlays (siblings paint after RiffScore). */
+        .riffscore-hf-wrapper .riff-Toolbar {
+          position: relative !important;
+          z-index: 60 !important;
+          background: var(--hf-bg) !important;
+          box-shadow: 0 1px 0 color-mix(in srgb, var(--hf-detail) 40%, transparent) !important;
+        }
         .riffscore-hf-wrapper .riff-ToolbarButton {
           flex-direction: column !important;
           gap: 1px !important;
@@ -1197,56 +1524,12 @@ export function RiffScoreEditor({
         />
       )}
 
-      {/* Theory Inspector: click bar numbers to focus the whole measure */}
-      {!presentation && noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure && (
-        <div
-          data-hf-inspector-measure-strip
-          className="absolute left-0 right-0 z-[25] flex flex-wrap items-center gap-1 px-2 py-1"
-          style={{
-            top: 48,
-            backgroundColor: "color-mix(in srgb, var(--hf-bg) 92%, transparent)",
-            borderBottom: "1px solid var(--hf-detail)",
-          }}
-          role="toolbar"
-          aria-label="Select measure for Theory Inspector"
-        >
-          <span
-            className="text-[9px] font-medium shrink-0 pr-1"
-            style={{ color: "var(--hf-text-secondary)" }}
-          >
-            Bars
-          </span>
-          {Array.from({ length: measureCount }, (_, i) => (
-            <button
-              key={`m-${i}`}
-              type="button"
-              className="min-w-[22px] h-[22px] rounded text-[10px] font-mono leading-none transition-colors hover:opacity-90"
-              style={{
-                backgroundColor: "var(--hf-detail)",
-                color: "var(--hf-text-primary)",
-                border: "1px solid var(--hf-detail)",
-              }}
-              title={`Focus measure ${i + 1} for chat`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                runSelectMeasureInRiffScore(i);
-                onInspectorSelectMeasure(i);
-              }}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Part names when SVG staff geometry is unavailable */}
       {!presentation && score.parts.length > 0 && !staffLabelsUseOverlay && (
         <div
           className="absolute left-0 right-0 z-[6] px-2 py-1 pointer-events-none"
           style={{
-            top:
-              noteInspectionEnabled && measureCount > 0 && onInspectorSelectMeasure ? 92 : 48,
+            top: 48,
             backgroundColor: "color-mix(in srgb, var(--hf-bg) 94%, transparent)",
             borderBottom: "1px solid var(--hf-detail)",
           }}
@@ -1329,12 +1612,13 @@ export function RiffScoreEditor({
                     boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
                   }}
                 >
-                  <img
+                  <Image
                     src={instrumentImgSrc}
                     alt={part.name}
                     width={28}
                     height={28}
-                    style={{ objectFit: "contain", filter: `drop-shadow(0 0 3px var(--hf-bg))` }}
+                    className="object-contain"
+                    style={{ filter: `drop-shadow(0 0 3px var(--hf-bg))` }}
                     draggable={false}
                   />
                 </span>
@@ -1397,51 +1681,30 @@ export function RiffScoreEditor({
 
       {/* Selection highlights */}
       {notePositions.length > 0 && (
-        <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute inset-0 pointer-events-none z-[1]"
+          style={clipUnderRiffToolbarStyle}
+        >
           {notePositions
             .filter((pos) => selectedIds.has(pos.selection.noteId))
-            .map((pos) => (
-              <div
-                key={pos.selection.noteId}
-                className="absolute rounded pointer-events-none"
-                style={{
-                  left: pos.x - 4,
-                  top: pos.y - 4,
-                  width: pos.w + 8,
-                  height: pos.h + 8,
-                  backgroundColor: "rgba(255, 179, 0, 0.3)",
-                }}
-                aria-hidden="true"
-              />
-            ))}
-        </div>
-      )}
-
-      {noteInspectionEnabled && notePositions.length > 0 && onNoteClick && (
-        <div className="absolute inset-0 z-10">
-          {notePositions.map((pos) => (
-            <button
-              key={`inspect-${pos.selection.noteId}`}
-              type="button"
-              aria-label={`Inspect note ${pos.selection.noteId}`}
-              className="absolute cursor-pointer"
-              style={{
-                left: pos.x - 8,
-                top: pos.y - 10,
-                width: Math.max(pos.w + 16, 20),
-                height: Math.max(pos.h + 16, 24),
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                margin: 0,
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNoteClick(pos.selection, e.shiftKey);
-              }}
-            />
-          ))}
+            .map((pos) => {
+              const r = tightNoteHighlightRect(pos, DEFAULT_NOTE_HIGHLIGHT_PAD, DEFAULT_NOTE_HIGHLIGHT_PAD);
+              return (
+                <div
+                  key={pos.selection.noteId}
+                  className="hf-score-overlay-pill absolute rounded-full pointer-events-none"
+                  style={{
+                    left: r.left,
+                    top: r.top,
+                    width: r.width,
+                    height: r.height,
+                    backgroundColor: "rgba(255, 179, 0, 0.38)",
+                    boxShadow: "0 0 0 1px rgba(255, 179, 0, 0.35)",
+                  }}
+                  aria-hidden="true"
+                />
+              );
+            })}
         </div>
       )}
 
@@ -1595,27 +1858,35 @@ export function RiffScoreEditor({
           containerRef={containerRef}
           onAccept={onAcceptCorrection}
           onReject={onRejectCorrection}
+          overlayClipStyle={clipUnderRiffToolbarStyle}
         />
       )}
 
       {/* Theory issue highlights (Grammarly-style nuance/error tinting) */}
       {issueHighlights.length > 0 && notePositions.length > 0 && (
-        <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute inset-0 pointer-events-none z-[1]"
+          style={clipUnderRiffToolbarStyle}
+        >
           {issueHighlights.map((highlight) => {
             const pos = notePositions.find((p) => p.selection.noteId === highlight.noteId);
             if (!pos) return null;
             const isError = highlight.severity === "error";
+            const r = tightNoteHighlightRect(pos, DEFAULT_NOTE_HIGHLIGHT_PAD, DEFAULT_NOTE_HIGHLIGHT_PAD);
             return (
               <div
                 key={`${highlight.noteId}-${highlight.label}`}
-                className="absolute rounded-sm"
+                className="hf-score-overlay-pill absolute rounded-full"
                 style={{
-                  left: pos.x - 2,
-                  top: pos.y - 2,
-                  width: pos.w + 4,
-                  height: pos.h + 6,
-                  backgroundColor: isError ? "rgba(239, 68, 68, 0.18)" : "rgba(37, 99, 235, 0.16)",
+                  left: r.left,
+                  top: r.top,
+                  width: r.width,
+                  height: r.height,
+                  backgroundColor: isError ? "rgba(239, 68, 68, 0.28)" : "rgba(37, 99, 235, 0.24)",
                   borderBottom: `2px dashed ${isError ? "#ef4444" : "#2563eb"}`,
+                  boxShadow: isError
+                    ? "0 0 0 1px rgba(239, 68, 68, 0.22)"
+                    : "0 0 0 1px rgba(37, 99, 235, 0.2)",
                 }}
                 aria-hidden="true"
               />
@@ -1625,24 +1896,31 @@ export function RiffScoreEditor({
       )}
 
       {focusHighlightSet.size > 0 && notePositions.length > 0 && (
-        <div className="absolute inset-0 pointer-events-none z-[4]">
+        <div
+          className="absolute inset-0 pointer-events-none z-[2]"
+          style={clipUnderRiffToolbarStyle}
+        >
           {notePositions
             .filter((p) => focusHighlightSet.has(p.selection.noteId))
-            .map((pos) => (
-              <div
-                key={`focus-${pos.selection.noteId}`}
-                className="absolute rounded-sm"
-                style={{
-                  left: pos.x - 3,
-                  top: pos.y - 3,
-                  width: pos.w + 6,
-                  height: pos.h + 8,
-                  backgroundColor: "rgba(16, 185, 129, 0.2)",
-                  borderBottom: "2px solid rgba(16, 185, 129, 0.75)",
-                }}
-                aria-hidden="true"
-              />
-            ))}
+            .map((pos) => {
+              const r = tightNoteHighlightRect(pos, DEFAULT_NOTE_HIGHLIGHT_PAD, DEFAULT_NOTE_HIGHLIGHT_PAD);
+              return (
+                <div
+                  key={`focus-${pos.selection.noteId}`}
+                  className="hf-score-overlay-pill absolute rounded-full"
+                  style={{
+                    left: r.left,
+                    top: r.top,
+                    width: r.width,
+                    height: r.height,
+                    backgroundColor: "rgba(16, 185, 129, 0.3)",
+                    borderBottom: "2px solid rgba(16, 185, 129, 0.88)",
+                    boxShadow: "0 0 0 1px rgba(16, 185, 129, 0.2)",
+                  }}
+                  aria-hidden="true"
+                />
+              );
+            })}
         </div>
       )}
 
@@ -1692,5 +1970,26 @@ export function RiffScoreEditor({
           </div>
         )}
     </div>
+    {issueHighlightTooltip
+      ? createPortal(
+          <div
+            role="tooltip"
+            className="hf-hover-tooltip fixed z-[13000] pointer-events-none max-w-[min(240px,calc(100vw-24px))] rounded-lg px-3 py-2 font-sans text-[11px] leading-snug"
+            style={{
+              left: issueHighlightTooltip.x + 12,
+              top: issueHighlightTooltip.y + 12,
+              backgroundColor: "var(--hf-panel-bg)",
+              border: "1px solid color-mix(in srgb, var(--hf-detail) 65%, transparent)",
+              color: "var(--hf-text-primary)",
+              boxShadow:
+                "0 4px 16px color-mix(in srgb, var(--hf-detail) 28%, transparent), 0 12px 40px rgba(45,24,23,0.08)",
+            }}
+          >
+            {issueHighlightTooltip.text}
+          </div>,
+          document.body,
+        )
+      : null}
+    </>
   );
 }

@@ -4,13 +4,10 @@
  * explanations following the Theory Named strategy.
  */
 
-import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
 import type { SuggestionExplanationMode } from "@/lib/study/studyConfig";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 export type Persona = "auditor" | "tutor" | "stylist";
-
-export type { ExplanationLevel };
 
 interface PromptContext {
   genre: string;
@@ -24,8 +21,6 @@ interface PromptContext {
   scoreSelectionContext?: string;
   /** Note-click explain: dual-mode tutor behavior */
   theoryInspectorNoteMode?: TheoryInspectorMode;
-  /** Audience depth; required for live LLM calls from the app */
-  explanationLevel?: ExplanationLevel;
   /**
    * User-stated musical goal for this session (Iter1 §3). When present, every
    * persona must align recommendations to this goal or flag conflicts, rather
@@ -83,31 +78,26 @@ const COMMAND_INTENT_BLOCK = `Actionable-command handling:
   2. Or, if the action is impossible from chat, say so in one sentence and point to the right screen (e.g. "I can’t change the pickup from chat — update it on the Document page before regenerating.").
 - Do NOT silently refuse and do NOT tell the user their request is wrong. If the user's premise contradicts the facts, correct the premise **and** still answer the underlying intent.`;
 
-/** Shared voice: transparent sources, scannable length */
+/**
+ * Single Theory Inspector voice (user research: Iter1–6): actionable and scannable first,
+ * plain language with light glosses for jargon, progression context, no wall of text,
+ * suggestions that include structural/rhythmic options—not only pitch tweaks.
+ */
 const CITATION_AND_BREVITY = `Citation and length (apply in every reply):
 - When you state a **rule, norm, or why something matters in theory**, add **one short source** inline (e.g. Aldwell & Schachter, Open Music Theory, Fux tradition)—**one** source per claim, not a bibliography.
-- Purely factual description of the score from the user message (pitches, rhythms, intervals, voicing) needs **no** citation unless you tie it to a named rule.
-- **Format (default):** use **3–5 bullet lines**, each starting with "- ", **one idea per bullet** (rule or observation + optional single source in that line).
-- **Alternative:** if bullets do not fit, use **at most 4 short sentences** total for the main answer (same content cap).
-- For **multiple distinct violations**, keep the **whole reply** within the same cap (combine into one tight bullet list).
-- **No multi-sentence prose paragraphs** for the main answer—stay inside bullets or the ≤4 short sentences cap.
+- Purely factual description of the score from FACT lines (pitches, rhythms, intervals, voicing) needs **no** citation unless you tie it to a named rule.
+- **Shape:** **2–4 bullet lines**, each starting with "- ", **one idea per bullet**—lead with what helps the user **act** or **decide**. Prefer **fewer, sharper** bullets over exhaustive commentary.
+- **If bullets do not fit:** **at most 3 short sentences** total for the main answer (same cap).
+- **Plain language:** Write for mixed theory backgrounds. The **first time** you use a non-obvious term (e.g. cadence, voice leading, consonance), add **one short gloss in parentheses**—**at most one gloss per bullet**; expand obscure abbreviations once (e.g. SATB). Do not chain glosses.
+- **No lecture:** Avoid dumping a full rule hierarchy or generic “pleasantness” justifications—tie claims to **facts** and **sequential context** where PROGRESSION rules apply.
+- For **multiple distinct violations**, keep the **whole reply** within the same cap.
+- **No multi-sentence prose paragraphs** for the main answer outside the bullet/sentence cap.
+- **Note-inspector** when <<<SUGGESTIONS>>> is required: after the main answer, **2–3 suggestion bullets** (or ≤3 short sentences for that section only). **Each** line pairs **action + reason** (“because” / “so that” / “reason:”) tied to FACTs. Offer **varied** ideas when possible—not only stepwise pitch edits; **duration, rests, spacing, or voicing** count (avoid a narrow counterpoint-only menu).
 - Expand only if the user clearly asks to go deeper.`;
 
-function explanationAudienceBlock(level: ExplanationLevel): string {
-  switch (level) {
-    case "beginner":
-      return `Audience: **Beginner** — thorough but concise: cover what matters without overwhelming. The **first time** you use any academic term (e.g. cadence, resolution, voice leading, consonance), add a **short plain-language gloss in parentheses** right after it. Avoid abbreviations unless you expand them once; **one concept per bullet**; do not assume prior harmony or counterpoint coursework. Respect the bullet / short-sentence caps above—no wall of text.`;
-    case "intermediate":
-      return `Audience: **Intermediate**. Use standard theory vocabulary (chord tones, voice leading, cadence, etc.); relate briefly to common-practice patterns when relevant.`;
-    case "professional":
-      return `Audience: **Professional**. Be dense and precise; assume fluency with Roman numerals, four-part harmony vocabulary, and voice-leading jargon; minimal setup—answer the question directly.`;
-  }
-}
-
-function appendExplanationLevel(ctx: PromptContext): string {
-  if (!ctx.explanationLevel) return "";
-  return `\n\n${explanationAudienceBlock(ctx.explanationLevel)}\n`;
-}
+const THEORY_INSPECTOR_AUDIENCE = `Theory Inspector audience (fixed):
+- Align with **editor focus** and **user-stated musical goal**; if advice conflicts, say so in one short phrase—do not silently contradict intent.
+- Analyze harmony **in time** when facts support it (see Progression-first rules), not as isolated verticals.`;
 
 /**
  * Iteration 3: harmonic explanation must treat progressions as sequences, not isolated verticals.
@@ -116,7 +106,8 @@ const PROGRESSION_CONTEXT_RULES = `Progression-first analysis (when FACT lines i
 - Give **at least one sentence** on **voice motion from the previous chord moment to this one** and, when the facts list a next moment, **what happens next**—not only the vertical at the clicked beat.
 - When **before / this / after** chord moments are present in FACTs, consider **sequential cadential pattern** (authentic, half, deceptive, plagal) **only as a hypothesis** tied to the listed bass and soprano motion—**before** treating the clicked moment as an isolated vertical. If the facts do not support a cadence label, say so briefly.
 - Do **not** justify a chord solely by “pleasantness,” generic consonance, or a vague study citation; tie the moment to **sequential** role when facts support it (approach, prolongation, preparation/resolution, standard bass or melody motion between moments).
-- If Roman numerals or harmonic labels are **not** in the facts, describe motion using **the listed pitches** and progression FACTs only—do not invent a full Roman analysis.`;
+- If Roman numerals or harmonic labels are **not** in the facts, describe motion using **the listed pitches** and progression FACTs only—do not invent a full Roman analysis.
+- For **<<<SUGGESTIONS>>>** and **<<<IDEA_ACTIONS>>>**, when a progression window is present, include **at least one** musically plausible option that addresses **motion between moments** (e.g. passing tone, neighbor, suspension resolution, voice exchange, or rhythmic space)—not only re-spelling the same vertical. **Structural** tweaks (shortening a harmony note, implying a rest, thinning a voice before a cadence) are in-bounds when the facts show rhythm/duration.`;
 
 const TUTOR_CHAT_TAGS_RULE = `Optional **chat tags** (for the app’s tag strip): after <<<SUGGESTIONS>>> / <<<IDEA_ACTIONS>>> blocks, you may add one final line exactly <<<TAGS>>> then a JSON array of **1–4** very short strings (possible follow-up questions), then <<<END_TAGS>>>. Example: <<<TAGS>>>["Try a different tenor pitch","What is the bass doing?"]<<<END_TAGS>>>. Omit entirely if not useful.`;
 
@@ -158,18 +149,11 @@ function theoryInspectorNoteModeRules(mode: TheoryInspectorMode): string {
 /**
  * Build the system prompt for a given persona.
  */
-export function buildSystemPrompt(
-  persona: Persona,
-  ctx: PromptContext,
-): string {
-  switch (persona) {
-    case "auditor":
-      return buildAuditorPrompt(ctx);
-    case "tutor":
-      return buildTutorPrompt(ctx);
-    case "stylist":
-      return buildStylistPrompt(ctx);
-  }
+export function buildSystemPrompt(persona: Persona, ctx: PromptContext): string {
+  if (persona === "auditor") return buildAuditorPrompt(ctx);
+  if (persona === "tutor") return buildTutorPrompt(ctx);
+  if (persona === "stylist") return buildStylistPrompt(ctx);
+  throw new Error(`buildSystemPrompt: invalid persona ${String(persona)}`);
 }
 
 function buildAuditorPrompt(ctx: PromptContext): string {
@@ -185,7 +169,8 @@ ${CITATION_AND_BREVITY}
 ${HONESTY_NO_SYCOPHANCY}
 
 ${COMMAND_INTENT_BLOCK}
-${appendExplanationLevel(ctx)}
+
+${THEORY_INSPECTOR_AUDIENCE}
 Rules:
 - Be transparent: only explain rules present in the provided reference material and deterministic engine checks.
 - Prefer a **single bullet list** for all violations; each bullet: what went wrong, why it matters (one phrase each), optional **short** source when the rule comes from the reference material. Mention **engine / validate-satb-trace** only if it helps trust the flag—not every time.
@@ -202,7 +187,6 @@ function buildTutorPrompt(ctx: PromptContext): string {
   const modeBlock = ctx.theoryInspectorNoteMode
     ? `\n\nNote explain mode (follow strictly):\n${theoryInspectorNoteModeRules(ctx.theoryInspectorNoteMode)}\n`
     : "";
-
   return `You are the HarmonyForge Tutor. You explain what the harmony tools decided and why, in **down-to-earth, conversational** language—like a good teacher at a keyboard, not a textbook wall of text.
 
 Genre context: ${ctx.genre}
@@ -216,7 +200,8 @@ ${CITATION_AND_BREVITY}
 ${HONESTY_NO_SYCOPHANCY}
 
 ${COMMAND_INTENT_BLOCK}
-${appendExplanationLevel(ctx)}
+
+${THEORY_INSPECTOR_AUDIENCE}
 Rules:
 - **Sources:** Whenever you explain **why** a rule exists or what tradition it comes from, add **one** short citation (prefer **Open Music Theory** for how topics are grouped; **Aldwell & Schachter** for strict SATB prohibitions and spacing; **Fux** only when smooth motion or independence is the point). Do **not** stack multiple authors for the same sentence.
 - When you distinguish **what the code checks** (e.g. validate-satb-trace, spacing/range) from **heuristic voicing choice** (solver prefers less total motion—not full Fux species), say so in **one** plain sentence when it matters to the question; skip if the user only asked about sound or intervals.
@@ -228,8 +213,7 @@ Rules:
 - If evidence in the message is thin, say exactly which pieces are missing—not vague uncertainty.
 - If the genre is jazz or pop, one or two sentences on relaxation vs classical; cite OMT when you name a style rule.
 - **Caplin / formal functions:** Do not describe the score as a Caplin-style sentence or period unless structural FACTs or metadata explicitly support it.
-- **Default format:** use the **3–5 bullet** (or ≤4 sentence) cap from Citation and length above for the main explanation—**no** narrative paragraphs outside that cap.
-- **Note-inspector note click:** Put the main answer first using that format; if the user message requires a final line \`<<<SUGGESTIONS>>>\` and short bullets after it, follow that format exactly for the suggestions section only (suggestions do not count toward the main cap). **Each suggestion bullet must state both what to try and why** (tie the reason to FACT lines—use “because” / “so that” / “reason:”).
+- **Format:** Follow **Citation and length** for all chat and note-inspector turns—**2–4 bullets** or **≤3 short sentences** for the main answer; if \`<<<SUGGESTIONS>>>\` is required, use the caps and **action + reason** pairing described there.
 ${TUTOR_CHAT_TAGS_RULE}
 ${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
 }
@@ -268,14 +252,14 @@ export function buildStylistStructuredPrompt(
   const minimalRules =
     ctx.suggestionExplanationMode === "minimal"
       ? `
-- **Minimal-explanation session (required):** For every correction set "rationale" to exactly "" (empty string). Set the top-level "summary" to exactly "" (empty string). Still return accurate noteId, suggestedPitch, and a very short ruleLabel (max 6 words, no punctuation essay). Do not add any other prose fields.
+- **Minimal-explanation session (required):** For every correction set "rationale" to exactly "" (empty string). Set the top-level "summary" to exactly "" (empty string). Still return accurate noteId, suggestedPitch, optional suggestedDuration (null or set), and a very short ruleLabel (max 6 words, no punctuation essay). Do not add any other prose fields.
 `
       : "";
 
   const rationaleRuleLine =
     ctx.suggestionExplanationMode === "minimal"
       ? "- Rationale and summary must be empty strings as stated above."
-      : "- Provide a ruleLabel (short name for the rule) and rationale: **≤2 short sentences** OR **≤3 bullet lines** (plain language). End rationale with **one** source tag when the fix follows a classical norm (e.g. \"Aldwell & Schachter\" or \"Open Music Theory\")—not a paragraph of references.";
+      : "- Provide a ruleLabel (short name, ≤8 words) and rationale: **≤3 short sentences** OR **≤3 bullet lines** (plain language, one idea per line). End rationale with **one** source tag when the fix follows a classical norm (e.g. \"Aldwell & Schachter\" or \"Open Music Theory\")—not a paragraph of references.";
 
   return `You are the HarmonyForge Stylist. You suggest specific pitch corrections to resolve voice-leading violations.
 
@@ -289,14 +273,18 @@ Score context (notes available for correction):
 ${noteList}
 
 ${HONESTY_NO_SYCOPHANCY}
-${appendExplanationLevel(ctx)}
+${CITATION_AND_BREVITY}
+
+${THEORY_INSPECTOR_AUDIENCE}
 ${minimalRules}
 Rules:
-- Suggest 1-3 concrete pitch changes that resolve the violation.
+- Suggest 1-3 concrete corrections that resolve the violation (pitch and/or rhythm).
 - Each correction MUST use a noteId from the list above (e.g. "note_0", "note_1", etc.) — copy the noteId exactly.
 - The suggestedPitch must be in scientific notation (e.g., "A4", "F#3", "Bb2").
+- **suggestedDuration** (field on each correction): use MusicXML-style durations (\`w\`, \`h\`, \`q\`, \`8\`, \`16\`, \`32\`) when changing rhythm helps—**longer** values for breathing room / pedal-like support, **shorter** or adjusted values to thin texture or avoid parallels. Set to **null** to leave duration unchanged. When pitch-only fixes feel narrow or stiff, prefer at least one option that uses **duration or rests** (e.g. shorten a busy voice) instead of only nudging pitch.
 - ${rationaleRuleLine}
 - Do not fabricate notes/rules; if no valid correction is supported by provided context, return zero corrections with a clear summary—state honestly if the fix is **one option** or could **trade off** another voice.
+- When multiple valid interventions exist, **vary the approach** across corrections (not only stepwise pitch edits)—e.g. rhythmic space vs voice-leading tweak.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
 - Be concise and practical.
 ${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;
@@ -316,12 +304,14 @@ Reference material:
 ${ctx.taxonomySection}
 ${musicalGoalBlock(ctx)}
 ${HONESTY_NO_SYCOPHANCY}
-${appendExplanationLevel(ctx)}
+${CITATION_AND_BREVITY}
+
+${THEORY_INSPECTOR_AUDIENCE}
 Rules:
-- Suggest 1-2 concrete pitch changes that resolve the violation.
-- Explain why the fix works with **≤4 short sentences** OR **3–5 bullets** (same cap as Citation and length); mention the rule name (e.g. parallel fifths, spacing) and add **one** short source if it is a classical textbook rule. Mention engine-checked behavior only when it clarifies trust.
+- Suggest 1-2 concrete changes that resolve the violation—**pitch and/or rhythmic** (e.g. longer/shorter written values, thinning a busy line, adding space before a cadence).
+- Explain why the fix works with **≤3 short sentences** OR **2–4 bullets**—mention the rule name (e.g. parallel fifths, spacing) and add **one** short source if it is a classical textbook rule. Mention engine-checked behavior only when it clarifies trust.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.
-- Format suggestions as actionable steps the user can apply in the score editor.
+- Format suggestions as actionable steps the user can apply in the score editor—including **non-pitch** options when they are musically reasonable (rest-like space, sustained tones).
 - If a suggestion is **not** the only musically valid fix, say so in one phrase (e.g. "one common fix").
 - Be concise and practical—no lecture.
 ${PROGRESSION_CONTEXT_RULES}${editorFocusPromptBlock(ctx)}`;

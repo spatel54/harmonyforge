@@ -6,7 +6,11 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)](#wl-ux-team-playground-2026-04-24) — **copy/UI polish** across **`/`** · **`/document`** · **`/sandbox`** · **`/team`**; **team** collapsibles + “how we work together”; **music-stand** hover pulse + **♫**-shaped aureole (no rectangular hover card)
+- [Work log — Team page & global credits (2026-04-23)](#wl-team-credits-2026-04-23) — **`TeamNavButton`** in headers, **`/team`** creator profiles (bios, quotes, **`next/image`**), **`frontend/public/creators/`** headshots
+- [Work log — Iteration 6 (2026-04-23)](#wl-iteration-6-2026-04-23) — **pedal bass engine option + expanded ensembles + Theory Inspector Guided/Concise + tighter prompts + float/dock inspector + Alt+bar measure selection + multi-select chat FACT + localized bar harmony API (`/api/generate-harmony-range`)**
 - [Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23) — **rest ghost hardening + hotkeys dialog + export paper + RiffScore↔HF multi-select + viola alto clef + RiffScore alto/tenor layout patch + CJS/ESM toolbar parity (`pendingClefChange` runtime)**
+- [Work log — Sandbox fluidity, multi-select pitch, inspector resize, UI polish (2026-04-23)](#wl-sandbox-fluidity-2026-04-23) — **multi-note pitch moves together + action bar removed + floating Theory Inspector resize/persist + `hf-pressable` + modal/backdrop/toast motion + less harsh chrome**
 - [Program narrative — MVP + Inspector polish (2026-04-22)](#program-narrative-2026-04-22) — **shipped bundle + lint/QA gaps (superseded for sandbox tranche by 2026-04-23 work log above)**
 - [Work log — Sandbox score UX: hotkeys, reset, rest hover ghost (2026-04-22)](#wl-sandbox-score-ux-2026-04-22) — **MuseScore-style rest replacement without duration tool**
 - [Work log — MVP phase: Document, Sandbox, Theory Inspector (2026-04-22)](#wl-mvp-phase-ship-2026-04-22) — **file-level checklist**
@@ -41,10 +45,21 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
+<a id="last-updated-2026-04-24"></a>
+
+### Last updated (2026-04-24)
+
+- **Cross-surface product copy & Playground music-stand UX:** See **[Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)](#wl-ux-team-playground-2026-04-24)** for **end goal**, **approach**, **file-level steps**, and **current failure / focus**.
+- **Tests:** **`frontend` Vitest** — **273** passing after this tranche (`npm test`).
+- **Program backlog (unchanged):** **Iteration 6** / sandbox polish items in **[Last updated (2026-04-23)](#last-updated-2026-04-23)** (localized range merge, touch, inspector selection drift, export narrow viewport, etc.) — not blocked by this UX slice.
+
 <a id="last-updated-2026-04-23"></a>
 
 ### Last updated (2026-04-23)
 
+- **Team page & global credits (same day, product):** See **[Work log — Team page & global credits (2026-04-23)](#wl-team-credits-2026-04-23)** for **end goal** (transparent “who built this,” Glass Box–aligned trust), **approach** (header icon + `/team` + static `public/creators` assets), **steps shipped** (`TeamNavButton`, `DocumentHeader` / `SandboxHeader` wiring, `app/team/*`, headshots), and **current failure / focus** — **no regression** from this slice; **ongoing engineering backlog** remains **Iteration 6** (localized range merge edge cases, touch without Alt-hover, inspector vs RiffScore selection drift, export narrow viewport, stylist/suggestion scope per **`Iteration6.txt`**). Ensure **`frontend/public/creators/**` is committed for deploys.
+- **Sandbox fluidity & UI polish (same day, follow-on):** See **[Work log — Sandbox fluidity… (2026-04-23)](#wl-sandbox-fluidity-2026-04-23)** for **end goal** (study “clunky UI” / Iteration6 §1), **approach**, **file-level steps** (multi-select pitch, inspector float resize, global motion/press tokens, modals/banners/toasts), and **current open work** (responsive export optional, touch/Alt gaps, localized range merge — no failing Vitest gate; **258** tests pass locally).
+- **Iteration 6 (study UX + engine):** See **[Work log — Iteration 6 (2026-04-23)](#wl-iteration-6-2026-04-23)** — pedal bass, inspector float/dock, prompts, multi-select FACT, measure-range harmony API, ensemble expansion.
 - **Sandbox & export polish tranche:** See **[Work log — Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)** for the consolidated **end goal**, **approach**, **steps done**, and **current failure / open QA**.
 - **Summary:** **Rest-hover ghost** — larger, higher-contrast Bravura preview, center-based layout, expanded commit hit box, guards against **`NaN`** CSS from bad staff geometry (`staffAnchorYForPitch`, `staffLineYsFiveInContainer`, `midStaffDiatonicPitchInContainer`); rest-hover **`useEffect`** uses **primitive deps** + ref flushes to avoid stale geometry. **Keyboard shortcuts** — in-app **`SandboxHotkeysDialog`** (header keyboard button); **`sandbox/page.tsx`** keydown aligned with help text (Caps Lock, `e.code` for brackets / main-row digits / numpad, unicode minus). **Export modal** — score preview **always paper** `#F8F3EA`; **`RiffScoreEditor`** **`presentation`** forces **LIGHT** theme; **PNG** capture uses the same paper background (not OS dark). **Multi-selection** — **`mapRiffSelectedNotesToHFSelections`** + **`onEditorSelectionChange`** sync full RiffScore **`selection`** to **`useToolStore`**; session **`editorSelectAll`** / **`editorDeselectAll`**; **⌘/Ctrl+A** and **Esc** clear both sides; **marquee / shift-range** should now drive **joint** drag + palette hotkeys. **Viola / staff clef (HF adapter)** — **`hfClefToRs`** no longer maps **`alto`** through **`PART_CLEF_MAP`** (SATB alto *voice* default treble); **staff clefs** **`treble` / `bass` / `alto` / `tenor`** pass through; test in **`riffscoreAdapter.test.ts`**. **Viola / additive harmony (RiffScore layout)** — upstream **`getOffsetForPitch`** treated **alto** and **tenor** like **treble** for Y offsets, so **C-clef** looked right but **noteheads** sat on the wrong lines; **`patches/riffscore+1.0.0-alpha.9.patch`** now uses **treble/bass lookup tables only for those clefs** and **`CLEF_REFERENCE` + formula** (and **`getPitchForOffset`** inversion) for **alto/tenor**. **Runtime `pendingClefChange`** — HarmonyForge patch removes the confirm-dialog flow; **`dist/index.js`** (CJS) is now **parity-patched** with **`index.mjs`** for **`toolbarPlugins`** on **`Toolbar`**, **`ScoreEditorContent`**, and **`RiffScoreInner`** so partial bundler resolution cannot leave stale JSX; after pull run **`cd frontend && rm -rf .next && npm install`**. **Open:** manual QA on dense scores, chords, **inspector overlay** vs native selection desync; **touch** still has no hover ghost; spot-check **viola** (and any **alto/tenor** staff) after layout patch.
 
@@ -97,6 +112,80 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 For checklist and verification steps, pair this file with **[plan.md](plan.md)** and **[README.md](../README.md)**.
 
+<a id="wl-ux-team-playground-2026-04-24"></a>
+
+## Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)
+
+### End goal
+
+- **Coherent product voice:** Playground, Document, Sandbox, and Team read like **one** product: Glass Box harmony, clear steps (**Playground → Configure → Sandbox**), and **transparent** people behind the tool.
+- **Trustworthy first-run:** Upload stand is **legible** (no clipped copy), **inviting** (motion + musical glow, not a generic rectangle), and **accessible** (keyboard focus, reduced motion respected).
+- **Team as narrative, not a brochure:** Dulf- and Shivam-first profiles, honest **complement vs distinct** story, **spec-driven** and **RAG / SOTA tooling** framed as **force multipliers** (NotebookLM, Google research surfaces) **not** load-bearing vendors; **product stack** once, at the bottom.
+
+### Approach
+
+- **Centralize chrome copy** in shared organisms (`DocumentHeader`, `SandboxHeader`, `AppFooterStrip`, `StepBar`, `DropzoneCopy`, `UploadPromptContent`, `ScorePreviewPanel`, `EnsembleBuilderPanel`, `GlassBoxPedagogyCallout`, `OnboardingModal`, `AudioUnlockBanner`, `WelcomeGuideButton`) rather than one-off strings only on pages.
+- **Team route:** Client layout with scroll shell (`overflow-y-auto`), **Framer Motion** stagger, **ActionTooltip** on header controls, **`ProfileBody` collapsible** details (DOM kept mounted so quote expanders don’t reset), **`inert`** when collapsed, **Jump avatars**, footer nav, grouped **StackOverview** with deduped heading.
+- **Playground stand:** Remove **`nowrap`** clipping inside SVG **`foreignObject`**; scale type responsively; **hover** drives **`hf-dropzone-interactive--hot`** + CSS stand/dash pulse; replace **rounded-rect box-shadow** with **blurred ♫ (U+266B)** layer + `hf-note-aureole-breathe`; **`useReducedMotion`** skips outer blur and pulse.
+
+### Steps done (file-level)
+
+| Area | Change |
+|------|--------|
+| **Atoms / tooltips** | **`ActionTooltip.tsx`**, **`Tooltip.tsx`** — portaled hover/focus, `useId`, `aria-describedby`; focus-without-`onFocusIn` DOM issues fixed. **`TeamNavButton.tsx`** — `target="_blank"`, `rel`, **`prefetch={false}`**, tooltip. |
+| **Headers** | **`DocumentHeader.tsx`**, **`SandboxHeader.tsx`**, **`WelcomeGuideButton.tsx`**, **`CoachmarkTourButton.tsx`** — ActionTooltip on theme / welcome / tour / export / hotkeys / reset where applicable. |
+| **Team route** | **`team/layout.tsx`** — scroll, **metadata / OpenGraph**; **`team/page.tsx`** — motion, **How we work together** after both profiles (before stack), solo-focused bios, **RAG + SOTA + NotebookLM + Google** copy (not vendor-dependent), **spec-driven development** (unbolded), conservative punctuation in that section, **Wand2** + sparkles hero, **collapsible** **`ProfileBody`** (`collapsible` prop), **Jump** copy, **TeamFooterNav** flavor, deduped **StackOverview** title. |
+| **Flow labels** | **`StepBar.tsx`** — step 2 label **Configure** (was “Edit configuration”). **`AppFooterStrip.tsx`** — **Team** link to **`/team`** + focus ring; **`OpenSourceCreditsDialog`** unchanged. |
+| **Playground** | **`page.tsx`** — **removed** subtitle under **HarmonyForge** (user request after A/B). **`DropzoneCopy.tsx`** — **`foreignObject`** padding/scroll, **`isHovered` + focus** → **`hf-dropzone-interactive--hot`**, **♫ aureole** layer, **`useReducedMotion`**, no rectangular hover shadow. **`UploadPromptContent.tsx`** — “**Bring your score**”, formats line with wrap-friendly sizes (iteratively enlarged). |
+| **globals.css** | Stronger **hf-stand-hover-pulse**, **hf-dropzone-glow**, **`hf-note-aureole-breathe`**; **reduced-motion** disables stand/dash/note motion and **`--hot`** box-shadow (legacy safety). |
+| **Document** | **`document/page.tsx`** — rhythm summary **period** not semicolon; coachmark/demo meta **·** separator; onboarding coachmark title/description polish. **`ScorePreviewPanel.tsx`** — “Score preview” kicker, **New file** button copy, letter-names line, `aria-label`s. **`EnsembleBuilderPanel.tsx`** — title **Harmony setup**, refreshed subtitles + classical footnote; **`GlassBoxPedagogyCallout.tsx`** — tighter Glass Box bodies. |
+| **Sandbox header** | **`SandboxHeader.tsx`** — letter-names **HoverTooltip** copy simplified. |
+| **Onboarding** | **`OnboardingModal.tsx`** — slide titles/bodies/CTA copy refresh. **`WelcomeGuideButton.tsx`** — tooltip mentions four slides. |
+| **Audio** | **`AudioUnlockBanner.tsx`** — plainer unlock sentence. |
+
+### Current failure / what we are working on now
+
+- **No new failing automated gate** from this slice: **`make lint-frontend`** clean; **Vitest 273** passing when last run in-session.
+- **Residual / verify manually:** **♫ aureole** depends on **serif + optional Noto Music** stack—on some Linux/minimal installs the glyph may **fallback or box**; mitigation if reported: swap to **inline SVG path** silhouette (no font). **Very short viewports:** dropzone content uses **`overflow-y-auto`** inside **`foreignObject`**; confirm no awkward double-scroll with page.
+- **Program focus (pre-existing):** Same **Iteration 6** / study backlog as **[2026-04-23](#last-updated-2026-04-23)** — localized harmony range merge, touch without Alt-hover, inspector vs RiffScore selection drift, optional narrow export layout, stylist scope—**not introduced** by this UX tranche.
+
+<a id="wl-team-credits-2026-04-23"></a>
+
+## Work log — Team page & global credits (2026-04-23)
+
+### End goal
+
+- **Transparent authorship:** Surface the people behind HarmonyForge in line with **Glass Box** values—users should see **who** built the system, not only **what** it does.
+- **Global discoverability:** A single, consistent entry point from **Playground** (`/`), **Document** (`/document`), and **Sandbox** (`/sandbox`) so “meet the team” is never hidden behind a deep link.
+
+### Approach
+
+- **Header control parity:** Small **people / `Users`** icon button using the same **`w-8 h-8`** bordered, **`hf-pressable`** pattern as **`CoachmarkTourButton`** (help / tour).
+- **App Router page:** **`/team`** — **`PlaygroundBackground`**, compact header (logo links home, **Team** title, **`ThemeToggle`**), two profile **cards** with **`next/Image`** and semantic **`<blockquote>`** quotes.
+- **Static assets:** Copy approved headshots from **`docs/CreatorPhotos/`** into **`frontend/public/creators/`** so **`next/image`** and deploys do not depend on `docs/` at runtime.
+- **UX detail:** **`TeamNavButton`** is a client component that **`usePathname()`**-guards **`/team`** so the icon does not appear on the credits page itself.
+
+### Steps done (file-level)
+
+| Area | Change |
+|------|--------|
+| Nav | [`frontend/src/components/atoms/TeamNavButton.tsx`](../frontend/src/components/atoms/TeamNavButton.tsx) — `Link` → `/team`, `Users` icon, aria-label / title **Meet the team**. |
+| Headers | [`DocumentHeader.tsx`](../frontend/src/components/organisms/DocumentHeader.tsx), [`SandboxHeader.tsx`](../frontend/src/components/organisms/SandboxHeader.tsx) — insert **`TeamNavButton`** after **`WelcomeGuideButton`**, before **`CoachmarkTourButton`**. |
+| Route | [`frontend/src/app/team/layout.tsx`](../frontend/src/app/team/layout.tsx) — **`metadata`** (title, description). |
+| UI | [`frontend/src/app/team/page.tsx`](../frontend/src/app/team/page.tsx) — **Dulf Vincent Genis** (lead backend / fullstack): pipeline, **`POST /api/*`**, engine integration, **context engineering**, **Cursor**; full bio + long quote (Professor Huang, direction vs infinite AI possibility, string quartet / Whitney Houston). **Shivam Patel** (lead frontend / fullstack): Next.js surface, RiffScore / inspector UX, **context engineering**, **Claude**; bio with **LinkedIn**, **UIUC**, **Microsoft** + quote on AI tools and continuing the project. |
+| Assets | `frontend/public/creators/dulf.jpg`, `shivam-patel.jpg` (from **`Dulf.jpg`**, **`Shivam_Headshot.JPG`** in `docs/CreatorPhotos/`). |
+
+### Current failure / open work
+
+- **This slice:** No failing lint or tracked regression attributable to the team page; verify in-browser once per deploy (images 404 if `public/creators` omitted from artifact).
+- **What we are still working on (program):** Same **Iteration 6 / study** backlog documented in **[Iteration6.txt](Iteration6.txt)** and **[Work log — Iteration 6 (2026-04-23)](#wl-iteration-6-2026-04-23)** / **[Sandbox fluidity (2026-04-23)](#wl-sandbox-fluidity-2026-04-23)** — notably **localized `generate-harmony-range` merge** when parts or alignment disagree with ensemble config, **touch** affordances without **Alt**-hover, **Theory Inspector** vs native **RiffScore** selection drift after regenerate, optional **export** narrow-viewport stack, and **stylist / suggestion scope** (breadth of structural interventions, concise explanations) per participant feedback.
+
+<a id="wl-iteration-6-2026-04-23"></a>
+
+## Work log — Iteration 6 product improvements (2026-04-23)
+
+Shipped from **[Iteration6.txt](Iteration6.txt)** / study feedback: **pedal bass** (`bassRhythmMode` in engine + Document Ensemble Builder + `satbToMusicXML` per-voice density), **expanded instrument lists** and **VoiceDropdown** family keywords, **Theory Inspector** **Guided / Concise** (`setExplanationLevel` + tighter **`prompts.ts`** caps + stylist **duration / texture** guidance), **Sandbox** inspector **Dock / Float** (`localStorage` `hf-inspector-dock`) + **Alt+click** bar numbers to select all notes in the active staff for that measure (`noteSelectionsForMeasurePart`), **chat** prepends a **multi-select FACT** line when `useToolStore.selection.length > 1`, **Document** body stacks **preview above ensemble** on narrow widths (`flex-col md:flex-row` + scroll), **localized harmony** via **`POST /api/generate-harmony-range`** + **`sliceParsedScoreToMeasureRange`** + **`spliceHarmonyMeasuresFromAddonScore`** wired from **Theory Inspector** “regenerate bar” / region action (still runs stylist region suggest after). **Iteration6 §1 (interface fluidity)** — multi-select pitch, inspector float **resize**, global press/motion tokens, action bar removal — is written up in **[Sandbox fluidity (2026-04-23)](#wl-sandbox-fluidity-2026-04-23)**. Tests: **`measureRangeSlice.test.ts`**, **`filePipeline`** bass-pedal case; full frontend Vitest **258** as of **2026-04-23**.
+
 <a id="wl-sandbox-ux-polish-2026-04-23"></a>
 
 ## Work log — Sandbox & export polish (2026-04-23)
@@ -144,6 +233,53 @@ For checklist and verification steps, pair this file with **[plan.md](plan.md)**
   - **Touch / tablet** — **no hover**; rest → note still relies on **select + A–G** (and related paths); optional future **long-press** or explicit control if study feedback requires it.
   - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch.
 - **Lint (carryover from 2026-04-22):** **`@next/next/no-img-element`**, unused **`_e`** in **`RiffScoreEditor`** **`handleKeyDown`** — warnings only unless CI is tightened.
+
+---
+
+<a id="wl-sandbox-fluidity-2026-04-23"></a>
+
+## Work log — Sandbox fluidity, multi-select pitch, inspector resize, UI polish (2026-04-23)
+
+This section records the **interface fluidity** tranche aligned with **[Iteration6.txt](Iteration6.txt) §1** (*non-blocking panels*, *multi-note selection/editing*, *less clunky chrome*) and the engineering follow-through in code. It sits **after** the **rest ghost / export / clef** tranche in **[Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)** and complements **[Iteration 6](#wl-iteration-6-2026-04-23)** (engine + inspector dock/float + prompts).
+
+### End goal
+
+- **Expressive sovereignty in the UI:** the musician can **edit the score while the Theory Inspector stays available** — floating inspector, resizable panel, and fewer modal “walls” that feel like hard stops.
+- **Multi-note workflows:** **arrow keys** and **vertical drag** move **all selected notes** together when RiffScore collapses selection during drag; palette pitch tools, **A–G**, and accidentals respect the same **pitch group**.
+- **Less clunky chrome:** softer overlays (blur + tint), **modal enter** motion, **toast/banner** motion, consistent **press feedback** (`hf-pressable`), smoother **StepBar** transitions, and lighter **inspector** shadows/borders so panels do not read as stacked “cards on cards.”
+- **Simpler sandbox header region:** remove the redundant **View/Edit + Undo/Redo/Delete** strip; sandbox stays in **edit** notation; power users rely on **hotkeys**, **RiffScore** toolbar, and **palette**.
+
+### Approach
+
+1. **Preserve multi-select through RiffScore drag collapse** — keep a **`pitchGroupRef`** and **`getPitchGroupNoteIds()`** in **`RiffScoreEditor`** so HarmonyForge still knows the full set when the editor reports a single note mid-gesture.
+2. **Single sync pipeline** — extend **`useRiffScoreSync`**: merge **`api.getSelection()`** (mapped to HF ids) with **tool store** selection and the **pitch group**; **`propagateMultiSelectPitchDelta`** for live moves; **`syncMultiPitchFromBaseline`** / **`resetMultiPitchDragSync`** against a frozen baseline; dedupe with **`noteSetPitchFingerprint`** in **`scoreUtils.ts`**.
+3. **Sandbox dispatch** — wire **arrows**, **A–G**, palette pitch, and accidentals through **`getPitchGroupNoteIds()`** where applicable.
+4. **Inspector layout** — **float** mode: persisted **`{ left, top, width, height }`** in **`INSPECTOR_FLOAT_POS_KEY`**, **`clampInspectorFloatLayout`**, **`applyFloatResizeDelta`**, edge/corner handles on **`sandbox/page.tsx`**; sync width when docking; outer wrapper **`overflow-visible`** with inner clip for panel content.
+5. **Design tokens in CSS** — **`globals.css`**: **`.hf-pressable`**, **`.hf-modal-animate`**, **`.hf-backdrop-animate`**, **`.hf-toast-animate`**, **`.hf-banner-animate`**, **`.hf-overlay-backdrop`**, **`.hf-scroll-smooth`**, with **`prefers-reduced-motion`** guards.
+6. **Targeted component polish** — apply tokens to **Export**, **hotkeys**, **workspace reset** modals; **AudioUnlockBanner**; **TheoryInspectorPanel** scroll regions + shadow; **StepBar** pill/connector transitions; sandbox **note-explain** toast and **expressive sovereignty** callout; **Export** preview/options panes (corner radius, close control).
+
+### Steps completed (file-level)
+
+| Area | What changed |
+|------|----------------|
+| **Multi-select pitch** | **`RiffScoreEditor.tsx`** — `pitchGroupRef`, `getPitchGroupNoteIds`, pointer baseline + rAF **`pointermove`** sync, pointer-up flush; **`useRiffScoreSync.ts`** — selection merge, multi-pitch delta propagation, baseline sync helpers; **`scoreUtils.ts`** — **`noteSetPitchFingerprint`**; **`sandbox/page.tsx`** — group-aware arrows / letters / palette / accidentals. |
+| **Sandbox chrome** | **`SandboxActionBar`** removed from **`sandbox/page.tsx`**; component deleted; **`notationMode`** fixed **`"edit"`** (no in-page View toggle). |
+| **Floating inspector** | **`sandbox/page.tsx`** — float size state, resize handles, persist with position; **`setInspectorDockModePersisted`** width sync. |
+| **Global interaction tokens** | **`globals.css`** — pressable, modal/backdrop/toast/banner animations, overlay backdrop, smooth scrolling. |
+| **Modals** | **`ExportModal.tsx`**, **`SandboxHotkeysDialog.tsx`**, **`WorkspaceResetModal.tsx`** — animated backdrop, modal enter, Escape/outside dismiss where added, scroll smoothing. |
+| **Banners / toasts** | **`AudioUnlockBanner.tsx`** — banner animation, responsive layout, pressable buttons; **`sandbox/page.tsx`** — note-explain toast + expressive callout use motion/softer borders. |
+| **Inspector & nav polish** | **`TheoryInspectorPanel.tsx`** — lighter box-shadow/border, **`hf-scroll-smooth`** on scroll areas; **`StepBar.tsx`** — transition-based hover/active, softer connectors; **`ScorePreviewPane.tsx`** / **`ExportOptionsPane.tsx`** — 12px corners, softer divider, **`hf-pressable`** close on export options. |
+| **Export modal layout** | Reverted experimental **stacked** (`flex-col` / `dvh`) body to **stable fixed row** (`1200×700`, `max-w`/`max-h`) after layout regression risk; kept softer border, shadow, and enter animation. |
+
+### Current failure / what we are working on now
+
+- **Automated tests:** **`cd frontend && npx vitest run`** — **258** tests passing as of **2026-04-23** (including **`ideaActionResolve.test.ts`**). There is **no** current CI-blocking unit failure tracked for this tranche; an earlier handoff mentioned **`Measure` `id`** typing in tests — **not** reproducing in the current tree.
+- **Product / QA gaps (non-blocking, Iteration6-aligned):**
+  - **Localized harmony merge** — **`POST /api/generate-harmony-range`** / client splice when **part counts** differ from config; **pickup** and **multi-bar** ranges.
+  - **Touch & tablets** — no **Alt+bar** hover equivalent; no **rest ghost** hover; multi-select and inspector float rely on **pointer** assumptions.
+  - **Optional responsive export** — a future pass can stack preview + options on narrow viewports with **`min-h-0` / flex** discipline (intentionally **not** shipped here to avoid export regression).
+  - **Manual validation** — multi-select **drag + keyboard** across staves; **inspector float** resize + reload persistence; **modals** (export, hotkeys, reset) on small laptop screens.
+  - **Lint debt (carryover):** **`@next/next/no-img-element`**, unused **`_e`** in **`RiffScoreEditor`** — warnings unless **`verify-strict`** tightens.
 
 ---
 

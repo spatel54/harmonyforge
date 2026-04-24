@@ -1,0 +1,15 @@
+Product Improvements for HarmonyForge
+Engineering write-up: docs/progress.md → "Sandbox fluidity, multi-select pitch, inspector resize, UI polish (2026-04-23)" (#wl-sandbox-fluidity-2026-04-23) for §1–§3 shipped steps and open QA; docs/plan.md → Status at a glance.
+
+The participant's think-aloud session revealed several critical UX and algorithmic limitations within the current System B (HarmonyForge) prototype that must be addressed to truly facilitate "Expressive Sovereignty":
+1. Interface Fluidity and Direct Manipulation
+Non-Blocking UI Panels: The user noted the interface was "clunky" because they were forced to close configuration or inspector panels before they could interact with the sheet music. We must implement non-blocking overlays so users can edit the score while simultaneously viewing the Theory Inspector.
+Multi-Node Selection: The user expressed frustration at only being able to select and edit one note at a time. Implementing multi-note and measure-level highlighting is essential for a smooth editing workflow.
+2. Algorithmic Generation and Rhythmic Variance
+Decoupling Rhythm from Melody: The user criticized the generated harmonies for being "pretty static," noting that the parts strictly followed the rhythm of the melody. We must adjust the Logic Core to introduce rhythmic independence, such as supporting pedal tones in the bass line, to prevent the arrangement from feeling stiff.
+Expanded Instrumentation: The user quickly noticed the limited instrument options. We need to expand the available ensemble configurations to accommodate diverse user needs.
+3. Refining the Theory Inspector
+Concise, Actionable Explanations: The participant, as an experienced musician, found that the Theory Inspector "explains way more than it needs to in a way that just kind of makes no sense". The LLM prompts must be recalibrated to prioritize brevity and strictly actionable theoretical feedback.
+Expanding Suggestion Scope (Avoiding the "Illusion of Decision"): The user felt railroaded by the system's narrow counterpoint suggestions, noting it failed to suggest structural changes like adding rests. To prevent the tool from feeling overly restrictive, the system must offer a wider variety of harmonic and structural interventions.
+4. Granular Collaborative Generation
+Section-by-Section Workflow: The user explicitly requested the ability to tackle the arrangement "one part and one section at a time" alongside the system as a partner, rather than having the tool generate the entire piece at once. Implementing a "fill-in-the-middle" or localized generation feature will better match professional workflows.

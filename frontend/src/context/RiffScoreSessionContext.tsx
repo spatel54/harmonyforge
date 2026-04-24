@@ -10,6 +10,11 @@ export type RiffScoreSessionHandles = {
   editorSelectAll: () => void;
   /** Clear native editor selection (e.g. Esc). */
   editorDeselectAll: () => void;
+  /**
+   * Batch pitch-edit target ids: when RiffScore collapses multi-select to one primary note during drag,
+   * this still returns every note in the last multi-selection so hotkeys and pull propagation stay aligned.
+   */
+  getPitchGroupNoteIds: () => Set<string>;
 };
 
 export const RiffScoreSessionContext = createContext<RiffScoreSessionHandles | null>(null);

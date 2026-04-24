@@ -13,6 +13,7 @@ describe("useGenerationConfigStore", () => {
     expect(s.mood).toBe("major");
     expect(s.genre).toBe("classical");
     expect(s.rhythmDensity).toBe("mixed");
+    expect(s.bassRhythmMode).toBe("follow");
     expect(s.instruments.soprano).toEqual([]);
     expect(s.detectedTonic).toBeNull();
   });
@@ -64,5 +65,16 @@ describe("useGenerationConfigStore", () => {
     const s = useGenerationConfigStore.getState();
     expect(s.mood).toBe("major");
     expect(s.rhythmDensity).toBe("mixed");
+    expect(s.bassRhythmMode).toBe("follow");
+  });
+
+  it("setBassRhythmMode persists pedal", async () => {
+    useGenerationConfigStore.getState().setBassRhythmMode("pedal");
+    expect(useGenerationConfigStore.getState().bassRhythmMode).toBe("pedal");
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    const raw = localStorage.getItem("harmonyforge-generation-config");
+    expect(raw).toBeTruthy();
+    const { state } = JSON.parse(raw!) as { state: Record<string, unknown> };
+    expect(state.bassRhythmMode).toBe("pedal");
   });
 });

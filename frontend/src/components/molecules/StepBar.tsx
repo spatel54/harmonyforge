@@ -14,7 +14,7 @@ export interface StepBarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const STEPS = [
   { n: 1, label: "Playground", href: "/" },
-  { n: 2, label: "Edit configuration", href: "/document" },
+  { n: 2, label: "Configure", href: "/document" },
   { n: 3, label: "Sandbox", href: "/sandbox" },
 ] as const;
 
@@ -53,9 +53,10 @@ export const StepBar = React.forwardRef<HTMLDivElement, StepBarProps>(
                   "flex items-center gap-[5px] rounded-full py-[6px]",
                   compact ? "px-[8px]" : "px-[12px]",
                   "font-mono text-[11px] font-medium leading-none whitespace-nowrap",
+                  "transition-[transform,filter,box-shadow,background-color] duration-200 ease-out",
                   isDone &&
-                    "bg-[var(--hf-accent)] cursor-pointer hover:opacity-85 transition-opacity",
-                  isActive && "bg-[var(--hf-surface)]",
+                    "bg-[var(--hf-accent)] cursor-pointer shadow-sm hover:brightness-[1.06] hover:shadow-md active:scale-[0.98]",
+                  isActive && "bg-[var(--hf-surface)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--hf-accent)_35%,transparent)]",
                   isPending && "bg-[var(--hf-surface)]/40",
                 )}
               >
@@ -92,12 +93,15 @@ export const StepBar = React.forwardRef<HTMLDivElement, StepBarProps>(
               {/* Connector line between steps */}
               {i < STEPS.length - 1 && (
                 <div
-                  className={cn("h-[1px] shrink-0", compact ? "w-[12px]" : "w-[24px]")}
+                  className={cn(
+                    "h-px shrink-0 transition-[background-color] duration-300 ease-out",
+                    compact ? "w-[12px]" : "w-[24px]",
+                  )}
                   style={{
                     backgroundColor:
                       step.n < currentStep
                         ? "var(--hf-accent)"
-                        : "var(--hf-surface)",
+                        : "color-mix(in srgb, var(--hf-surface) 55%, transparent)",
                   }}
                   aria-hidden="true"
                 />

@@ -49,7 +49,7 @@ export const VolumeSlider = React.forwardRef<HTMLDivElement, VolumeSliderProps>(
           step={1}
           value={volumeDb}
           onChange={(e) => onVolumeDbChange(Number.parseFloat(e.target.value))}
-          className="accent-[var(--hf-accent)]"
+          className="h-1.5 rounded-full accent-[var(--hf-accent)] cursor-pointer transition-[box-shadow,opacity] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
           style={{ width }}
           aria-label="Playback volume (decibels)"
           aria-valuemin={-40}

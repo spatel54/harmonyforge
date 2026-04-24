@@ -8,6 +8,8 @@
 import { generateSATB, SolverBudgetExceededError } from "./solver";
 import { ensureChords } from "./chordInference";
 import { satbToMusicXML, parsedScoreToPartwiseMelodyMusicXML } from "./satbToMusicXML";
+import { parseMusicXML } from "./parsers/musicxmlParser";
+import { sliceParsedScoreToMeasureRange } from "./measureRangeSlice";
 import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB";
 import {
   intakeFileToParsedScore,
@@ -22,6 +24,7 @@ import type {
   Genre,
   ParsedScore,
   RhythmDensity,
+  BassRhythmMode,
 } from "./types";
 
 export const SOLVER_BUDGET_ERROR =
@@ -49,6 +52,7 @@ const VALID_TONICS = [
 const VALID_MODES = ["major", "minor"];
 const VALID_GENRES: Genre[] = ["classical", "jazz", "pop"];
 const VALID_RHYTHM_DENSITIES: RhythmDensity[] = ["chordal", "mixed", "flowing"];
+const VALID_BASS_RHYTHM_MODES: BassRhythmMode[] = ["follow", "pedal"];
 
 const VOICE_MAP: Record<string, Voice> = {
   soprano: "Soprano", alto: "Alto", tenor: "Tenor", bass: "Bass",
@@ -92,6 +96,12 @@ export function parseConfig(body: unknown): GenerationConfig | null {
   }
   if (typeof o.rhythmDensity === "string" && VALID_RHYTHM_DENSITIES.includes(o.rhythmDensity as RhythmDensity)) {
     config.rhythmDensity = o.rhythmDensity as RhythmDensity;
+  }
+  if (
+    typeof o.bassRhythmMode === "string" &&
+    VALID_BASS_RHYTHM_MODES.includes(o.bassRhythmMode as BassRhythmMode)
+  ) {
+    config.bassRhythmMode = o.bassRhythmMode as BassRhythmMode;
   }
   if (o.instruments && typeof o.instruments === "object") {
     const inst = o.instruments as Record<string, unknown>;
@@ -224,8 +234,76 @@ export function runGenerateFromFile(
     format: "partwise",
     version: "2.0",
     rhythmDensity: config?.rhythmDensity ?? "mixed",
+    bassRhythmMode: config?.bassRhythmMode ?? "follow",
   });
   return { ok: true, xml };
+}
+
+/**
+ * Regenerate additive harmonies for an inclusive measure range from in-memory MusicXML.
+ * Returns a **short** partwise score (melody + harmony parts for the slice only); the client splices
+ * harmony staves back into the full layout via `spliceHarmonyMeasuresFromAddonScore`.
+ */
+export function runGenerateHarmonyRangeFromMusicXml(
+  xml: string,
+  config: GenerationConfig | null,
+  startMeasure: number,
+  endMeasure: number,
+): GenerateFromFileResult | EngineError {
+  const parsed = parseMusicXML(xml);
+  if (!parsed || parsed.melody.length === 0) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Could not parse MusicXML or no melody in score",
+    };
+  }
+  const sliced = sliceParsedScoreToMeasureRange(parsed, startMeasure, endMeasure);
+  if (!sliced) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Selected measures contain no melody notes",
+    };
+  }
+  const parsedForGen =
+    config?.pickupBeats !== undefined && startMeasure === 0
+      ? {
+          ...sliced,
+          pickupBeats: config.pickupBeats === 0 ? undefined : config.pickupBeats,
+        }
+      : sliced;
+  const withChords = ensureChords(parsedForGen, config?.mood, config?.genre, {
+    preferInferredChords: config?.preferInferredChords === true,
+  });
+  const leadSheet: LeadSheet = {
+    key: withChords.key,
+    chords: withChords.chords,
+    melody: withChords.melody,
+  };
+  let result;
+  try {
+    result = generateSATB(leadSheet, {
+      genre: config?.genre,
+      maxMs: effectiveSolverMaxMsForFileGeneration(),
+    });
+  } catch (e) {
+    if (e instanceof SolverBudgetExceededError) {
+      return { ok: false, status: 422, error: SOLVER_BUDGET_ERROR };
+    }
+    throw e;
+  }
+  if (!result) {
+    return { ok: false, status: 422, error: "Could not find valid SATB arrangement for range" };
+  }
+  const outXml = satbToMusicXML(result, config?.instruments, withChords, {
+    additiveHarmonies: true,
+    format: "partwise",
+    version: "2.0",
+    rhythmDensity: config?.rhythmDensity ?? "mixed",
+    bassRhythmMode: config?.bassRhythmMode ?? "follow",
+  });
+  return { ok: true, xml: outXml };
 }
 
 export interface PreviewResult {

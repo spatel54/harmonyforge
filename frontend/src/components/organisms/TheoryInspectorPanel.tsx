@@ -19,7 +19,11 @@ import { isMinimalSuggestionExplanation } from "@/lib/study/studyConfig";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
 import { CHAT_SEED_TAG_PROMPTS } from "@/lib/ai/theoryInspectorTags";
 import { useScoreStore } from "@/store/useScoreStore";
-import { collectNonRestPitchesInMeasure } from "@/lib/music/scoreUtils";
+import {
+  collectNonRestPitchesInMeasure,
+  measureRangeForLocalizedHarmonyRegenerate,
+} from "@/lib/music/scoreUtils";
+import type { NoteSelection } from "@/store/useScoreStore";
 
 const AI_MODAL_KEY = "hf-inspector-ai-modal-seen";
 
@@ -73,12 +77,23 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onStarterPromptClick?: (prompt: string) => void;
   /** Measure focus: classical localized regenerate hook (backend optional). */
   onEditFocusedRegion?: (payload: EditFocusedRegionPayload) => void;
+  /** Current editor note selection (sandbox) — drives multi-bar regenerate label and range. */
+  editorSelection?: NoteSelection[];
   /** Accept a tutor INTENT (mood/genre/pickup/regenerate/navigation). */
   onApplyIntent?: (msgId: string, intent: import("@/lib/ai/intentRouter").Intent) => void;
   /** Dismiss an INTENT confirmation bubble without applying it. */
   onDismissIntent?: (msgId: string) => void;
   /** Fired when user clicks a bold keyword in AI explanations — for note highlighting. */
   onKeywordClick?: (keyword: string) => void;
+  /** Sandbox: dock inspector as right column vs floating card (full-width score). */
+  inspectorDockMode?: "sidebar" | "floating";
+  onInspectorDockModeChange?: (mode: "sidebar" | "floating") => void;
+  /** Floating layout: drag the panel by the header (parent handles pointer + position). */
+  floatingHeaderDrag?: {
+    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
+    className?: string;
+    title?: string;
+  };
 }
 
 /**
@@ -130,15 +145,31 @@ export const TheoryInspectorPanel = React.forwardRef<
       onRejectIdeaAction,
       onStarterPromptClick,
       onEditFocusedRegion,
+      editorSelection = [],
       onApplyIntent,
       onDismissIntent,
       onKeywordClick,
+      inspectorDockMode,
+      onInspectorDockModeChange,
+      floatingHeaderDrag,
       className,
       ...props
     },
     ref,
   ) => {
     const scrollRef = React.useRef<HTMLDivElement>(null);
+    const localizedRegenerateRange = React.useMemo(() => {
+      if (!inspectorScoreFocus || inspectorScoreFocus.kind !== "measure") return null;
+      return measureRangeForLocalizedHarmonyRegenerate(
+        editorSelection,
+        inspectorScoreFocus.measureIndex,
+      );
+    }, [inspectorScoreFocus, editorSelection]);
+    const localizedRegenerateLabel =
+      localizedRegenerateRange &&
+      localizedRegenerateRange.startMeasure !== localizedRegenerateRange.endMeasure
+        ? `Regenerate bars ${localizedRegenerateRange.startMeasure + 1}–${localizedRegenerateRange.endMeasure + 1}`
+        : "Regenerate this bar";
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
     const showInspectorRationale = useTheoryInspectorStore((s) => s.showInspectorRationale);
     const setShowInspectorRationale = useTheoryInspectorStore(
@@ -326,19 +357,19 @@ export const TheoryInspectorPanel = React.forwardRef<
     };
 
     const headerIconBtn =
-      "flex items-center justify-center w-[28px] h-[28px] rounded-[4px] transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 shrink-0";
+      "hf-pressable flex items-center justify-center w-[28px] h-[28px] rounded-[4px] shrink-0 transition-[transform,background-color,opacity] hover:bg-black/30 active:bg-black/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70";
 
     return (
       <div
         ref={ref}
         className={cn(
-          "flex flex-col h-full overflow-hidden rounded-[4px]",
+          "hf-inspector-panel-depth flex flex-col h-full overflow-hidden rounded-[4px]",
           className,
         )}
         style={{
           backgroundColor: "var(--hf-panel-bg)",
-          boxShadow: "var(--shadow-lg)",
-          borderLeft: "1px solid var(--hf-detail)",
+          boxShadow: "0 2px 20px color-mix(in srgb, var(--hf-detail) 22%, transparent)",
+          borderLeft: "1px solid color-mix(in srgb, var(--hf-detail) 65%, transparent)",
           position: "relative",
         }}
         role="complementary"
@@ -349,8 +380,13 @@ export const TheoryInspectorPanel = React.forwardRef<
             fill:$sonata-surface (solid cherry red)
             gap:8  pad:[0,12]  h:52  jc:space_between  ai:center   */}
         <div
-          className="flex items-center gap-[8px] w-full min-h-[52px] py-[6px] px-[12px] shrink-0"
+          className={cn(
+            "flex items-center gap-[8px] w-full min-h-[52px] py-[6px] px-[12px] shrink-0",
+            floatingHeaderDrag?.className,
+          )}
           style={{ backgroundColor: "var(--hf-surface)" }}
+          onPointerDown={floatingHeaderDrag?.onPointerDown}
+          title={floatingHeaderDrag?.title}
         >
           {/* Title block */}
           <div className="flex flex-col justify-center gap-[1px] min-w-0">
@@ -372,13 +408,45 @@ export const TheoryInspectorPanel = React.forwardRef<
           {/* Spacer — fills remaining width */}
           <div className="flex-1" aria-hidden="true" />
 
+          {onInspectorDockModeChange && inspectorDockMode && (
+            <div className="flex items-center gap-1 shrink-0 mr-1" role="group" aria-label="Inspector layout">
+              <button
+                type="button"
+                title="Dock to the right edge"
+                aria-pressed={inspectorDockMode === "sidebar"}
+                onClick={() => onInspectorDockModeChange("sidebar")}
+                className={cn(
+                  "hf-pressable rounded px-2 py-1 font-mono text-[9px] font-medium transition-colors",
+                  inspectorDockMode === "sidebar"
+                    ? "bg-white/25 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
+                    : "bg-black/15 text-white/90 hover:bg-black/25 hover:text-white",
+                )}
+              >
+                Dock
+              </button>
+              <button
+                type="button"
+                title="Float over the score — full-width editing"
+                aria-pressed={inspectorDockMode === "floating"}
+                onClick={() => onInspectorDockModeChange("floating")}
+                className={cn(
+                  "hf-pressable rounded px-2 py-1 font-mono text-[9px] font-medium transition-colors",
+                  inspectorDockMode === "floating"
+                    ? "bg-white/25 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
+                    : "bg-black/15 text-white/90 hover:bg-black/25 hover:text-white",
+                )}
+              >
+                Float
+              </button>
+            </div>
+          )}
+
           {/* CloseBtn — x icon */}
           <button
             type="button"
             onClick={onClose}
             aria-label="Close panel"
-            className={headerIconBtn}
-            style={{ backgroundColor: "#00000020" }}
+            className={cn(headerIconBtn, "bg-black/20")}
           >
             <X
               className="w-[14px] h-[14px]"
@@ -409,10 +477,10 @@ export const TheoryInspectorPanel = React.forwardRef<
                 aria-selected={inspectorActiveTab === id}
                 onClick={() => setInspectorActiveTab(id)}
                 className={cn(
-                  "rounded-full px-[14px] py-[6px] font-mono text-[11px] font-medium transition-colors",
+                  "hf-pressable rounded-full px-[14px] py-[6px] font-mono text-[11px] font-medium transition-all duration-200 ease-out shadow-sm",
                   inspectorActiveTab === id
-                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                    : "bg-transparent text-[var(--hf-text-secondary)] border border-[var(--hf-detail)]",
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c] shadow-md"
+                    : "bg-transparent text-[var(--hf-text-secondary)] border border-[var(--hf-detail)] hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_10%,transparent)]",
                 )}
               >
                 {label}
@@ -422,7 +490,7 @@ export const TheoryInspectorPanel = React.forwardRef<
 
           <div
             ref={scrollRef}
-            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
+            className="hf-scroll-smooth flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
             aria-label="Theory Inspector — tab content"
           >
             {inspectorActiveTab === "explanation" ? (
@@ -444,11 +512,17 @@ export const TheoryInspectorPanel = React.forwardRef<
                       className="font-mono text-[10px] mb-[2px]"
                       style={{ color: "var(--hf-text-secondary)" }}
                     >
-                      {inspectorScoreFocus.kind === "measure" ? "This measure" : "This part"}
+                      {inspectorScoreFocus.kind === "measure"
+                        ? inspectorScoreFocus.partId
+                          ? "This staff · bar"
+                          : "This measure"
+                        : "This part"}
                     </div>
                     <div className="text-[14px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
                       {inspectorScoreFocus.kind === "measure"
-                        ? `Bar ${inspectorScoreFocus.measureIndex + 1}`
+                        ? inspectorScoreFocus.partId && score
+                          ? `Bar ${inspectorScoreFocus.measureIndex + 1} · ${score.parts.find((p) => p.id === inspectorScoreFocus.partId)?.name ?? "staff"}`
+                          : `Bar ${inspectorScoreFocus.measureIndex + 1}`
                         : inspectorScoreFocus.partName}
                     </div>
                   </div>
@@ -473,19 +547,22 @@ export const TheoryInspectorPanel = React.forwardRef<
                           });
                         }
                       }}
-                      className="shrink-0 rounded-[6px] px-[10px] py-[6px] font-mono text-[11px] font-medium"
+                      className="hf-pressable shrink-0 rounded-[6px] px-[10px] py-[6px] font-mono text-[11px] font-medium shadow-sm hover:shadow-md hover:brightness-[1.04] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                       style={{
                         backgroundColor: "var(--hf-accent)",
                         color: "var(--text-on-light)",
                       }}
                       aria-label={
                         inspectorScoreFocus.kind === "measure"
-                          ? "Regenerate harmony suggestions for this bar"
+                          ? localizedRegenerateRange &&
+                            localizedRegenerateRange.startMeasure !== localizedRegenerateRange.endMeasure
+                            ? "Regenerate harmony for the selected bar range"
+                            : "Regenerate harmony suggestions for this bar"
                           : "Ask the assistant to suggest edits for this part"
                       }
                     >
                       {inspectorScoreFocus.kind === "measure"
-                        ? "Regenerate this bar"
+                        ? localizedRegenerateLabel
                         : "Suggest edits"}
                     </button>
                   )}
@@ -589,7 +666,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                 <button
                   type="button"
                   onClick={() => setShowInspectorRationale(!showInspectorRationale)}
-                  className="flex items-center gap-[6px] rounded-[4px] px-[8px] py-[4px] font-mono text-[10px] self-start"
+                  className="hf-pressable flex items-center gap-[6px] rounded-[4px] px-[8px] py-[4px] font-mono text-[10px] self-start shadow-sm hover:bg-[color-mix(in_srgb,var(--hf-surface)_6%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                   style={{
                     color: "var(--hf-text-secondary)",
                     border: "1px solid var(--hf-detail)",
@@ -798,7 +875,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                                     <button
                                       type="button"
                                       onClick={() => onAcceptIdeaAction?.(a)}
-                                      className="flex items-center justify-center w-[26px] h-[26px] rounded transition-colors hover:bg-green-900/25 focus-visible:outline-2 focus-visible:outline-offset-1"
+                                      className="hf-pressable flex items-center justify-center w-[26px] h-[26px] rounded shadow-sm hover:bg-green-900/25 active:bg-green-900/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                                       style={{ color: "#2e7d32" }}
                                       aria-label={`Accept: set pitch to ${a.suggestedPitch}`}
                                     >
@@ -807,7 +884,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                                     <button
                                       type="button"
                                       onClick={() => onRejectIdeaAction?.(a)}
-                                      className="flex items-center justify-center w-[26px] h-[26px] rounded transition-colors hover:bg-red-900/25 focus-visible:outline-2 focus-visible:outline-offset-1"
+                                      className="hf-pressable flex items-center justify-center w-[26px] h-[26px] rounded shadow-sm hover:bg-red-900/20 active:bg-red-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-violation)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                                       style={{ color: "var(--semantic-violation)" }}
                                       aria-label="Reject this idea"
                                     >
@@ -872,10 +949,10 @@ export const TheoryInspectorPanel = React.forwardRef<
 
           {inspectorActiveTab === "chat" && visibleChatTags.length > 0 ? (
             <div
-              className="flex items-center gap-[6px] shrink-0 overflow-x-auto py-[8px] px-[12px] border-t"
+              className="hf-scroll-smooth flex items-center gap-[6px] shrink-0 overflow-x-auto py-[8px] px-[12px] border-t"
               style={{
                 scrollbarWidth: "none",
-                borderColor: "var(--hf-detail)",
+                borderColor: "color-mix(in srgb, var(--hf-detail) 55%, transparent)",
                 backgroundColor: "var(--hf-bg)",
               }}
               aria-label="Suggested chats"
@@ -892,7 +969,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                   <button
                     type="button"
                     onClick={() => onStarterPromptClick?.(tag)}
-                    className="font-mono text-[10px] whitespace-nowrap"
+                    className="hf-pressable font-mono text-[10px] whitespace-nowrap rounded-sm px-0.5 -mx-0.5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--hf-bg)]"
                     style={{ color: "var(--hf-text-primary)" }}
                   >
                     {tag}
@@ -900,7 +977,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                   <button
                     type="button"
                     onClick={() => dismissChatTag(tag)}
-                    className="ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15"
+                    className="hf-pressable ml-[2px] flex items-center justify-center w-[14px] h-[14px] rounded-full hover:bg-black/15 active:bg-black/25"
                     aria-label={`Remove tag ${tag}`}
                     style={{ color: "var(--hf-text-secondary)" }}
                   >
@@ -920,7 +997,7 @@ export const TheoryInspectorPanel = React.forwardRef<
               }}
             >
               <div
-                className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px]"
+                className="flex items-center flex-1 h-[36px] px-[12px] rounded-[4px] transition-[box-shadow,border-color] duration-200 ease-out focus-within:border-[var(--hf-accent)] focus-within:ring-2 focus-within:ring-[color-mix(in_srgb,var(--hf-accent)_30%,transparent)]"
                 style={{
                   backgroundColor: "var(--hf-panel-bg)",
                   border: "1px solid var(--hf-detail)",
@@ -947,7 +1024,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                 onClick={onSend}
                 disabled={chatInputLocked}
                 aria-label="Send message"
-                className="flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent)"
+                className="hf-pressable flex items-center justify-center w-[36px] h-[36px] rounded-[4px] shrink-0 shadow-sm hover:shadow-md hover:brightness-[1.08] active:brightness-[0.92] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
                 style={{ backgroundColor: "var(--hf-surface)" }}
               >
                 <SendHorizontal
@@ -982,7 +1059,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                 <h2 className="font-mono text-[13px] font-semibold" style={{ color: "var(--hf-text-primary)" }}>
                   Conversational AI is ready
                 </h2>
-                <button type="button" onClick={dismissAiModal} aria-label="Close" className="flex items-center justify-center w-[22px] h-[22px] rounded-full hover:bg-black/15" style={{ color: "var(--hf-text-secondary)" }}>
+                <button type="button" onClick={dismissAiModal} aria-label="Close" className="hf-pressable flex items-center justify-center w-[22px] h-[22px] rounded-full hover:bg-black/15 active:bg-black/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]" style={{ color: "var(--hf-text-secondary)" }}>
                   <X className="w-[12px] h-[12px]" strokeWidth={2} />
                 </button>
               </div>
@@ -995,7 +1072,7 @@ export const TheoryInspectorPanel = React.forwardRef<
               <button
                 type="button"
                 onClick={dismissAiModal}
-                className="self-end rounded-[6px] px-[14px] py-[7px] font-mono text-[11px] font-medium transition-opacity hover:opacity-85"
+                className="hf-pressable self-end rounded-[6px] px-[14px] py-[7px] font-mono text-[11px] font-medium shadow-sm hover:shadow-md hover:brightness-[1.05] active:brightness-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-surface)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                 style={{ backgroundColor: "var(--hf-accent)", color: "#1a0f0c" }}
               >
                 Got it
@@ -1060,7 +1137,7 @@ function IntentConfirmationBubble({
       <div className="flex gap-[8px]">
         <button
           type="button"
-          className="font-mono text-[11px] rounded-[4px] px-[10px] py-[4px]"
+          className="hf-pressable font-mono text-[11px] rounded-[4px] px-[10px] py-[4px] shadow-sm hover:shadow-md hover:brightness-[1.06] active:brightness-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
           style={{
             backgroundColor: "var(--hf-surface)",
             color: "var(--hf-text-on-surface, white)",
@@ -1072,7 +1149,7 @@ function IntentConfirmationBubble({
         </button>
         <button
           type="button"
-          className="font-mono text-[11px] rounded-[4px] px-[10px] py-[4px] border"
+          className="hf-pressable font-mono text-[11px] rounded-[4px] px-[10px] py-[4px] border shadow-sm hover:bg-[color-mix(in_srgb,var(--hf-surface)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
           style={{
             borderColor: "var(--hf-detail)",
             color: "var(--hf-text-primary)",

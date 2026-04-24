@@ -5,6 +5,8 @@ import { StepBar } from "@/components/molecules/StepBar";
 import { ThemeToggle } from "@/components/atoms/ThemeToggle";
 import { CoachmarkTourButton } from "@/components/organisms/CoachmarkTourButton";
 import { WelcomeGuideButton } from "@/components/organisms/WelcomeGuideButton";
+import { TeamNavButton } from "@/components/atoms/TeamNavButton";
+import { ActionTooltip } from "@/components/atoms/ActionTooltip";
 
 export interface DocumentHeaderProps extends React.HTMLAttributes<HTMLElement> {
   currentStep?: 1 | 2 | 3;
@@ -24,12 +26,11 @@ export const DocumentHeader = React.forwardRef<
     <header
       ref={ref}
       className={cn(
-        "flex items-center justify-between w-full h-[64px] shrink-0",
-        "px-[40px]",
+        "hf-sandbox-header hf-print-hide flex items-center justify-between w-full h-[64px] shrink-0",
+        "px-4 sm:px-6 md:px-10 lg:px-[40px] gap-2",
         className,
       )}
       style={{
-        backgroundColor: "var(--hf-bg)",
         borderBottom: "1px solid var(--hf-detail)",
       }}
       {...props}
@@ -38,13 +39,20 @@ export const DocumentHeader = React.forwardRef<
       <LogoLockup />
 
       {/* Center: Progress steps */}
-      <StepBar currentStep={currentStep} aria-label="Arrangement progress" />
+      <StepBar
+        currentStep={currentStep}
+        aria-label="Arrangement progress"
+        className="shrink min-w-0 justify-center"
+      />
 
       {/* Right: Tour + theme */}
       <div className="flex items-center gap-2">
         <WelcomeGuideButton />
+        <TeamNavButton />
         <CoachmarkTourButton />
-        <ThemeToggle />
+        <ActionTooltip content="Switch between light and dark appearance.">
+          <ThemeToggle />
+        </ActionTooltip>
       </div>
     </header>
   );

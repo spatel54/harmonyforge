@@ -90,7 +90,7 @@ export const ViolationCard = React.forwardRef<
             onClick={onRegenerate}
             disabled={disableLlmActions}
             aria-label="Regenerate explanation"
-            className="flex items-center justify-center w-[20px] h-[20px] rounded-[2px] transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+            className="hf-pressable flex items-center justify-center w-[20px] h-[20px] rounded-[2px] hover:bg-[color-mix(in_srgb,var(--hf-surface)_12%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ color: "var(--hf-text-primary)" }}
           >
             <RefreshCw
@@ -105,7 +105,7 @@ export const ViolationCard = React.forwardRef<
             type="button"
             onClick={onExplainMore}
             disabled={disableLlmActions}
-            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+            className="hf-pressable flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal shadow-sm hover:shadow-md hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               backgroundColor:
                 "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
@@ -120,7 +120,7 @@ export const ViolationCard = React.forwardRef<
             type="button"
             onClick={onSuggestFix}
             disabled={disableLlmActions}
-            className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hf-accent) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+            className="hf-pressable flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white shadow-sm hover:shadow-md hover:brightness-[1.08] active:brightness-[0.92] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: "var(--hf-surface)" }}
           >
             Suggest Fix

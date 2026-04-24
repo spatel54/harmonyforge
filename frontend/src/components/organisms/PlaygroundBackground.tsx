@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { PlaygroundCursorTrail } from "@/components/organisms/PlaygroundCursorTrail";
 
 export interface PlaygroundBackgroundProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
@@ -19,7 +20,7 @@ export const PlaygroundBackground = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative w-full min-h-screen overflow-hidden transition-[background] duration-500",
+        "hf-playground-bg relative w-full min-h-screen overflow-hidden transition-[background] duration-500",
         className,
       )}
       style={{
@@ -32,6 +33,18 @@ export const PlaygroundBackground = React.forwardRef<
       }}
       {...props}
     >
+      {/* Decorative ambience — pointer-events none; motion gated in globals.css */}
+      <div className="hf-playground-ambience" aria-hidden>
+        <div className="hf-playground-aurora" />
+        <div className="hf-playground-vignette" />
+        <div className="hf-playground-sparkles">
+          <span className="hf-playground-sparkle hf-playground-sparkle--a" />
+          <span className="hf-playground-sparkle hf-playground-sparkle--b" />
+          <span className="hf-playground-sparkle hf-playground-sparkle--c" />
+          <span className="hf-playground-sparkle hf-playground-sparkle--d" />
+        </div>
+        <PlaygroundCursorTrail />
+      </div>
       {children}
     </div>
   );

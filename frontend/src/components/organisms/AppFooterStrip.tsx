@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SiteCopyright } from "@/components/atoms/SiteCopyright";
 import { OpenSourceCreditsDialog } from "@/components/molecules/OpenSourceCreditsDialog";
@@ -33,6 +34,13 @@ export function AppFooterStrip({ className, lead, end, ...props }: AppFooterStri
         <div className="flex flex-wrap items-center gap-3 min-w-0">
           {lead != null ? <div className="shrink-0">{lead}</div> : null}
           <SiteCopyright />
+          <Link
+            href="/team"
+            className="font-mono text-[10px] underline underline-offset-2 opacity-80 hover:opacity-100 shrink-0 transition-opacity hf-pressable rounded-sm px-0.5 -mx-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Team
+          </Link>
           <button
             type="button"
             onClick={() => setCreditsOpen(true)}

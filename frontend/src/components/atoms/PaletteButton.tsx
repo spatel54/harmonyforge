@@ -42,14 +42,15 @@ export function PaletteButton({ item, disabled, onActivate, className }: Palette
         onActivate(item);
       }}
       className={cn(
-        "flex flex-col items-center justify-center gap-[2px]",
+        "hf-pressable flex flex-col items-center justify-center gap-[2px]",
         "min-h-[44px] min-w-[44px] px-[8px] py-[6px] rounded-[6px]",
         "border border-[var(--hf-detail)]",
         "bg-[var(--hf-bg)]",
-        "transition-colors transition-shadow",
+        "shadow-sm hover:shadow-md",
         "hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_12%,transparent)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)]",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "active:border-[var(--hf-accent)] active:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]",
+        "disabled:shadow-none",
         className,
       )}
     >

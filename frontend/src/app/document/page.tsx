@@ -95,6 +95,7 @@ export default function DocumentPage() {
   const restoreGenerationConfig = useGenerationConfigStore((s) => s.restoreFromStorage);
   const setDetectedKey = useGenerationConfigStore((s) => s.setDetectedKey);
   const rhythmDensity = useGenerationConfigStore((s) => s.rhythmDensity);
+  const bassRhythmMode = useGenerationConfigStore((s) => s.bassRhythmMode);
 
   const rhythmSummary = React.useMemo(() => {
     const labels: Record<string, string> = {
@@ -102,8 +103,9 @@ export default function DocumentPage() {
       mixed: "Mixed",
       flowing: "Flowing (active)",
     };
-    return `Harmony motion: ${labels[rhythmDensity] ?? rhythmDensity} (accompaniment density when you generate).`;
-  }, [rhythmDensity]);
+    const bassLabel = bassRhythmMode === "pedal" ? "Pedal bass" : "Bass follows motion";
+    return `Harmony motion: ${labels[rhythmDensity] ?? rhythmDensity}. ${bassLabel}.`;
+  }, [rhythmDensity, bassRhythmMode]);
 
   // Client-side PDF rasterization — always renders a visible first page, even
   // when the server OMR pipeline is degraded (Vercel without pdfalto/oemer).
@@ -385,6 +387,7 @@ export default function DocumentPage() {
         mood: config.mood,
         genre: "classical",
         rhythmDensity: config.rhythmDensity,
+        bassRhythmMode: config.bassRhythmMode ?? "follow",
         instruments: config.instruments,
       };
       if (config.preferInferredChords === true) {
@@ -435,8 +438,8 @@ export default function DocumentPage() {
         <DocumentHeader currentStep={2} />
         <AudioUnlockBanner />
 
-        {/* Two-panel body */}
-        <div className="flex flex-row flex-1 min-h-0">
+        {/* Two-panel body — stack on narrow viewports so preview + ensemble stay reachable without closing either */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
           <ScorePreviewPanel
             score={previewScore}
             scoreTitle={
@@ -446,8 +449,8 @@ export default function DocumentPage() {
             scoreMeta={
               previewMeta?.meta ??
               (coachmarkTourActive && !file
-                ? "Upload a file in a real session to see your score here."
-                : "Traditional • 4 voices • Page 1 of 4")
+                ? "Upload a file in a live session to preview your score here."
+                : "Traditional · 4 voices · Page 1 of 4")
             }
             rhythmSummary={reviewerArm ? undefined : rhythmSummary}
             onReupload={() => router.push("/")}
@@ -479,11 +482,11 @@ export default function DocumentPage() {
         {showOnboarding && !COACHMARKS_ENABLED && (
           <OnboardingCoachmark
             stepLabel="Step 2 of 3"
-            title="Set mood and instrumentation"
+            title="Mood, motion, and instruments"
             description={
               reviewerArm
-                ? "Preview your score and set mood and genre for context. Continue with your melody only—you will add harmonies in the sandbox."
-                : "Preview your uploaded score, choose mood and genre, then select instruments before generating harmonies."
+                ? "Preview the score and set mood for context. Continue with melody only. You will add harmonies in the sandbox."
+                : "Preview your upload, set mood and how the harmony moves, pick instruments, then generate SATB you can still edit."
             }
             primaryCta="Continue"
             onPrimary={() => setShowOnboarding(false)}

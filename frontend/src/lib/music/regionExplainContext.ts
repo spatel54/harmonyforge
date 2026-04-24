@@ -94,6 +94,64 @@ export function buildMeasureFocusFacts(
 }
 
 /**
+ * FACT lines for one measure on a single part (Theory Inspector + scoped highlights).
+ */
+export function buildMeasurePartFocusFacts(
+  score: EditableScore,
+  measureIndex: number,
+  partId: string,
+): { lines: string[]; noteIds: string[] } {
+  const lines: string[] = [];
+  const part = score.parts.find((p) => p.id === partId);
+  if (!part) {
+    lines.push(`MEASURE FOCUS: unknown partId ${partId}`);
+    return { lines, noteIds: [] };
+  }
+  if (!score.parts.length) {
+    lines.push("MEASURE FOCUS: (empty score)");
+    return { lines, noteIds: [] };
+  }
+  if (measureIndex < 0 || measureIndex >= score.parts[0]!.measures.length) {
+    lines.push(`MEASURE FOCUS: invalid measure index ${measureIndex + 1}`);
+    return { lines, noteIds: [] };
+  }
+
+  const ref = score.parts[0]!.measures[measureIndex]!;
+  const ts = ref.timeSignature ?? "(unknown meter)";
+  const ks =
+    ref.keySignature !== undefined
+      ? `keySignature fifths=${ref.keySignature}`
+      : "keySignature (not set on measure)";
+
+  lines.push(
+    `MEASURE FOCUS: measure ${measureIndex + 1} · part "${part.name}" (single staff)`,
+  );
+  lines.push(`FACT: timeSignature ${ts}; ${ks}`);
+
+  const m = part.measures[measureIndex];
+  const noteIds = m ? collectNoteIdsFromMeasure(m) : [];
+  if (!m) {
+    lines.push(`Part "${part.name}" m${measureIndex + 1}: (missing measure)`);
+    return { lines, noteIds: [] };
+  }
+
+  const tokens: string[] = [];
+  let truncated = false;
+  for (let i = 0; i < m.notes.length; i++) {
+    if (tokens.length >= MAX_NOTES_PER_PART_IN_MEASURE) {
+      truncated = true;
+      break;
+    }
+    tokens.push(formatNoteToken(m.notes[i]!));
+  }
+  const body = tokens.join(", ");
+  const suffix = truncated ? " … (truncated: more events in this staff)" : "";
+  lines.push(`Part "${part.name}" m${measureIndex + 1}: ${body || "(empty)"}${suffix}`);
+
+  return { lines, noteIds };
+}
+
+/**
  * Condensed part-wide summary for LLM (capped measures and notes per measure).
  */
 export function buildPartFocusFacts(

@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Check, X } from "lucide-react";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
+import {
+  DEFAULT_NOTE_HIGHLIGHT_PAD,
+  tightNoteHighlightRect,
+} from "@/lib/music/noteHighlightRect";
 import type { NotePosition } from "@/lib/music/scoreTypes";
 
 interface RiffScoreSuggestionOverlayProps {
@@ -11,6 +15,8 @@ interface RiffScoreSuggestionOverlayProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onAccept?: (correctionId: string) => void;
   onReject?: (correctionId: string) => void;
+  /** Clip so ghost notes / tints do not draw over the RiffScore toolbar. */
+  overlayClipStyle?: CSSProperties;
 }
 
 /**
@@ -23,9 +29,10 @@ export function RiffScoreSuggestionOverlay({
   notePositions,
   onAccept,
   onReject,
+  overlayClipStyle,
 }: RiffScoreSuggestionOverlayProps) {
   return (
-    <div className="absolute inset-0 pointer-events-none">
+    <div className="absolute inset-0 pointer-events-none z-[1]" style={overlayClipStyle}>
       <div className="relative w-full h-full">
         {corrections.map((correction) => {
           const pos = notePositions.find(
@@ -122,6 +129,11 @@ function GhostNoteCorrection({
   const ghostX = position.x;
   const ghostY = position.y + yOffset;
   const direction = pitchToMidi(correction.suggestedPitch) > pitchToMidi(correction.originalPitch) ? "up" : "down";
+  const originalTint = tightNoteHighlightRect(
+    position,
+    DEFAULT_NOTE_HIGHLIGHT_PAD,
+    DEFAULT_NOTE_HIGHLIGHT_PAD,
+  );
 
   return (
     <>
@@ -199,14 +211,15 @@ function GhostNoteCorrection({
 
       {/* Highlight tint on original note */}
       <div
-        className="absolute rounded pointer-events-none"
+        className="hf-score-overlay-pill absolute rounded-full pointer-events-none"
         style={{
-          left: position.x - 3,
-          top: position.y - 3,
-          width: position.w + 6,
-          height: position.h + 6,
-          backgroundColor: "var(--semantic-warning-20)",
+          left: originalTint.left,
+          top: originalTint.top,
+          width: originalTint.width,
+          height: originalTint.height,
+          backgroundColor: "color-mix(in srgb, var(--semantic-warning) 32%, transparent)",
           border: "1px dashed var(--semantic-warning)",
+          boxShadow: "0 0 0 1px color-mix(in srgb, var(--semantic-warning) 28%, transparent)",
         }}
         aria-hidden="true"
       />

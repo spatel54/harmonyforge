@@ -4,7 +4,7 @@
 
 Pair this with **[progress.md](progress.md)** (current status) and **[plan.md](plan.md)** (checklist).
 
-**Local secrets template:** [`frontend/.env.example`](../frontend/.env.example) lists **`OPENAI_API_KEY`** and optional **`OPENAI_BASE_URL`** (OpenAI-compatible gateway). The tables below add **production tuning** (optional overrides such as **`OPENAI_MODEL`**); you do not need every variable in `.env.local` for development.
+**Local secrets template:** [`frontend/.env.example`](../frontend/.env.example) lists **`OPENAI_API_KEY`**, optional **`OPENAI_BASE_URL`** / **`OPENAI_URL`**, and **`OPENAI_MODEL`** (chat model id; code defaults to **`gpt-5-nano`** for lowest standard-tier API cost—override if your provider uses another id). The tables below add **production tuning**; you do not need every variable in `.env.local` for development.
 
 ---
 
@@ -31,7 +31,7 @@ Both paths produce the same UX; the only functional difference is PDF OMR.
 |----------|----------------|--------|
 | `OPENAI_API_KEY` | Server | Secret. Enables Theory Inspector; omit for offline fallback. |
 | `OPENAI_BASE_URL` / `OPENAI_URL` | Server | Optional compatible OpenAI base. |
-| `OPENAI_MODEL` | Server | Optional override (default `gpt-4o-mini`). |
+| `OPENAI_MODEL` | Server | Chat model / deployment id (default **`gpt-5-nano`** in app code—cheapest standard tier on OpenAI’s pricing table; set e.g. `gpt-4o-mini` if needed). |
 | `HF_SOLVER_MAX_MS` | Server | SATB wall-clock cap (ms). `0` = unlimited. Default ~108s on file routes. |
 | `HF_SOLVER_MAX_NODES` | Server | SATB search node budget. |
 | `HF_MAX_CHORD_SLOTS` | Server | Chord-grid density cap for long melodies. |

@@ -7,6 +7,16 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
   {
     title: "Selection & score",
     rows: [
+      {
+        keys: "Toolbar · F9",
+        description:
+          "Durations, accidentals, and playback live in the RiffScore toolbar. F9 toggles the Notation (palette) panel for dynamics, clefs, and more.",
+      },
+      {
+        keys: "Inspector Float",
+        description:
+          "With Theory Inspector in Float mode, drag the cherry header bar (not the Dock/Float/Close buttons) to reposition the panel; the spot is remembered for next time.",
+      },
       { keys: "Esc", description: "Clear the current selection." },
       {
         keys: "Delete · Backspace",
@@ -29,6 +39,26 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
         keys: "⌘/Ctrl + A",
         description: "Select every note in the score.",
       },
+      {
+        keys: "Measure gutter",
+        description:
+          "Click empty space in a measure column on a staff (not on a note or rest) to select every event in that bar for that staff only—useful with Theory Inspector bar focus.",
+      },
+    ],
+  },
+  {
+    title: "Touch & tablet",
+    rows: [
+      {
+        keys: "Rest → pitch",
+        description:
+          "There is no hover on touch: put the cursor on a rest or select it, then type A–G. You can also touch and drag on a rest to move the preview ghost, then tap the ghost to commit.",
+      },
+      {
+        keys: "Measure gutter",
+        description:
+          "Tap empty space in the measure column on a staff (same as desktop) to select the whole bar on that staff.",
+      },
     ],
   },
   {
@@ -43,6 +73,11 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
   {
     title: "Step-time entry (no selection)",
     rows: [
+      {
+        keys: "R",
+        description:
+          "Toggle Repitch mode: change pitch with A–G on a selection or at the cursor; hover a rest for the ghost preview without picking a duration first. Press R again to return to quarter-note entry.",
+      },
       {
         keys: "N",
         description: "Choose the quarter-note duration tool (for typed note entry).",

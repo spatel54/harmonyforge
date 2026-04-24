@@ -91,8 +91,8 @@ export function ExportOptionsPane({
     <div
       data-coachmark="step-6"
       className={cn(
-        "flex flex-col flex-1 h-[700px] min-w-[500px]",
-        "bg-[var(--hf-panel-bg)] rounded-r-[8px]",
+        "flex flex-col flex-1 min-h-0 min-w-0 w-full md:min-w-[500px] h-auto md:h-[700px] max-h-[min(52vh,480px)] md:max-h-none",
+        "bg-[var(--hf-panel-bg)] rounded-b-[12px] md:rounded-b-none md:rounded-r-[12px]",
         className,
       )}
     >
@@ -107,8 +107,9 @@ export function ExportOptionsPane({
           </span>
         </div>
         <button
+          type="button"
           onClick={onClose}
-          className="flex items-center justify-center w-[32px] h-[32px] rounded-[6px] border border-[var(--hf-detail)] hover:bg-[rgba(var(--hf-surface-rgb),0.05)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-surface)]"
+          className="hf-pressable flex items-center justify-center w-[32px] h-[32px] rounded-lg border border-[color-mix(in_srgb,var(--hf-detail)_65%,transparent)] bg-[var(--hf-panel-bg)]/80 hover:bg-[color-mix(in_srgb,var(--hf-surface)_8%,var(--hf-panel-bg))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
         >
           <X className="w-[14px] h-[14px] text-[var(--hf-text-primary)] opacity-70" />
         </button>
@@ -120,7 +121,7 @@ export function ExportOptionsPane({
           Format
         </span>
 
-        <div className="grid grid-cols-3 gap-[12px]">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-[12px]">
           {formats.slice(0, 3).map((f) => (
             <ExportFormatCard
               key={f.id}
@@ -133,7 +134,7 @@ export function ExportOptionsPane({
           ))}
         </div>
 
-        <div className="grid grid-cols-4 gap-[12px]">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-[12px]">
           {formats.slice(3).map((f) => (
             <ExportFormatCard
               key={f.id}

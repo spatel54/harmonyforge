@@ -415,7 +415,6 @@ function inferClef(
   const fromName = clefFromInstrumentName(partName);
   if (fromName) return fromName;
   if (PART_CLEFS[partId]) return PART_CLEFS[partId];
-  const normalized = (partName ?? "").toLowerCase();
   // Do not infer tenor C-clef from the word "tenor" (choral tenor uses treble).
   if (totalParts >= 4 && partIndex === totalParts - 1) return "bass";
   return "treble";

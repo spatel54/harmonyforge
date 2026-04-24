@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { UploadPromptContent } from "@/components/molecules/UploadPromptContent";
 import { cn } from "@/lib/utils";
@@ -17,8 +18,9 @@ export interface DropzoneCopyProps extends React.HTMLAttributes<HTMLDivElement> 
  * Theme-aware: applies dark mode SVG colors from design system Nocturne tokens (Node PnDXj).
  */
 export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
-  ({ className, onFileDrop, onFileSelect, ...props }, ref) => {
+  ({ className, onFileDrop, onFileSelect, style: propStyle, ...props }, ref) => {
     const [isHovered, setIsHovered] = React.useState(false);
+    const [isFocusVisible, setIsFocusVisible] = React.useState(false);
     const inputRef = React.useRef<HTMLInputElement>(null);
     const { resolvedTheme } = useTheme();
     // Render light-mode defaults on SSR and the first client paint to prevent hydration mismatch.
@@ -28,6 +30,7 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
       setMounted(true);
     }, []);
     const isDark = mounted && resolvedTheme === "dark";
+    const prefersReducedMotion = useReducedMotion() === true;
 
     const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
@@ -76,6 +79,8 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
         ? "#2d1817"
         : "#7a6b69";
 
+    const glowActive = isHovered || isFocusVisible;
+
     return (
       <>
         <input
@@ -90,16 +95,26 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
         <div
           ref={ref}
           className={cn(
-            "relative aspect-1513/880 mx-auto shrink-0 cursor-pointer",
+            "hf-dropzone-interactive relative aspect-1513/880 mx-auto shrink-0 cursor-pointer overflow-visible",
+            "transition-[transform] duration-700 ease-[cubic-bezier(0.33,0,0.25,1)]",
+            "hover:-translate-y-0.5 hover:scale-[1.002]",
+            "active:translate-y-0 active:scale-[1]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--hf-bg-grad-end)]",
+            glowActive && "hf-dropzone-interactive--hot",
             className,
           )}
+          style={propStyle}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onFocus={() => setIsFocusVisible(true)}
+          onBlur={() => setIsFocusVisible(false)}
           onClick={handleClick}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           role="button"
           tabIndex={0}
-          aria-label="Upload score - MusicXML, MXL, MIDI, or PDF"
+          aria-label="Choose or drop a score file: MusicXML, MXL, MIDI, or PDF"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -108,9 +123,50 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
           }}
           {...props}
         >
+          {/* Soft musical aureole (beamed eighth notes) — replaces rectangular hover shadow */}
+          <div
+            className={cn(
+              "hf-dropzone-note-aureole pointer-events-none absolute left-1/2 top-[46%] z-0 w-[min(92vw,480px)] max-w-full -translate-x-1/2 -translate-y-1/2",
+              "opacity-0 transition-opacity duration-500 ease-out",
+              glowActive && "opacity-100",
+              glowActive && !prefersReducedMotion && "hf-dropzone-note-aureole--pulse",
+            )}
+            aria-hidden
+          >
+            <div
+              className="hf-dropzone-note-aureole-blur w-full [&>svg]:w-full [&>svg]:h-auto [&>svg]:max-h-[min(52vh,420px)]"
+              style={{
+                color: "var(--hf-accent)",
+                filter: prefersReducedMotion ? undefined : "blur(22px)",
+              }}
+            >
+              <svg
+                viewBox="0 0 240 260"
+                xmlns="http://www.w3.org/2000/svg"
+                className="overflow-visible"
+                aria-hidden
+              >
+                <text
+                  x="120"
+                  y="195"
+                  textAnchor="middle"
+                  fill="currentColor"
+                  fillOpacity={0.55}
+                  style={{
+                    fontSize: 200,
+                    fontFamily:
+                      'ui-serif, Georgia, Cambria, "Times New Roman", Times, "Noto Music", serif',
+                  }}
+                >
+                  {"\u266b"}
+                </text>
+              </svg>
+            </div>
+          </div>
+
           {/* ─── Unified SVG ─── viewBox maps exactly to design proportions ─── */}
           <svg
-            className="absolute inset-0 w-full h-full drop-shadow-sm pointer-events-none"
+            className="hf-dropzone-stand-svg absolute inset-0 z-[1] h-full w-full pointer-events-none"
             viewBox="0 0 1513 1010"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -154,17 +210,20 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
                 height="566"
                 rx="20"
                 stroke={strokeColor}
-                strokeOpacity={isHovered ? "1" : "0.5"}
-                strokeWidth="2"
+                strokeOpacity={isHovered ? "0.92" : "0.5"}
+                strokeWidth={isHovered ? 2.15 : 2}
                 strokeDasharray="10 5"
-                className="transition-colors duration-300"
+                className={cn(
+                  "transition-[stroke-opacity,stroke-width] duration-500 ease-[cubic-bezier(0.33,0,0.25,1)]",
+                  isHovered && "hf-dropzone-dash-glow",
+                )}
               />
 
               {/* ── 4. Upload prompt (zuzV6) ─────────────────────────────────── */}
               {/* Design: Frame 4 at x:560 y:214, we position the foreignObject exactly over the drop-zone rect */}
               <foreignObject x="482.5" y="41" width="474" height="566">
-                <div className="w-full h-full flex flex-col items-center justify-center pointer-events-auto gap-4 px-8">
-                  <UploadPromptContent isDark={isDark} />
+                <div className="w-full h-full min-h-0 flex flex-col items-center justify-center pointer-events-auto gap-2 sm:gap-3 px-4 sm:px-6 py-3 overflow-y-auto hf-scroll-smooth">
+                  <UploadPromptContent isDark={isDark} className="max-h-full min-h-0 justify-center" />
                 </div>
               </foreignObject>
             </g>

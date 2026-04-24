@@ -7,10 +7,6 @@ import {
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
 import {
-  resolveExplanationLevel,
-  type ExplanationLevel,
-} from "@/lib/ai/explanationLevel";
-import {
   isSuggestionExplanationMode,
   type SuggestionExplanationMode,
 } from "@/lib/study/studyConfig";
@@ -34,7 +30,6 @@ interface SuggestRequestBody {
   violationContext?: string;
   scoreContext: ScoreNoteContext[];
   userMessage?: string;
-  explanationLevel?: ExplanationLevel;
   /** M5 RQ2: when "minimal", strip rationale/summary from the JSON response */
   suggestionExplanationMode?: SuggestionExplanationMode;
 }
@@ -65,8 +60,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const explanationLevel = resolveExplanationLevel(body.explanationLevel);
-
   const suggestionExplanationMode: SuggestionExplanationMode =
     isSuggestionExplanationMode(body.suggestionExplanationMode)
       ? body.suggestionExplanationMode
@@ -80,7 +73,6 @@ export async function POST(request: NextRequest) {
     violationType,
     violationContext,
     scoreContext,
-    explanationLevel,
     suggestionExplanationMode,
   });
 

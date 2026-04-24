@@ -7,6 +7,7 @@ export const TAGS_END = "<<<END_TAGS>>>";
 export const CHAT_SEED_TAG_PROMPTS = [
   "Why this note?",
   "Check my voice leading",
+  "How does this progression connect?",
   "Suggest a passing chord",
   "What else fits here?",
   "Show voice motion",

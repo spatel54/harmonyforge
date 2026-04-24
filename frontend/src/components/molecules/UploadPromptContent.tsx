@@ -21,30 +21,31 @@ export const UploadPromptContent = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("flex flex-col items-center gap-[20px]", className)}
+      className={cn(
+        "flex flex-col items-center justify-center gap-3 sm:gap-4 w-full min-h-0",
+        className,
+      )}
       {...props}
     >
-      {/* Inner Frame (Node: YGm78) combining Icon + Primary Header grouped with gap-[15px] */}
-      <div className="flex flex-col items-center gap-[15px] w-full">
-        {/* Target exact fill context from 'Upload Score' parent text group */}
+      {/* Sized to fit SVG foreignObject: wrap allowed, no nowrap (prevents horizontal clip). */}
+      <div className="flex flex-col items-center gap-2 sm:gap-3 w-full min-w-0">
         <UploadIcon
-          className="w-12 h-12 lg:w-16 lg:h-16"
+          className="w-12 h-12 sm:w-16 sm:h-16 shrink-0"
           style={{ color: primaryColor }}
         />
         <h2
-          className="font-mono text-3xl lg:text-5xl font-medium leading-none text-center whitespace-nowrap"
+          className="font-mono text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-medium leading-tight text-center text-balance max-w-full px-1 break-words"
           style={{ color: primaryColor }}
         >
-          Upload a score
+          Bring your score
         </h2>
       </div>
 
-      {/* Secondary helper text (Node: R3OO2) */}
       <p
-        className="font-mono text-xl lg:text-3xl font-normal leading-none text-center whitespace-nowrap"
+        className="font-mono text-base sm:text-lg md:text-xl lg:text-2xl font-normal leading-snug text-center text-balance max-w-full px-1 break-words"
         style={{ color: secondaryColor }}
       >
-        MusicXML, MXL, MIDI, or PDF
+        MusicXML, MXL, MIDI, or PDF. Click or drop.
       </p>
     </div>
   );

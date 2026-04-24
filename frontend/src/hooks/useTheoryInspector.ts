@@ -3,6 +3,7 @@
 import { useCallback, useContext, useEffect, useRef } from "react";
 import { RiffScoreSessionContext } from "@/context/RiffScoreSessionContext";
 import { useScoreStore } from "@/store/useScoreStore";
+import { useToolStore } from "@/store/useToolStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
 import type { EditableScore } from "@/lib/music/scoreTypes";
@@ -44,6 +45,7 @@ import {
 } from "@/lib/music/noteExplainContext";
 import {
   buildMeasureFocusFacts,
+  buildMeasurePartFocusFacts,
   buildPartFocusFacts,
 } from "@/lib/music/regionExplainContext";
 import type { TraceFinding, SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
@@ -54,7 +56,11 @@ import {
   type AuditedSlot,
 } from "@/lib/music/theoryInspectorSlots";
 import type { ScoreCorrection, LLMCorrection } from "@/lib/music/suggestionTypes";
-import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
+import {
+  CANONICAL_ISSUE_LABEL,
+  type ScoreIssueHighlight,
+  type ScoreIssueRuleId,
+} from "@/lib/music/inspectorTypes";
 import { SATB_RULES, isVoiceInRange, type VoiceKey } from "@/lib/music/theoryRules";
 import { splitNoteInsightAiContent } from "@/lib/ai/noteInsightAiSplit";
 import { getSuggestionExplanationMode } from "@/lib/study/studyConfig";
@@ -99,18 +105,26 @@ function resolveViolationKeyForPrompt(
   return primaryViolationKey(lastValidation?.violations);
 }
 
-/** Tutor: plain language, grounded in score + checker facts. */
-const NOTE_EXPLAIN_TUTOR_BRIEF =
+/** Tutor: plain language, grounded in score + checker facts (shared prefix for note-inspector streaming). */
+const NOTE_EXPLAIN_TUTOR_SHARED =
   "Write for a curious musician who is not a theory student. **Before** any **Response rules** section, this message includes **exported notation** from the app: **SCORE_DIGEST**, **FACT:** lines, and usually a **FULL BAR** listing. That block **is** the score you can read (not a teaser). **Never** say notation or duration was not provided if SCORE_DIGEST or AUTHORITATIVE lines exist. " +
   "**Do not prioritize pitch over rhythm or other dimensions**—weave **everything the FACT lines supply** into one answer: pitches, notated durations (note type, quarter-note span, dots, ties), meter, staff roster, every staff sounding at this beat, intervals, voice-leading motion between moments, and same-line neighbors (before/after, across the barline) when listed. Mention articulation or dynamics only if they appear in the facts or the user asks. " +
   "If the message includes ENGINE ORIGIN facts, use those ONLY to explain what HarmonyForge originally generated at load time. Never say the engine ‘chose’ or ‘picked’ the CURRENT pitch if a pitch-edit FACT shows the user changed it—describe the **live** score using CURRENT SCORE FACTS instead. " +
   "STAFF ROSTER and vertical FACT lines label the user’s first staff as **Melody** when there are multiple staves; generated staves use their part names. When multiple harmony staves are listed, relate this moment to **Melody AND each other staff** that sounds. Use every relevant INTERVAL FACT. " +
   "CURRENT SCORE FACTS are a **full notation snapshot** for this moment; treat them as authoritative. Lines starting **FACT: AUTHORITATIVE NOTATION** or **FACT: Clicked event** state the **notated note length**—if either appears, you **must** answer half-note vs quarter etc. from them; never say duration is missing. When a claim follows from a FACT, state it plainly—no ‘maybe’, ‘probably’, ‘likely’, or ‘might’. " +
   "If the user clicked Melody (no engine-origin block), explain how this melody moment fits **each generated staff** at the same beat—do not invent generator intent. " +
-  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. Main answer: **3–5 bullets** (each “- ”) or **at most 4 short sentences**. " +
-  "After the main answer, on its own line output exactly the text <<<SUGGESTIONS>>> then 2–4 short bullet lines (each starting with “- ”). **Every suggestion bullet must pair an action with an explicit reason** (use “because”, “so that”, or “— reason:”): e.g. “- Try X **because** Y from the FACTs” or “- Do Z — **reason:** smoother motion per the intervals listed.” Ideas must refine harmony or voice-leading or the **next** chord moment—grounded in supplied facts; if facts are too thin, use a single bullet: “- Not enough context for specific suggestions because the notation block does not spell out the next harmony.” " +
-  "Optionally, after the suggestion bullets, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\",\"staffIndex\":<int>}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). **staffIndex** is the integer from the matching `STAFF_HINT=<n>` on that line — include it so the app can resolve duplicates even when the suggestion's part name is ambiguous. Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to bullets when possible (e.g. ia1 with first bullet). " +
+  "Do not guess Roman numerals, key degrees, or chord labels unless they appear in the facts. ";
+
+const NOTE_EXPLAIN_TUTOR_IDEA_ACTIONS_AND_TAGS =
+  "Optionally, after the suggestion section, on its own line output exactly <<<IDEA_ACTIONS>>> then a single JSON array (no markdown fence) of objects the app can apply in one click. Each object: {\"id\":\"ia1\",\"noteId\":\"<string>\",\"suggestedPitch\":\"A4\",\"summary\":\"short UI label\",\"staffIndex\":<int>}. The **noteId** MUST be copied **verbatim** from a line starting `FACT: NOTE_ID` in the **NOTE_IDS_FOR_IDEA_ACTIONS** section (same message). **staffIndex** is the integer from the matching `STAFF_HINT=<n>` on that line — include it so the app can resolve duplicates even when the suggestion's part name is ambiguous. Do not invent, shorten, or paraphrase noteIds. Use scientific pitch (e.g. F#3, Bb4). If that section is missing or no row fits, omit <<<IDEA_ACTIONS>>> or use []. Match `id` to suggestion lines when possible (e.g. ia1 with first line). " +
   "Optionally, on the last line, output <<<TAGS>>> then a JSON array of 1–4 short follow-up prompts, then <<<END_TAGS>>> (e.g. <<<TAGS>>>[\"Check the bass motion\",\"Try a smoother alto\"]<<<END_TAGS>>>). Omit if not useful.";
+
+/** Single response shape: scannable main answer + compact suggestions (user research Iter1–6). */
+const NOTE_EXPLAIN_TUTOR_RESPONSE_RULES =
+  NOTE_EXPLAIN_TUTOR_SHARED +
+  "Main answer: **2–4 bullets** (each \"- \") or **at most 3 short sentences**—lead with **actionable** harmonic/rhythmic insight tied to FACT lines, not a theory lecture. " +
+  "After the main answer, on its own line output exactly <<<SUGGESTIONS>>> then **2–3** short bullet lines (each \"- \") or **≤3 short sentences** for that section. **Every** line pairs **action + explicit reason** (“because”, “so that”, or \"— reason:\") grounded in FACTs. Prefer **varied** ideas when facts allow—not only different chord tones; **duration, rests, spacing, or voicing** are valid. If facts are too thin: \"- Not enough context for specific suggestions because the notation block does not spell out the next harmony.\" " +
+  NOTE_EXPLAIN_TUTOR_IDEA_ACTIONS_AND_TAGS;
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
@@ -273,7 +287,9 @@ function pushHighlights(
   voices: VoiceKey[],
   label: string,
   severity: "error" | "warning",
+  meta?: { ruleId: ScoreIssueRuleId; involvedVoices?: VoiceKey[] },
 ) {
+  const involved = meta?.involvedVoices ?? voices;
   for (const voice of voices) {
     const noteId = slot.noteIds[voice];
     if (!noteId) continue;
@@ -281,7 +297,9 @@ function pushHighlights(
       noteId,
       label,
       severity,
-      detail: `${label} in ${voice}`,
+      detail: `${label} · ${voice}`,
+      ruleId: meta?.ruleId,
+      involvedVoices: involved,
     });
   }
 }
@@ -717,30 +735,54 @@ function detectIssueHighlights(auditedSlots: AuditedSlot[]): ScoreIssueHighlight
     };
 
     if (!isVoiceInRange("soprano", currMidi.soprano)) {
-      pushHighlights(highlights, curr, ["soprano"], "Range violation", "error");
+      pushHighlights(highlights, curr, ["soprano"], "Range violation", "error", {
+        ruleId: "range",
+        involvedVoices: ["soprano"],
+      });
     }
     if (!isVoiceInRange("alto", currMidi.alto)) {
-      pushHighlights(highlights, curr, ["alto"], "Range violation", "error");
+      pushHighlights(highlights, curr, ["alto"], "Range violation", "error", {
+        ruleId: "range",
+        involvedVoices: ["alto"],
+      });
     }
     if (!isVoiceInRange("tenor", currMidi.tenor)) {
-      pushHighlights(highlights, curr, ["tenor"], "Range violation", "error");
+      pushHighlights(highlights, curr, ["tenor"], "Range violation", "error", {
+        ruleId: "range",
+        involvedVoices: ["tenor"],
+      });
     }
     if (!isVoiceInRange("bass", currMidi.bass)) {
-      pushHighlights(highlights, curr, ["bass"], "Range violation", "error");
+      pushHighlights(highlights, curr, ["bass"], "Range violation", "error", {
+        ruleId: "range",
+        involvedVoices: ["bass"],
+      });
     }
 
     if (currMidi.soprano - currMidi.alto > SATB_RULES.maxSpacing.sopranoAlto) {
-      pushHighlights(highlights, curr, ["soprano", "alto"], "Spacing violation", "warning");
+      pushHighlights(highlights, curr, ["soprano", "alto"], "Spacing violation", "warning", {
+        ruleId: "spacing",
+        involvedVoices: ["soprano", "alto"],
+      });
     }
     if (currMidi.alto - currMidi.tenor > SATB_RULES.maxSpacing.altoTenor) {
-      pushHighlights(highlights, curr, ["alto", "tenor"], "Spacing violation", "warning");
+      pushHighlights(highlights, curr, ["alto", "tenor"], "Spacing violation", "warning", {
+        ruleId: "spacing",
+        involvedVoices: ["alto", "tenor"],
+      });
     }
     if (currMidi.tenor - currMidi.bass > SATB_RULES.maxSpacing.tenorBass) {
-      pushHighlights(highlights, curr, ["tenor", "bass"], "Spacing violation", "warning");
+      pushHighlights(highlights, curr, ["tenor", "bass"], "Spacing violation", "warning", {
+        ruleId: "spacing",
+        involvedVoices: ["tenor", "bass"],
+      });
     }
 
     if (!(currMidi.soprano >= currMidi.alto && currMidi.alto >= currMidi.tenor && currMidi.tenor >= currMidi.bass)) {
-      pushHighlights(highlights, curr, VOICE_KEYS, "Voice order violation", "error");
+      pushHighlights(highlights, curr, VOICE_KEYS, "Voice order violation", "error", {
+        ruleId: "voiceOrder",
+        involvedVoices: [...VOICE_KEYS],
+      });
     }
 
     if (i === 0) continue;
@@ -761,10 +803,16 @@ function detectIssueHighlights(auditedSlots: AuditedSlot[]): ScoreIssueHighlight
       if (!parallelMotion) continue;
 
       if (prevInterval === 7 && currInterval === 7) {
-        pushHighlights(highlights, curr, [v1, v2], "Parallel fifth", "error");
+        pushHighlights(highlights, curr, [v1, v2], "Parallel fifth", "error", {
+          ruleId: "parallelFifth",
+          involvedVoices: [v1, v2],
+        });
       }
       if (prevInterval === 0 && currInterval === 0) {
-        pushHighlights(highlights, curr, [v1, v2], "Parallel octave", "error");
+        pushHighlights(highlights, curr, [v1, v2], "Parallel octave", "error", {
+          ruleId: "parallelOctave",
+          involvedVoices: [v1, v2],
+        });
       }
     }
 
@@ -773,7 +821,10 @@ function detectIssueHighlights(auditedSlots: AuditedSlot[]): ScoreIssueHighlight
         const upperVoice = VOICE_KEYS[upper];
         const lowerVoice = VOICE_KEYS[lower];
         if (currMidi[lowerVoice] > prevMidi[upperVoice] || currMidi[upperVoice] < prevMidi[lowerVoice]) {
-          pushHighlights(highlights, curr, [upperVoice, lowerVoice], "Voice overlap", "warning");
+          pushHighlights(highlights, curr, [upperVoice, lowerVoice], "Voice overlap", "warning", {
+            ruleId: "voiceOverlap",
+            involvedVoices: [upperVoice, lowerVoice],
+          });
         }
       }
     }
@@ -794,6 +845,8 @@ function findingsToHighlights(
     const slot = auditedSlots[slotTrace.slotIndex];
     if (!slot) continue;
     for (const finding of slotTrace.findings) {
+      const ruleId = finding.rule as ScoreIssueRuleId;
+      const label = CANONICAL_ISSUE_LABEL[ruleId] ?? finding.message;
       for (const voice of finding.voices) {
         const noteId = slot.noteIds[voice];
         if (!noteId) continue;
@@ -801,9 +854,11 @@ function findingsToHighlights(
         if (!found || !harmonyPartIds.has(found.part.id)) continue;
         highlights.push({
           noteId,
-          label: finding.message,
+          label,
           severity: finding.severity,
-          detail: `${finding.rule} at slot ${slotTrace.slotIndex + 1}`,
+          detail: finding.message,
+          ruleId,
+          involvedVoices: finding.voices,
         });
       }
     }
@@ -851,8 +906,6 @@ export function useTheoryInspector() {
       if (!trimmed || store.isStreaming) return;
 
       flushEditorToZustand();
-
-      const gate = useTheoryInspectorStore.getState();
 
       // Abort any in-flight stream
       abortRef.current?.abort();
@@ -917,15 +970,19 @@ export function useTheoryInspector() {
           theoryInspectorNoteMode = insight.inspectorMode;
         }
       } else if (scoreFocus?.kind === "measure" && liveScore) {
-        const { lines, noteIds } = buildMeasureFocusFacts(
-          liveScore,
-          scoreFocus.measureIndex,
-        );
+        const { lines, noteIds } = scoreFocus.partId
+          ? buildMeasurePartFocusFacts(
+              liveScore,
+              scoreFocus.measureIndex,
+              scoreFocus.partId,
+            )
+          : buildMeasureFocusFacts(liveScore, scoreFocus.measureIndex);
         scoreSelectionContext = lines.join("\n");
         theoryInspectorNoteMode = undefined;
         store.setInspectorScoreFocus({
           kind: "measure",
           measureIndex: scoreFocus.measureIndex,
+          ...(scoreFocus.partId ? { partId: scoreFocus.partId } : {}),
           evidenceLines: lines,
           noteIds,
         });
@@ -946,6 +1003,20 @@ export function useTheoryInspector() {
       } else if (scoreFocus?.kind === "measure" || scoreFocus?.kind === "part") {
         scoreSelectionContext = scoreFocus.evidenceLines.join("\n");
         theoryInspectorNoteMode = undefined;
+      }
+
+      const multiSel = useToolStore.getState().selection;
+      if (multiSel.length > 1 && liveScore) {
+        const parts = multiSel.slice(0, 12).map((sel) => {
+          const hit = getNoteById(liveScore, sel.noteId);
+          const label =
+            hit == null ? "?" : hit.note.isRest ? "rest" : hit.note.pitch ?? "?";
+          return `${label}@m${sel.measureIndex + 1}`;
+        });
+        const multiLine = `FACT: User multi-selected ${multiSel.length} note slot(s): ${parts.join(", ")}${multiSel.length > 12 ? " …" : ""}`;
+        scoreSelectionContext = scoreSelectionContext
+          ? `${scoreSelectionContext}\n${multiLine}`
+          : multiLine;
       }
 
       const userMsg: TheoryInspectorMessage = {
@@ -993,9 +1064,6 @@ export function useTheoryInspector() {
             theoryInspectorNoteMode,
             conversationHistory,
             ...(musicalGoal ? { musicalGoal } : {}),
-            ...(gate.hasApiKey
-              ? { explanationLevel: useTheoryInspectorStore.getState().explanationLevel }
-              : {}),
           }),
           signal: controller.signal,
         });
@@ -1213,7 +1281,6 @@ export function useTheoryInspector() {
             genre: store.genre,
             violationType,
             scoreContext: scopedScoreContext,
-            explanationLevel: useTheoryInspectorStore.getState().explanationLevel,
             suggestionExplanationMode: getSuggestionExplanationMode(),
           }),
         });
@@ -1350,9 +1417,8 @@ export function useTheoryInspector() {
             persona: "tutor",
             genre: store.genre,
             theoryInspectorNoteMode: base.inspectorMode,
-            userMessage: `${evidence}\n\n---\n**Response rules** (apply after reading the notation block above):\n${NOTE_EXPLAIN_TUTOR_BRIEF}`,
+            userMessage: `${evidence}\n\n---\n**Response rules** (apply after reading the notation block above):\n${NOTE_EXPLAIN_TUTOR_RESPONSE_RULES}`,
             scoreSelectionContext: evidence,
-            explanationLevel: useTheoryInspectorStore.getState().explanationLevel,
           }),
         });
         if (!response.ok) {

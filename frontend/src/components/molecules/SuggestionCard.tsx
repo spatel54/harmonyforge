@@ -132,7 +132,7 @@ export const SuggestionCard = React.forwardRef<
                     <button
                       type="button"
                       onClick={() => onAcceptCorrection(c.id)}
-                      className="flex items-center justify-center w-[18px] h-[18px] rounded-full hover:bg-green-100 transition-colors focus-visible:outline-2"
+                      className="hf-pressable flex items-center justify-center w-[18px] h-[18px] rounded-full hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                       style={{ color: "#2e7d32" }}
                       aria-label={`Accept: ${c.originalPitch} → ${c.suggestedPitch}`}
                     >
@@ -141,7 +141,7 @@ export const SuggestionCard = React.forwardRef<
                     <button
                       type="button"
                       onClick={() => onRejectCorrection(c.id)}
-                      className="flex items-center justify-center w-[18px] h-[18px] rounded-full hover:bg-red-100 transition-colors focus-visible:outline-2"
+                      className="hf-pressable flex items-center justify-center w-[18px] h-[18px] rounded-full hover:bg-red-100 dark:hover:bg-red-900/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-violation)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
                       style={{ color: "var(--semantic-violation)" }}
                       aria-label={`Reject: keep ${c.originalPitch}`}
                     >
@@ -175,7 +175,7 @@ export const SuggestionCard = React.forwardRef<
             <button
               type="button"
               onClick={onRejectAll}
-              className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal transition-opacity hover:opacity-80 focus-visible:outline-2"
+              className="hf-pressable flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
               style={{
                 backgroundColor:
                   "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
@@ -187,7 +187,7 @@ export const SuggestionCard = React.forwardRef<
             <button
               type="button"
               onClick={onAcceptAll}
-              className="flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white transition-opacity hover:opacity-85 focus-visible:outline-2"
+              className="hf-pressable flex items-center px-[8px] py-[3px] rounded-[2px] font-mono text-[10px] font-normal text-white shadow-sm hover:shadow-md hover:brightness-[1.06] active:brightness-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
               style={{ backgroundColor: "var(--semantic-warning)" }}
             >
               Accept All

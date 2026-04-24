@@ -43,7 +43,7 @@ COPY frontend/ ./frontend/
 
 # Optional build-time env forwarded to the client bundle.
 ARG OPENAI_API_KEY
-ARG OPENAI_MODEL=gpt-4o-mini
+ARG OPENAI_MODEL=gpt-5-nano
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 ENV OPENAI_MODEL=$OPENAI_MODEL
 

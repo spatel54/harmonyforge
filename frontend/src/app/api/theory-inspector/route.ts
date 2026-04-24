@@ -8,10 +8,6 @@ import {
   type Genre,
   type ViolationKey,
 } from "@/lib/ai/taxonomyIndex";
-import {
-  resolveExplanationLevel,
-  type ExplanationLevel,
-} from "@/lib/ai/explanationLevel";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
 
 interface TheoryInspectorRequestBody {
@@ -24,7 +20,6 @@ interface TheoryInspectorRequestBody {
   scoreSelectionContext?: string;
   theoryInspectorNoteMode?: TheoryInspectorMode;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
-  explanationLevel?: ExplanationLevel;
   /** User-stated musical goal (Iter1 §3) — aligns tutor responses with user intent. */
   musicalGoal?: string;
 }
@@ -57,7 +52,6 @@ export async function POST(request: NextRequest) {
   }
 
   const { apiKey, model } = getServerOpenAIEnv();
-  const explanationLevel = resolveExplanationLevel(body.explanationLevel);
 
   // --- Fallback mode: no API key ---
   if (!apiKey) {
@@ -83,7 +77,6 @@ export async function POST(request: NextRequest) {
     violationContext,
     scoreSelectionContext: scoreSelectionContext ?? violationContext,
     theoryInspectorNoteMode,
-    explanationLevel,
     musicalGoal,
   });
 

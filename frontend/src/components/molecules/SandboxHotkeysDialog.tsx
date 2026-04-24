@@ -92,7 +92,7 @@ export function SandboxHotkeysDialog({ isOpen, onClose }: SandboxHotkeysDialogPr
       role="presentation"
     >
       <div
-        className="fixed inset-0 bg-[#2D1817] opacity-15 dark:opacity-30 transition-opacity"
+        className="hf-backdrop-animate hf-overlay-backdrop fixed inset-0 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -102,8 +102,8 @@ export function SandboxHotkeysDialog({ isOpen, onClose }: SandboxHotkeysDialogPr
           aria-modal="true"
           aria-labelledby="sandbox-hotkeys-title"
           className={cn(
-            "pointer-events-auto max-w-lg w-full max-h-[min(85vh,560px)] overflow-y-auto rounded-lg border p-6 shadow-xl",
-            "bg-[var(--hf-panel-bg)] border-[var(--hf-detail)]",
+            "hf-modal-animate hf-scroll-smooth pointer-events-auto max-w-lg w-full max-h-[min(85vh,560px)] overflow-y-auto rounded-xl border p-6 shadow-[0_16px_48px_rgba(45,24,23,0.14)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)]",
+            "bg-[var(--hf-panel-bg)] border-[color-mix(in_srgb,var(--hf-detail)_70%,transparent)]",
           )}
         >
           <div className="flex items-start justify-between gap-3 mb-3">
@@ -117,7 +117,7 @@ export function SandboxHotkeysDialog({ isOpen, onClose }: SandboxHotkeysDialogPr
             <button
               type="button"
               onClick={onClose}
-              className="font-mono text-[11px] shrink-0 px-2 py-1 rounded border border-[var(--hf-detail)] text-[var(--hf-text-primary)] hover:opacity-90"
+              className="hf-pressable font-mono text-[11px] shrink-0 px-2.5 py-1.5 rounded-lg border border-[var(--hf-detail)] text-[var(--hf-text-primary)] shadow-sm hover:bg-[color-mix(in_srgb,var(--hf-surface)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
             >
               Close
             </button>

@@ -80,6 +80,8 @@ export function SandboxPalettePanel({
       className={cn(
         "flex flex-col h-full w-[260px] shrink-0 overflow-hidden",
         "bg-[var(--hf-panel-bg)] border-l border-[var(--hf-detail)]",
+        "shadow-[inset_1px_0_0_color-mix(in_srgb,var(--hf-detail)_35%,transparent)]",
+        "transition-[box-shadow,background-color] duration-300 ease-out",
         className,
       )}
       aria-label="Notation and symbols (beta)"
@@ -99,7 +101,7 @@ export function SandboxPalettePanel({
             onClick={onClose}
             title="Hide notation panel (F9)"
             aria-label="Hide notation panel"
-            className="flex items-center justify-center w-[28px] h-[28px] rounded-[6px] border border-[var(--hf-detail)] hover:bg-[color-mix(in_srgb,var(--hf-surface)_8%,transparent)] transition-colors"
+            className="hf-pressable flex items-center justify-center w-[28px] h-[28px] rounded-[6px] border border-[var(--hf-detail)] shadow-sm hover:shadow-md hover:bg-[color-mix(in_srgb,var(--hf-surface)_10%,transparent)] active:bg-[color-mix(in_srgb,var(--hf-surface)_16%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
           >
             <PanelRightClose className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
           </button>
@@ -111,7 +113,7 @@ export function SandboxPalettePanel({
           <button
             type="button"
             onClick={expandAll}
-            className="flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] hover:border-[var(--hf-accent)] transition-colors"
+            className="hf-pressable flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] shadow-sm hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
             style={{ color: "var(--hf-text-primary)" }}
           >
             Expand all
@@ -119,7 +121,7 @@ export function SandboxPalettePanel({
           <button
             type="button"
             onClick={collapseAll}
-            className="flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] hover:border-[var(--hf-accent)] transition-colors"
+            className="hf-pressable flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] shadow-sm hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
             style={{ color: "var(--hf-text-primary)" }}
           >
             Collapse all
@@ -133,15 +135,15 @@ export function SandboxPalettePanel({
           className={cn(
             "w-full h-[28px] px-2 rounded-[6px]",
             "bg-[var(--hf-bg)] border border-[var(--hf-detail)]",
-            "text-[12px] font-mono",
-            "focus:outline-none focus:border-[var(--hf-accent)]",
+            "text-[12px] font-mono transition-shadow",
+            "focus:outline-none focus:border-[var(--hf-accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--hf-accent)_35%,transparent)]",
           )}
           style={{ color: "var(--hf-text-primary)" }}
           aria-label="Filter notation symbols"
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
+      <div className="hf-scroll-smooth flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
         {visibleSections.map((section) => {
           const isOpen = openSections[section.id] ?? false;
           return (
@@ -152,7 +154,7 @@ export function SandboxPalettePanel({
               <button
                 type="button"
                 onClick={() => toggleSection(section.id)}
-                className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-[color-mix(in_srgb,var(--hf-surface)_6%,transparent)] transition-colors"
+                className="hf-pressable w-full flex items-center justify-between px-2 py-1.5 hover:bg-[color-mix(in_srgb,var(--hf-surface)_8%,transparent)] active:bg-[color-mix(in_srgb,var(--hf-surface)_14%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--hf-accent)]"
                 aria-expanded={isOpen}
                 aria-controls={`palette-section-${section.id}`}
               >

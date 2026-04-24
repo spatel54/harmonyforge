@@ -46,7 +46,8 @@ export function getServerOpenAIEnv(): {
 } {
   const apiKey = process.env.OPENAI_API_KEY?.trim() || undefined;
   const rawModel = process.env.OPENAI_MODEL?.trim();
-  const model = rawModel || "gpt-4o-mini";
+  /** Default: lowest standard input $/MTok on OpenAI’s pricing table (`gpt-5-nano`); override via `OPENAI_MODEL`. */
+  const model = rawModel || "gpt-5-nano";
   const baseURL = resolveOpenAIBaseURL();
   return { apiKey, model, baseURL };
 }

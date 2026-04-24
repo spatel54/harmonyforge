@@ -42,13 +42,15 @@ Default URL: **http://localhost:3000**
 1. Copy **`.env.example`** → **`.env.local`** (same directory as this README).  
 2. Never commit `.env.local`.
 
-The template only defines:
+The template documents:
 
 ```bash
 OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5-nano
+# OPENAI_BASE_URL=https://api.openai.com/v1   # optional — gateway or self-hosted OpenAI-compatible API
 ```
 
-Set it if you use the Theory Inspector LLM; leave blank for offline fallbacks. A **base URL is not required**: the client uses OpenAI’s default API when `OPENAI_BASE_URL` / `OPENAI_URL` are omitted. Advanced tuning (solver limits, OMR paths, etc.) is optional and documented in code comments and [docs/deployment.md](../docs/deployment.md) — not in `.env.example` on purpose.
+Set **`OPENAI_API_KEY`** if you use the Theory Inspector LLM; leave blank for offline fallbacks. **`OPENAI_MODEL`** sets the chat model id (default in code is **`gpt-5-nano`**, the cheapest standard tier on [OpenAI pricing](https://platform.openai.com/docs/pricing); use e.g. **`gpt-4o-mini`** if your account does not serve **`gpt-5-nano`** yet). **`OPENAI_BASE_URL`** (or legacy **`OPENAI_URL`**) targets a non-default OpenAI-compatible API root (include `.../v1` when required). Solver limits, OMR, and deploy-only vars are in [docs/deployment.md](../docs/deployment.md).
 
 ---
 

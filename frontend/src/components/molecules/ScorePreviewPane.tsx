@@ -26,8 +26,9 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
   return (
     <div
       className={cn(
-        "flex flex-col w-[480px] h-[700px] shrink-0",
-        "bg-[var(--hf-bg)] border-r border-[var(--hf-detail)] rounded-l-[8px]",
+        "flex flex-col w-full md:w-[480px] h-[min(320px,38vh)] md:h-[700px] shrink-0 min-h-0",
+        "bg-[var(--hf-bg)] border-b md:border-b-0 md:border-r border-[color-mix(in_srgb,var(--hf-detail)_60%,transparent)]",
+        "rounded-t-[12px] md:rounded-t-none md:rounded-l-[12px]",
         className,
       )}
     >
@@ -65,7 +66,7 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
       </div>
 
       {/* Footer */}
-      <div className="flex flex-col items-center justify-center h-[72px] gap-[4px] border-t border-[var(--hf-detail)] bg-[var(--hf-bg)] shrink-0 rounded-bl-[8px]">
+      <div className="flex flex-col items-center justify-center h-[72px] gap-[4px] border-t border-[var(--hf-detail)] bg-[var(--hf-bg)] shrink-0 md:rounded-bl-[8px]">
         <span className="font-mono text-[10px] text-[var(--hf-text-primary)] opacity-50">
           {meta ? `${meta.title || "Score"} · ${meta.meta || "HarmonyForge"}` : "Export your score"}
         </span>

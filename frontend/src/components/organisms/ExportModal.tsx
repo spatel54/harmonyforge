@@ -29,7 +29,7 @@ export function ExportModal({
     <div className="fixed inset-0 z-[10130] overflow-y-auto hf-print-hide hf-export-modal">
       {/* Fixed dim backdrop */}
       <div
-        className="fixed inset-0 bg-[#2D1817] opacity-15 dark:opacity-30 transition-opacity"
+        className="hf-backdrop-animate hf-overlay-backdrop fixed inset-0 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -42,18 +42,14 @@ export function ExportModal({
           aria-modal="true"
           aria-labelledby="export-modal-title"
           className={cn(
-            "pointer-events-auto relative flex flex-row w-[1200px] h-[700px] max-w-[95vw] max-h-[90vh]",
-            "bg-[var(--hf-panel-bg)] rounded-[8px] shadow-[0_24px_80px_rgba(45,24,23,0.31)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]",
-            "border border-[var(--hf-detail)]",
+            "hf-modal-animate pointer-events-auto relative flex flex-col md:flex-row w-full max-w-[95vw] max-h-[90vh] md:w-[1200px] md:h-[700px] min-h-0 overflow-hidden",
+            "bg-[var(--hf-panel-bg)] rounded-[12px] shadow-[0_20px_60px_rgba(45,24,23,0.18)] dark:shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
+            "border border-[color-mix(in_srgb,var(--hf-detail)_75%,transparent)]",
             className,
           )}
         >
           <ScorePreviewPane musicXML={musicXML} previewRootRef={previewContainerRef} />
-          <ExportOptionsPane
-          onClose={onClose}
-          onExport={onExport}
-          musicXML={musicXML}
-        />
+          <ExportOptionsPane onClose={onClose} onExport={onExport} musicXML={musicXML} />
         </div>
       </div>
     </div>

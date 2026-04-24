@@ -29,11 +29,11 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   issueHighlights?: ScoreIssueHighlight[];
   noteInspectionEnabled?: boolean;
   focusHighlightNoteIds?: readonly string[];
-  onInspectorSelectMeasure?: (measureIndex: number) => void;
+  onInspectorSelectMeasure?: (measureIndex: number, partId?: string) => void;
   onInspectorSelectPart?: (staffIndex: number) => void;
   onInspectorInferredRegion?: (
     region:
-      | { kind: "measure"; measureIndex: number }
+      | { kind: "measure"; measureIndex: number; partId?: string }
       | { kind: "part"; staffIndex: number },
   ) => void;
   onRiffScoreSessionReady?: (session: RiffScoreSessionHandles) => void;
@@ -42,6 +42,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   onPaletteSymbolDrop?: (toolId: string) => void;
   /** Commit note-input ghost over a selected rest (pitch + duration handled by parent). */
   onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
+  /** When false, notation is read-only (sandbox View mode). Default true. */
+  enableScoreEditing?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       noteInputPitchLabelEnabled = false,
       onPaletteSymbolDrop,
       onRestInputCommit,
+      enableScoreEditing = true,
       className,
       ...props
     },
@@ -129,6 +132,10 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
           const target = e.target as HTMLElement;
           if (target.closest("[data-note-hit]")) return;
           if (target.closest("[data-grid-slot]")) return;
+          // RiffScore renders inside `.riffscore-hf-wrapper`. Background dismiss (empty staff,
+          // etc.) is handled there via `onScoreBackgroundInteract` with note/rest hit-testing.
+          // Without this guard, note clicks bubble here after mouseup and clear selection immediately.
+          if (target.closest(".riffscore-hf-wrapper")) return;
           onCanvasClick?.();
         }}
         onContextMenu={(e) => {
@@ -442,6 +449,8 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}
               onRestInputCommit={onRestInputCommit}
+              enableScoreEditing={enableScoreEditing}
+              onScoreBackgroundInteract={onCanvasClick}
             />
           </div>
         )}

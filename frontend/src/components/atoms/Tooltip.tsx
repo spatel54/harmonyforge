@@ -16,6 +16,10 @@ interface TooltipProps {
    * `overflow-*` on ancestors or covered by the adjacent document column.
    */
   floatingPosition: { top: number; left: number } | null;
+  /** Set on the tooltip surface for `aria-describedby` on triggers (e.g. ActionTooltip). */
+  contentId?: string;
+  /** Near-instant motion for `prefers-reduced-motion`. */
+  instantTransition?: boolean;
 }
 
 const tooltipBoxClass = cn(
@@ -36,6 +40,8 @@ export const Tooltip: React.FC<TooltipProps> = ({
   visible,
   className,
   floatingPosition,
+  contentId,
+  instantTransition = false,
 }) => {
   /* SSR / pre-hydration: no document.body */
   if (typeof document === "undefined") return null;
@@ -45,10 +51,12 @@ export const Tooltip: React.FC<TooltipProps> = ({
       {visible && floatingPosition != null ? (
         <motion.div
           key="hf-tooltip"
+          id={contentId}
+          role="tooltip"
           initial={{ opacity: 0, scale: 0.95, y: 4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 4 }}
-          transition={{ duration: 0.15, ease: "easeOut" }}
+          transition={{ duration: instantTransition ? 0.04 : 0.15, ease: "easeOut" }}
           className={cn("fixed z-[10000] -translate-x-1/2", tooltipBoxClass, className)}
           style={{
             top: floatingPosition.top,

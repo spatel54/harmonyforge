@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import type { EditableScore, Note } from "@/lib/music/scoreTypes";
-import { cloneScore, deleteNotesAsRests, normalizeScoreRests } from "@/lib/music/scoreUtils";
+import {
+  cloneScore,
+  deleteNotesAsRests,
+  enforceMeasureBeatCaps,
+  normalizeScoreRests,
+} from "@/lib/music/scoreUtils";
 import { generateId } from "@/lib/music/scoreTypes";
 
 export interface NoteSelection {
@@ -45,7 +50,9 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
     set({ visibleParts: next });
   },
   setScore: (score) => {
-    const normalized = score ? normalizeScoreRests(score) : null;
+    const normalized = score
+      ? normalizeScoreRests(enforceMeasureBeatCaps(score))
+      : null;
     set({
       score: normalized,
       history: normalized ? [cloneScore(normalized)] : [],
@@ -106,7 +113,7 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
   applyScore: (nextScore: EditableScore) => {
     const { score } = get();
     if (!score) return;
-    const normalized = normalizeScoreRests(nextScore);
+    const normalized = normalizeScoreRests(enforceMeasureBeatCaps(nextScore));
     const { history, historyIndex } = get();
     const trimmed = history.slice(0, historyIndex + 1);
     trimmed.push(cloneScore(normalized));
@@ -120,7 +127,7 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
     });
   },
   replaceScoreFromEditor: (nextScore) => {
-    const normalized = normalizeScoreRests(nextScore);
+    const normalized = normalizeScoreRests(enforceMeasureBeatCaps(nextScore));
     set({
       score: normalized,
       history: [cloneScore(normalized)],

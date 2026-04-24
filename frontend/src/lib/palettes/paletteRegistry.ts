@@ -46,6 +46,13 @@ export const PALETTE_SECTIONS: PaletteSection[] = [
       { id: "dur-dot", label: "Dot", glyph: "‥", toolId: "duration-dotted", title: "Toggle dotted rhythm (selection)", requiresSelection: true },
       { id: "dur-tie", label: "Tie", glyph: "⌒", toolId: "duration-tie", title: "Tie (,) — needs selection", requiresSelection: true },
       { id: "dur-rest", label: "Rest", glyph: "𝄽", toolId: "insert-rest", title: "Insert rest (0) at cursor" },
+      {
+        id: "mode-repitch",
+        label: "Repitch",
+        glyph: "↺",
+        toolId: "mode-repitch",
+        title: "Repitch mode (R) — A–G changes pitch; rest hover shows ghost (no new durations)",
+      },
     ],
   },
   {

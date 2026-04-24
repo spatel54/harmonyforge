@@ -1,26 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSystemPrompt } from "./prompts";
+import { buildSystemPrompt } from "@/lib/ai/prompts";
 
 const baseCtx = {
   genre: "classical",
   taxonomySection: "(test taxonomy)",
-  explanationLevel: "intermediate" as const,
 };
 
 describe("buildSystemPrompt", () => {
+  it("returns a long string (regression: template literal must not break on backticks)", () => {
+    const out = buildSystemPrompt("tutor", baseCtx);
+    expect(typeof out).toBe("string");
+    expect(out.length).toBeGreaterThan(200);
+  });
+
   it("omits musical-goal block when the goal is empty", () => {
-    const prompt = buildSystemPrompt("tutor", baseCtx);
-    expect(prompt).not.toContain("User-stated musical goal");
+    const systemPrompt = buildSystemPrompt("tutor", baseCtx);
+    expect(systemPrompt).not.toContain("User-stated musical goal");
   });
 
   it("includes musical-goal block verbatim when the user sets a goal", () => {
-    const prompt = buildSystemPrompt("tutor", {
+    const systemPrompt = buildSystemPrompt("tutor", {
       ...baseCtx,
       musicalGoal: "establish a stable C major cadence here",
     });
-    expect(prompt).toContain("User-stated musical goal");
-    expect(prompt).toContain("establish a stable C major cadence here");
+    expect(systemPrompt).toContain("User-stated musical goal");
+    expect(systemPrompt).toContain("establish a stable C major cadence here");
   });
 
   it("includes the actionable-command intent block for auditor and tutor", () => {
@@ -46,5 +51,13 @@ describe("buildSystemPrompt", () => {
       expect(p).toContain("PROGRESSION WINDOW");
       expect(p).toContain("pleasantness");
     }
+  });
+
+  it("uses unified Theory Inspector voice (actionable bullets, plain-language gloss guidance)", () => {
+    const p = buildSystemPrompt("tutor", baseCtx);
+    expect(p).toContain("2–4 bullet lines");
+    expect(p).toContain("non-obvious term");
+    expect(p).toContain("<<<SUGGESTIONS>>>");
+    expect(p).toContain("Theory Inspector audience");
   });
 });

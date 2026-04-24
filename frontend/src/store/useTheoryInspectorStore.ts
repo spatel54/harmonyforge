@@ -5,7 +5,6 @@ import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { SlotTraceEntry } from "@/lib/music/theoryInspectorBaseline";
 import type { AuditedSlot } from "@/lib/music/theoryInspectorSlots";
 import type { TheoryInspectorMode } from "@/lib/music/theoryInspectorMode";
-import type { ExplanationLevel } from "@/lib/ai/explanationLevel";
 import { mergeAiChatTags } from "@/lib/ai/theoryInspectorTags";
 
 export type InspectorPanelTab = "explanation" | "chat";
@@ -74,6 +73,8 @@ export type InspectorScoreFocus =
   | {
       kind: "measure";
       measureIndex: number;
+      /** When set, focus is this bar on one staff only (highlights + FACTs). */
+      partId?: string;
       evidenceLines: string[];
       noteIds: string[];
     }
@@ -118,9 +119,6 @@ export interface TheoryInspectorState {
   /** Progressive-disclosure toggle for the note panel rationale stack (Iter1 §3 / Iter2 §3). */
   showInspectorRationale: boolean;
   setShowInspectorRationale: (v: boolean) => void;
-
-  /** Explanation depth sent to the LLM (fixed beginner tone in product UI). */
-  explanationLevel: ExplanationLevel;
 
   issueHighlights: ScoreIssueHighlight[];
   setIssueHighlights: (highlights: ScoreIssueHighlight[]) => void;
@@ -197,8 +195,6 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     showInspectorRationale: false,
     setShowInspectorRationale: (showInspectorRationale) => set({ showInspectorRationale }),
-
-    explanationLevel: "beginner",
 
     issueHighlights: [],
     setIssueHighlights: (issueHighlights) => set({ issueHighlights }),

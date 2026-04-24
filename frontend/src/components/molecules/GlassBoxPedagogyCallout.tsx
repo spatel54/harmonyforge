@@ -20,19 +20,19 @@ const COPY: Record<
     title: "How HarmonyForge uses (and doesn’t use) AI",
     summaryLabel: "How HarmonyForge uses AI",
     body:
-      "Baseline harmonies come from algorithms—music-theory rules and search, not a chat model or neural net—so you can trace what the engine did, not guess at a hidden process. AI shows up only in Theory Inspector on the next screen, where it explains, flags problems, and suggests edits; it does not generate the notes underneath.",
+      "Baseline harmonies come from algorithms: theory rules and search, not a chat model. You can trace what the engine did instead of guessing at a hidden process. Conversational AI appears only in Theory Inspector on the next screen, for explanations, flags, and edit ideas. It does not generate the notes under the staff.",
   },
   "ensemble-reviewer": {
     title: "How HarmonyForge uses (and doesn’t use) AI",
     summaryLabel: "How HarmonyForge uses AI",
     body:
-      "In this flow you add harmonies in the editor yourself—no generative AI writes your parts. Any conversational AI stays in Theory Inspector, for explanations, critique, and suggestions, separate from the notes on the staff.",
+      "In this flow you write harmonies in the editor yourself. No generative AI fills in your parts. Any chat-style help stays in Theory Inspector for explanations, critique, and suggestions, separate from the notes on the staff.",
   },
   inspector: {
     title: "This panel is where conversational AI lives",
     summaryLabel: "Conversational AI in this panel",
     body:
-      "Chats here use a language model for explanations, audits, and stylistic suggestions. HarmonyForge’s automatic voicings still come from the deterministic engine, not from this panel—the point is transparent coaching next to fixed rules, not chat-only generation.",
+      "Chats here use a language model for explanations, audits, and stylistic suggestions. Automatic voicings still come from the deterministic engine, not from this panel. The goal is coaching next to fixed rules, not chat-only generation.",
   },
 };
 

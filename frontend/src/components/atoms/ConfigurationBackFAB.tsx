@@ -23,11 +23,10 @@ export const ConfigurationBackFAB = React.forwardRef<HTMLAnchorElement, Configur
         ref={ref}
         href="/document"
         className={cn(
-          "inline-flex items-center gap-1.5 h-9 max-w-[min(100%,18rem)] rounded-md px-2.5 py-1",
+          "hf-pressable inline-flex items-center gap-1.5 h-9 max-w-[min(100%,18rem)] rounded-md px-2.5 py-1",
           "font-mono text-[11px] font-semibold leading-none tracking-tight",
-          "border transition-colors duration-150",
+          "border transition-colors duration-150 shadow-sm hover:shadow-md",
           "hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_12%,transparent)]",
-          "active:scale-[0.99]",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]",
           className,
         )}

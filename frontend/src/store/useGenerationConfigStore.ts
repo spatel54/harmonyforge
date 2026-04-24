@@ -11,11 +11,14 @@ import type { VoiceType } from "@/components/atoms/PartChip";
 export type GenerationMood = "major" | "minor";
 export type GenerationGenre = "classical" | "jazz" | "pop";
 export type RhythmDensity = "chordal" | "mixed" | "flowing";
+export type BassRhythmMode = "follow" | "pedal";
 
 export interface GenerationConfigShape {
   mood: GenerationMood;
   genre: GenerationGenre;
   rhythmDensity: RhythmDensity;
+  /** Bass holds chord tones per slot vs following melody subdivisions (engine). */
+  bassRhythmMode: BassRhythmMode;
   instruments: Record<VoiceType, string[]>;
   /** Detected tonic from the uploaded score (e.g. "C"). Displayed + persisted. */
   detectedTonic: string | null;
@@ -34,6 +37,7 @@ export interface GenerationConfigState extends GenerationConfigShape {
   setMood: (mood: GenerationMood) => void;
   setGenre: (genre: GenerationGenre) => void;
   setRhythmDensity: (value: RhythmDensity) => void;
+  setBassRhythmMode: (value: BassRhythmMode) => void;
   setInstruments: (instruments: Record<VoiceType, string[]>) => void;
   toggleInstrument: (voice: VoiceType, instrument: string) => void;
   removeInstrument: (instrument: string) => void;
@@ -52,6 +56,7 @@ const DEFAULT_STATE: GenerationConfigShape = {
   mood: "major",
   genre: "classical",
   rhythmDensity: "mixed",
+  bassRhythmMode: "follow",
   instruments: { soprano: [], alto: [], tenor: [], bass: [] },
   detectedTonic: null,
   detectedMode: null,
@@ -70,6 +75,7 @@ function sanitizeFromPersist(data: unknown): Partial<GenerationConfigShape> {
       parsed.rhythmDensity === "chordal" || parsed.rhythmDensity === "flowing"
         ? parsed.rhythmDensity
         : "mixed",
+    bassRhythmMode: parsed.bassRhythmMode === "pedal" ? "pedal" : "follow",
     instruments: {
       soprano: Array.isArray(parsed.instruments?.soprano) ? parsed.instruments!.soprano : [],
       alto: Array.isArray(parsed.instruments?.alto) ? parsed.instruments!.alto : [],
@@ -102,6 +108,7 @@ export const useGenerationConfigStore = create<GenerationConfigState>()(
       setMood: (mood) => set({ mood }),
       setGenre: (genre) => set({ genre }),
       setRhythmDensity: (rhythmDensity) => set({ rhythmDensity }),
+      setBassRhythmMode: (bassRhythmMode) => set({ bassRhythmMode }),
       setInstruments: (instruments) => set({ instruments }),
       toggleInstrument: (voice, instrument) => {
         const prev = get().instruments;
@@ -146,6 +153,7 @@ export const useGenerationConfigStore = create<GenerationConfigState>()(
         mood: s.mood,
         genre: s.genre,
         rhythmDensity: s.rhythmDensity,
+        bassRhythmMode: s.bassRhythmMode,
         instruments: s.instruments,
         detectedTonic: s.detectedTonic,
         detectedMode: s.detectedMode,

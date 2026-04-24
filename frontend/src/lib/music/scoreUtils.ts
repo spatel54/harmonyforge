@@ -85,7 +85,212 @@ export function parseMeasureBeats(timeSignature?: string): number {
   return (num * 4) / den;
 }
 
+/** Time signature string for column `measureIndex` (cascades to previous measures, then 4/4). */
+export function effectiveMeasureTimeSignature(score: EditableScore, measureIndex: number): string {
+  const ref = score.parts[0];
+  if (!ref) return "4/4";
+  for (let i = measureIndex; i >= 0; i--) {
+    const ts = ref.measures[i]?.timeSignature;
+    if (ts) return ts;
+  }
+  return "4/4";
+}
+
+function maxMeasureCount(score: EditableScore): number {
+  if (score.parts.length === 0) return 0;
+  return Math.max(0, ...score.parts.map((p) => p.measures.length));
+}
+
+function measureTotalBeats(notes: Note[]): number {
+  return notes.reduce((s, n) => s + noteBeats(n), 0);
+}
+
+const METER_EPS = 1e-4;
+
+/** True if any measure column exceeds its effective time signature capacity. */
+export function scoreHasMeasureOverflow(score: EditableScore): boolean {
+  const n = maxMeasureCount(score);
+  for (let mi = 0; mi < n; mi++) {
+    const cap = parseMeasureBeats(effectiveMeasureTimeSignature(score, mi));
+    for (const p of score.parts) {
+      const m = p.measures[mi];
+      if (!m) continue;
+      if (measureTotalBeats(m.notes) > cap + METER_EPS) return true;
+    }
+  }
+  return false;
+}
+
 const BEAT_UNITS = 8; // 1 quarter note = 8 units (smallest supported duration: 1/32 = 1 unit)
+
+/** Greedy exact decomposition in eighth-of-a-quarter units (supports dotted values). */
+const DUR_UNIT_BREAKDOWN: Array<{ duration: DurationType; units: number; dots: 0 | 1 }> = [
+  { duration: "w", units: 32, dots: 0 },
+  { duration: "h", units: 24, dots: 1 },
+  { duration: "h", units: 16, dots: 0 },
+  { duration: "q", units: 12, dots: 1 },
+  { duration: "q", units: 8, dots: 0 },
+  { duration: "8", units: 6, dots: 1 },
+  { duration: "8", units: 4, dots: 0 },
+  { duration: "16", units: 3, dots: 1 },
+  { duration: "16", units: 2, dots: 0 },
+  { duration: "32", units: 1, dots: 0 },
+];
+
+function decomposeBeatUnitsExact(totalUnits: number): Array<{ duration: DurationType; dots: 0 | 1 }> {
+  const out: Array<{ duration: DurationType; dots: 0 | 1 }> = [];
+  let u = Math.max(0, Math.round(totalUnits));
+  for (const row of DUR_UNIT_BREAKDOWN) {
+    while (u >= row.units) {
+      out.push({ duration: row.duration, dots: row.dots });
+      u -= row.units;
+    }
+  }
+  while (u > 0) {
+    out.push({ duration: "32", dots: 0 });
+    u -= 1;
+  }
+  return out;
+}
+
+function tieFirstSegmentBeforeBarline(seg: Note[]): void {
+  if (seg.length === 0) return;
+  if (seg.length === 1) {
+    seg[0].tie = "start";
+    return;
+  }
+  seg[0].tie = "start";
+  for (let i = 1; i < seg.length - 1; i++) {
+    seg[i].tie = "continue";
+  }
+  seg[seg.length - 1]!.tie = "start";
+}
+
+function tieSecondSegmentAfterBarline(seg: Note[]): void {
+  if (seg.length === 0) return;
+  seg[0].tie = "stop";
+  for (let i = 1; i < seg.length; i++) {
+    delete seg[i].tie;
+  }
+}
+
+function splitNoteForBarline(note: Note, firstSegmentUnits: number): { first: Note[]; second: Note[] } {
+  const totalUnits = beatsToUnits(noteBeats(note));
+  const fsu = Math.round(firstSegmentUnits);
+  if (note.tuplet) {
+    return { first: [], second: [note] };
+  }
+  if (fsu <= 0 || fsu >= totalUnits) {
+    return { first: [note], second: [] };
+  }
+  const specs1 = decomposeBeatUnitsExact(fsu);
+  const specs2 = decomposeBeatUnitsExact(totalUnits - fsu);
+  const strip: Note = { ...note };
+  delete strip.tie;
+  const first: Note[] = specs1.map((s) => ({
+    ...strip,
+    id: generateId("n"),
+    duration: s.duration,
+    dots: s.dots ? 1 : undefined,
+  }));
+  const second: Note[] = specs2.map((s) => ({
+    ...strip,
+    id: generateId("n"),
+    duration: s.duration,
+    dots: s.dots ? 1 : undefined,
+  }));
+  tieFirstSegmentBeforeBarline(first);
+  tieSecondSegmentAfterBarline(second);
+  return { first, second };
+}
+
+function partitionNotesAtCap(notes: Note[], capBeats: number): { head: Note[]; tail: Note[] } {
+  const capUnits = beatsToUnits(capBeats);
+  let accUnits = 0;
+  let i = 0;
+  const head: Note[] = [];
+  while (i < notes.length) {
+    const n = notes[i]!;
+    const nUnits = beatsToUnits(noteBeats(n));
+    if (accUnits + nUnits <= capUnits + 1e-6) {
+      head.push(n);
+      accUnits += nUnits;
+      i++;
+      continue;
+    }
+    if (accUnits >= capUnits - 1e-6) {
+      return { head, tail: notes.slice(i) };
+    }
+    const remUnits = capUnits - accUnits;
+    const { first, second } = splitNoteForBarline(n, remUnits);
+    head.push(...first);
+    return { head, tail: [...second, ...notes.slice(i + 1)] };
+  }
+  return { head, tail: [] };
+}
+
+function insertSplitAtMeasure(next: EditableScore, mi: number, cap: number): void {
+  const tails: Note[][] = next.parts.map((p) => {
+    const m = p.measures[mi];
+    if (!m) return [];
+    const { head, tail } = partitionNotesAtCap(m.notes, cap);
+    m.notes = head;
+    return tail;
+  });
+
+  const refMeasure = next.parts[0]?.measures[mi];
+  const ts = refMeasure?.timeSignature;
+  const keySig = refMeasure?.keySignature;
+
+  for (let pi = 0; pi < next.parts.length; pi++) {
+    const p = next.parts[pi];
+    const tail = tails[pi] ?? [];
+    if (mi + 1 < p.measures.length) {
+      const nextM = p.measures[mi + 1]!;
+      nextM.notes = [...tail, ...nextM.notes];
+    } else {
+      p.measures.push({
+        id: generateId("m"),
+        notes: tail,
+        ...(ts ? { timeSignature: ts } : {}),
+        ...(keySig !== undefined ? { keySignature: keySig } : {}),
+      });
+    }
+  }
+}
+
+/**
+ * Split any measure columns that exceed the effective time signature so each bar’s
+ * written durations fit the meter. Inserts or extends the next measure(s) across **all**
+ * parts so barlines stay aligned (sparse parts get overflow prepended only when they had overflow).
+ * Run **before** {@link normalizeScoreRests} so under-filled bars pick up rests.
+ */
+export function enforceMeasureBeatCaps(score: EditableScore): EditableScore {
+  if (!score.parts.length) return cloneScore(score);
+  const next = cloneScore(score);
+  let mi = 0;
+  let guard = 0;
+  while (mi < maxMeasureCount(next) && guard < 10_000) {
+    guard++;
+    const cap = parseMeasureBeats(effectiveMeasureTimeSignature(next, mi));
+    let overflow = false;
+    for (const p of next.parts) {
+      const m = p.measures[mi];
+      if (!m) continue;
+      if (measureTotalBeats(m.notes) > cap + METER_EPS) {
+        overflow = true;
+        break;
+      }
+    }
+    if (!overflow) {
+      mi++;
+      continue;
+    }
+    insertSplitAtMeasure(next, mi, cap);
+  }
+  return next;
+}
+
 const REST_BREAKDOWN: Array<{ duration: DurationType; units: number }> = [
   { duration: "w", units: 32 },
   { duration: "h", units: 16 },
@@ -497,6 +702,69 @@ export function setPitchByLetter(score: EditableScore, noteIds: Set<string>, let
   return needsRepitchPass ? restsToNotes(next, noteIds, letterKey) : next;
 }
 
+/** Compact fingerprint of pitch/rest state for a set of note ids (live multi-pitch sync dedupe). */
+export function noteSetPitchFingerprint(score: EditableScore, noteIds: Iterable<string>): string {
+  const parts: string[] = [];
+  for (const id of noteIds) {
+    const hit = getNoteById(score, id);
+    if (!hit) {
+      parts.push(`${id}:`);
+      continue;
+    }
+    const { note } = hit;
+    parts.push(`${id}:${note.isRest ? "rest" : (note.pitch ?? "").trim()}`);
+  }
+  parts.sort();
+  return parts.join("|");
+}
+
+/**
+ * After a RiffScore pull, if several notes were selected and the editor applied the same
+ * chromatic delta to one (or more) of them, apply that delta to every other selected note
+ * that did not change — so dragging or repitching one note in a bar selection updates the group.
+ */
+export function propagateMultiSelectPitchDelta(
+  prev: EditableScore | null,
+  next: EditableScore,
+  selectedNoteIds: ReadonlySet<string>,
+): EditableScore {
+  if (!prev || selectedNoteIds.size < 2) return next;
+
+  let delta: number | null = null;
+  const changedIds = new Set<string>();
+
+  for (const id of selectedNoteIds) {
+    const a = getNoteById(prev, id);
+    const b = getNoteById(next, id);
+    if (!a || !b) continue;
+    if (a.note.isRest !== b.note.isRest) return next;
+    if (a.note.isRest && b.note.isRest) continue;
+    const pa = a.note.pitch?.trim();
+    const pb = b.note.pitch?.trim();
+    if (!pa || !pb) continue;
+    if (a.note.pitch !== b.note.pitch) {
+      const d = pitchToMidi(b.note.pitch) - pitchToMidi(a.note.pitch);
+      if (delta === null) delta = d;
+      else if (Math.abs(d - delta) > 0.001) return next;
+      changedIds.add(id);
+    }
+  }
+
+  if (delta == null || Math.abs(delta) < 0.001 || changedIds.size === 0) return next;
+
+  const out = cloneScore(next);
+  for (const id of selectedNoteIds) {
+    if (changedIds.has(id)) continue;
+    const a = getNoteById(prev, id);
+    const b = getNoteById(out, id);
+    if (!a || !b) continue;
+    if (a.note.isRest || b.note.isRest) continue;
+    if (a.note.pitch !== b.note.pitch) continue;
+    b.note.pitch = midiToPitch(pitchToMidi(b.note.pitch) + delta);
+  }
+  return out;
+}
+
 /**
  * Transpose notes by ID by semitones. Rests are converted to a pitched note at
  * their neighbor-derived default pitch first (so arrow-up on a selected rest
@@ -826,6 +1094,24 @@ function cloneMeasureWithNewNoteIds(measure: Measure): Measure {
   };
 }
 
+/** Every note in one measure on a single part (Theory Inspector Alt+click on bar numbers). */
+export function noteSelectionsForMeasurePart(
+  score: EditableScore,
+  measureIndex: number,
+  partId: string,
+): Array<{ partId: string; measureIndex: number; noteIndex: number; noteId: string }> {
+  const part = score.parts.find((p) => p.id === partId);
+  if (!part || measureIndex < 0 || measureIndex >= part.measures.length) return [];
+  const measure = part.measures[measureIndex];
+  if (!measure) return [];
+  return measure.notes.map((note, noteIndex) => ({
+    partId,
+    measureIndex,
+    noteIndex,
+    noteId: note.id,
+  }));
+}
+
 /** Melody line only (part 0) for full-score regeneration intake. */
 export function extractMelodyOnlyScore(score: EditableScore): EditableScore {
   if (score.parts.length === 0) return score;
@@ -841,6 +1127,160 @@ export function extractMelodyOnlyScore(score: EditableScore): EditableScore {
  * Replace harmony staves’ measures in [startIdx, endIdx] with measures from a
  * freshly generated full score (same part ordering: melody + harmonies).
  */
+function normalizePartNameKey(name: string | undefined): string {
+  return (name ?? "").trim().toLowerCase();
+}
+
+/** Result of merging a short generated score into the live arrangement (localized harmony). */
+export type SpliceHarmonyMeasuresResult =
+  | {
+      ok: true;
+      score: EditableScore;
+      /** True when some target harmony staves had no matching generated part (measures left unchanged). */
+      partialMerge?: boolean;
+      skippedHarmonyPartNames?: string[];
+    }
+  | { ok: false; score: EditableScore; reason: string };
+
+/**
+ * Map each target harmony part index → addon part index (melody excluded). Returns `null` if the
+ * addon declares more harmony parts than the live score (unsafe to merge).
+ */
+export function resolveHarmonyPartMapping(
+  target: EditableScore,
+  generatedAddon: EditableScore,
+): { map: number[]; partialMerge: boolean; skippedHarmonyPartNames: string[] } | null {
+  if (target.parts.length <= 1 || generatedAddon.parts.length <= 1) {
+    return { map: [], partialMerge: false, skippedHarmonyPartNames: [] };
+  }
+  if (generatedAddon.parts.length > target.parts.length) {
+    return null;
+  }
+
+  const nT = target.parts.length;
+  const nA = generatedAddon.parts.length;
+  /** targetPi → addonPi; index 0 unused (melody). */
+  const map: number[] = new Array(nT).fill(-1);
+  const usedAddon = new Set<number>();
+
+  for (let pi = 1; pi < nT; pi++) {
+    const tPart = target.parts[pi];
+    if (!tPart) continue;
+    const tKey = normalizePartNameKey(tPart.name);
+    let chosen = -1;
+
+    if (pi < nA && !usedAddon.has(pi)) {
+      const aPart = generatedAddon.parts[pi];
+      if (aPart && (tKey === "" || normalizePartNameKey(aPart.name) === tKey)) {
+        chosen = pi;
+      }
+    }
+    if (chosen < 0 && tKey !== "") {
+      for (let j = 1; j < nA; j++) {
+        if (usedAddon.has(j)) continue;
+        const aPart = generatedAddon.parts[j];
+        if (aPart && normalizePartNameKey(aPart.name) === tKey) {
+          chosen = j;
+          break;
+        }
+      }
+    }
+    if (chosen < 0 && pi < nA && !usedAddon.has(pi)) {
+      chosen = pi;
+    }
+
+    if (chosen >= 0) {
+      map[pi] = chosen;
+      usedAddon.add(chosen);
+    }
+  }
+
+  const skippedHarmonyPartNames: string[] = [];
+  for (let pi = 1; pi < nT; pi++) {
+    if (map[pi]! < 0) skippedHarmonyPartNames.push(target.parts[pi]?.name ?? `part ${pi}`);
+  }
+  const partialMerge = skippedHarmonyPartNames.length > 0;
+  return { map, partialMerge, skippedHarmonyPartNames };
+}
+
+const EXTRA_HARMONY_REASON =
+  "Generated score has more parts than the current arrangement. Regenerate the full score from Document to change the ensemble size.";
+
+/** Inclusive measure range for localized harmony regenerate: multi-bar when selection spans measures. */
+export function measureRangeForLocalizedHarmonyRegenerate(
+  selection: Array<{ measureIndex: number }>,
+  fallbackMeasureIndex: number,
+): { startMeasure: number; endMeasure: number } {
+  if (selection.length === 0) {
+    return { startMeasure: fallbackMeasureIndex, endMeasure: fallbackMeasureIndex };
+  }
+  const measures = selection
+    .map((s) => s.measureIndex)
+    .filter((m) => Number.isFinite(m) && m >= 0);
+  if (measures.length === 0) {
+    return { startMeasure: fallbackMeasureIndex, endMeasure: fallbackMeasureIndex };
+  }
+  const uniq = new Set(measures);
+  if (uniq.size <= 1) {
+    const m = measures[0]!;
+    return { startMeasure: m, endMeasure: m };
+  }
+  return {
+    startMeasure: Math.min(...measures),
+    endMeasure: Math.max(...measures),
+  };
+}
+
+/**
+ * Merge harmony-only measures from a **short** additive-generated score (one bar or more)
+ * into the live arrangement. Aligns harmony staves by **part name** when counts differ; rejects
+ * when the addon has **extra** harmony parts vs the live score.
+ */
+export function spliceHarmonyMeasuresFromAddonScore(
+  target: EditableScore,
+  generatedAddon: EditableScore,
+  startMeasure: number,
+): SpliceHarmonyMeasuresResult {
+  if (target.parts.length <= 1 || generatedAddon.parts.length <= 1) {
+    return { ok: true, score: target };
+  }
+  const sliceLen = generatedAddon.parts[0]?.measures.length ?? 0;
+  if (sliceLen === 0) {
+    return { ok: true, score: target };
+  }
+
+  const resolved = resolveHarmonyPartMapping(target, generatedAddon);
+  if (resolved === null) {
+    return { ok: false, score: target, reason: EXTRA_HARMONY_REASON };
+  }
+  const { map, partialMerge, skippedHarmonyPartNames } = resolved;
+
+  const next = cloneScore(target);
+  for (let i = 0; i < sliceLen; i++) {
+    const targetMi = startMeasure + i;
+    if (targetMi >= next.parts[0]!.measures.length) break;
+    for (let pi = 1; pi < next.parts.length; pi++) {
+      const addonPi = map[pi];
+      if (addonPi == null || addonPi < 0) continue;
+      const srcPart = generatedAddon.parts[addonPi];
+      if (!srcPart || i >= srcPart.measures.length) continue;
+      const dest = next.parts[pi];
+      if (!dest || targetMi >= dest.measures.length) continue;
+      dest.measures[targetMi] = cloneMeasureWithNewNoteIds(srcPart.measures[i]!);
+    }
+  }
+
+  if (partialMerge && skippedHarmonyPartNames.length > 0) {
+    return {
+      ok: true,
+      score: next,
+      partialMerge: true,
+      skippedHarmonyPartNames,
+    };
+  }
+  return { ok: true, score: next };
+}
+
 export function replaceHarmonyMeasuresRange(
   score: EditableScore,
   generated: EditableScore,

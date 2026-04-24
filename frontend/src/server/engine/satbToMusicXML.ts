@@ -4,7 +4,7 @@
  */
 
 import type { SolverResult } from "./solver";
-import type { ParsedScore, RhythmDensity, Voice } from "./types";
+import type { BassRhythmMode, ParsedScore, RhythmDensity, Voice } from "./types";
 import { pitchToMidi, midiToPitch, getVoiceRange } from "./types";
 
 const DIVISIONS = 8;
@@ -255,6 +255,18 @@ function slotSpansForDensity(
   return spans;
 }
 
+/** Per Iteration 6: optional pedal bass (slot-long tones) while inner voices keep `density`. */
+function densityForHarmonyVoice(
+  harmonyVoice: "alto" | "tenor" | "bass",
+  density: RhythmDensity,
+  bassRhythmMode: BassRhythmMode | undefined,
+): RhythmDensity {
+  if (harmonyVoice === "bass" && (bassRhythmMode ?? "follow") === "pedal") {
+    return "chordal";
+  }
+  return density;
+}
+
 function buildHarmonyEvents(
   result: SolverResult,
   voice: keyof SolverResult["slots"][number]["voices"],
@@ -284,9 +296,14 @@ function buildHarmonyEventsForInstrument(
   groupIndex: number,
   source?: ParsedScore,
   density: RhythmDensity = "mixed",
+  bassRhythmMode?: BassRhythmMode,
 ): TimedEvent[] {
   const rotation = VOICE_SOURCE_ROTATION[targetVoice];
   const { voice, semitones } = rotation[groupIndex % rotation.length]!;
+  const instDensity =
+    targetVoice === "Bass"
+      ? densityForHarmonyVoice("bass", density, bassRhythmMode)
+      : density;
   const beatsPerMeasure = source?.timeSignature?.beats ?? DEFAULT_BEATS_PER_MEASURE;
   const totalBeats = source?.totalBeats ?? result.slots.length * beatsPerMeasure;
   const boundaries = getChordBoundaries(result, totalBeats, beatsPerMeasure);
@@ -297,7 +314,7 @@ function buildHarmonyEventsForInstrument(
     const basePitch = slot.voices[voice];
     const transposed = semitones !== 0 ? transposePitch(basePitch!, semitones) : basePitch!;
     const clamped = clampPitchToRange(transposed, targetVoice);
-    const spans = slotSpansForDensity(boundaries[index]!, boundaries[index + 1]!, density, source);
+    const spans = slotSpansForDensity(boundaries[index]!, boundaries[index + 1]!, instDensity, source);
     for (const span of spans) {
       events.push({ pitch: clamped, startBeat: span.startBeat, duration: span.duration });
     }
@@ -532,6 +549,8 @@ export interface SatbToMusicXMLOptions {
   additiveHarmonies?: boolean;
   /** Harmony rhythm density; default "mixed" (subdivide slot spans on melody onsets). */
   rhythmDensity?: RhythmDensity;
+  /** Bass slot-long pedaling vs following melody subdivisions; default "follow". */
+  bassRhythmMode?: BassRhythmMode;
 }
 
 /** Build MusicXML string from SATB result. Outputs only parts with selected instruments. */
@@ -542,6 +561,7 @@ export function satbToMusicXML(
   options?: SatbToMusicXMLOptions
 ): string {
   const density: RhythmDensity = options?.rhythmDensity ?? "mixed";
+  const bassRhythmMode = options?.bassRhythmMode ?? "follow";
   const beatsPerMeasure = source?.timeSignature?.beats ?? DEFAULT_BEATS_PER_MEASURE;
   const beatType = source?.timeSignature?.beatType ?? DEFAULT_BEAT_TYPE;
   const pickupBeats = Math.max(0, clampDurationBeats(source?.pickupBeats ?? 0));
@@ -554,9 +574,24 @@ export function satbToMusicXML(
   const layout = buildMeasureLayout(totalMeasures, beatsPerMeasure, hasPickup ? pickupBeats : 0);
 
   const sopranoEvents = buildSopranoEvents(result, source);
-  const altoEvents = buildHarmonyEvents(result, "alto", source, density);
-  const tenorEvents = buildHarmonyEvents(result, "tenor", source, density);
-  const bassEvents = buildHarmonyEvents(result, "bass", source, density);
+  const altoEvents = buildHarmonyEvents(
+    result,
+    "alto",
+    source,
+    densityForHarmonyVoice("alto", density, bassRhythmMode),
+  );
+  const tenorEvents = buildHarmonyEvents(
+    result,
+    "tenor",
+    source,
+    densityForHarmonyVoice("tenor", density, bassRhythmMode),
+  );
+  const bassEvents = buildHarmonyEvents(
+    result,
+    "bass",
+    source,
+    densityForHarmonyVoice("bass", density, bassRhythmMode),
+  );
   const allPartEvents = [sopranoEvents, altoEvents, tenorEvents, bassEvents].map((events) =>
     splitEventsByMeasure(events, totalMeasures, beatsPerMeasure, layout)
   );
@@ -585,7 +620,14 @@ export function satbToMusicXML(
       allPartEvents[0],
       ...harmonyParts.map((p) =>
         splitEventsByMeasure(
-          buildHarmonyEventsForInstrument(result, p.voice, p.groupIndex, source, density),
+          buildHarmonyEventsForInstrument(
+            result,
+            p.voice,
+            p.groupIndex,
+            source,
+            density,
+            bassRhythmMode,
+          ),
           totalMeasures,
           beatsPerMeasure,
           layout,

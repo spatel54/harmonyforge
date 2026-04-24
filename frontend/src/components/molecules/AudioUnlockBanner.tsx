@@ -52,23 +52,23 @@ export function AudioUnlockBanner() {
 
   return (
     <div
-      className="flex items-center justify-between gap-3 px-4 py-2 text-[12px]"
+      className="hf-banner-animate hf-print-hide flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-2.5 text-[12px] leading-snug border-b"
       style={{
-        backgroundColor: "color-mix(in srgb, var(--hf-surface) 15%, transparent)",
+        backgroundColor: "color-mix(in srgb, var(--hf-surface) 12%, var(--hf-bg))",
         color: "var(--hf-text-primary)",
-        borderBottom: "1px solid var(--hf-detail)",
+        borderColor: "color-mix(in srgb, var(--hf-detail) 50%, transparent)",
       }}
       role="status"
     >
-      <span>
-        Browsers keep audio muted until you interact. Use{" "}
-        <strong>Enable audio</strong> so the first Play isn’t silent.
+      <span className="min-w-0">
+        Browsers keep audio quiet until you interact with the page. Tap{" "}
+        <strong>Enable audio</strong> so the first Play is not silent.
       </span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 shrink-0">
         <button
           type="button"
           onClick={unlock}
-          className="font-mono text-[11px] rounded px-2 py-1"
+          className="hf-pressable font-mono text-[11px] rounded-lg px-3 py-1.5 shadow-sm hover:brightness-110 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
           style={{ backgroundColor: "var(--hf-surface)", color: "white" }}
         >
           Enable audio
@@ -76,8 +76,8 @@ export function AudioUnlockBanner() {
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="font-mono text-[11px] rounded px-2 py-1 border"
-          style={{ borderColor: "var(--hf-detail)" }}
+          className="hf-pressable font-mono text-[11px] rounded-lg px-3 py-1.5 border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)]/80 shadow-sm hover:bg-[color-mix(in_srgb,var(--hf-surface)_10%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
+          style={{ color: "var(--hf-text-primary)" }}
         >
           Dismiss
         </button>

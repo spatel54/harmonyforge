@@ -18,6 +18,7 @@ import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
 import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
+import { AlertTriangle } from "lucide-react";
 
 /**
  * Playground Screen (Step 1: Upload)
@@ -83,29 +84,47 @@ export default function Home() {
         <DocumentHeader currentStep={1} />
 
         {/* Main Content: Brand Title and scaled-down Dropzone */}
-        <main className="flex-1 flex flex-col items-center justify-between pb-0 overflow-y-auto">
+        <main className="flex-1 flex flex-col items-center justify-between pb-0 overflow-y-auto hf-scroll-smooth px-4 sm:px-6">
           {/* Title takes up the top empty space and centers vertically before the stand */}
-          <div className="flex-1 flex items-center justify-center pt-8">
-            <BrandTitle className="text-center" />
+          <div className="flex-1 flex items-center justify-center pt-6 sm:pt-10 pb-4 w-full">
+            <div className="hf-playground-title-wrap">
+              <BrandTitle className="hf-playground-title-prestige text-center text-[clamp(2.25rem,8vw,3.56rem)] leading-[1.12] tracking-[-0.02em]" />
+            </div>
           </div>
 
           {/* Scaled down music stand (max 1000px) flush with the bottom */}
           <div
-            className="w-full max-w-[1000px] shrink-0 mt-8 flex flex-col gap-3"
+            className="hf-playground-stand w-full max-w-[1000px] shrink-0 mt-4 sm:mt-8 flex flex-col gap-4 pb-6"
             data-coachmark="step-1"
           >
             {uploadError && (
               <div
-                className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-left"
+                className="hf-playground-error rounded-xl border px-4 py-3.5 text-left shadow-md"
                 role="alert"
+                style={{
+                  backgroundColor: "var(--semantic-violation-10)",
+                  borderColor: "color-mix(in srgb, var(--semantic-violation) 45%, var(--hf-detail))",
+                }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <pre className="font-mono text-[11px] leading-relaxed text-red-100/95 whitespace-pre-wrap break-words flex-1 max-h-[min(40vh,320px)] overflow-y-auto">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    className="shrink-0 w-[18px] h-[18px] mt-0.5"
+                    style={{ color: "var(--semantic-violation)" }}
+                    aria-hidden
+                  />
+                  <pre
+                    className="font-mono text-[11px] sm:text-[12px] leading-relaxed whitespace-pre-wrap break-words flex-1 max-h-[min(40vh,320px)] overflow-y-auto hf-scroll-smooth"
+                    style={{ color: "var(--hf-text-primary)" }}
+                  >
                     {uploadError}
                   </pre>
                   <button
                     type="button"
-                    className="shrink-0 font-mono text-[11px] text-red-200 underline"
+                    className="hf-pressable shrink-0 font-mono text-[11px] font-medium rounded-md px-2 py-1 -mr-1 -mt-0.5"
+                    style={{
+                      color: "var(--semantic-violation)",
+                      border: "1px solid color-mix(in srgb, var(--semantic-violation) 35%, transparent)",
+                    }}
                     onClick={() => setUploadError(null)}
                   >
                     Dismiss

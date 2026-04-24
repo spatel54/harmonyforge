@@ -10,34 +10,78 @@ import { GlassBoxPedagogyCallout } from "@/components/molecules/GlassBoxPedagogy
 import type { VoiceType } from "@/components/atoms/PartChip";
 import {
   useGenerationConfigStore,
+  type BassRhythmMode,
   type RhythmDensity,
 } from "@/store/useGenerationConfigStore";
 
 /** Placeholder instrument lists per voice — replaced by backend data later */
 const VOICE_INSTRUMENTS: Record<VoiceType, string[]> = {
-  soprano: ["Soprano Voice", "Flute", "Oboe", "Violin I"],
-  alto: ["Alto Voice", "Clarinet", "Viola", "French Horn"],
-  tenor: ["Tenor Voice", "Trumpet", "Cello", "Trombone"],
-  bass: ["Bass Voice", "Bassoon", "Double Bass", "Tuba"],
+  soprano: [
+    "Soprano Voice",
+    "Flute",
+    "Piccolo",
+    "Oboe",
+    "Violin I",
+    "Violin II",
+    "Trumpet",
+  ],
+  alto: [
+    "Alto Voice",
+    "Clarinet",
+    "English Horn",
+    "Viola",
+    "French Horn",
+    "Alto Saxophone",
+    "Marimba",
+  ],
+  tenor: [
+    "Tenor Voice",
+    "Trumpet",
+    "Tenor Saxophone",
+    "Cello",
+    "Trombone",
+    "Euphonium",
+    "Guitar",
+  ],
+  bass: [
+    "Bass Voice",
+    "Bassoon",
+    "Contrabassoon",
+    "Double Bass",
+    "Tuba",
+    "Bass Trombone",
+    "Electric Bass",
+  ],
 };
 
 const INSTRUMENT_DESCRIPTIONS: Record<string, string> = {
   "Soprano Voice": "Highest human voice range",
   "Flute": "Bright, breathy woodwind — no reed",
-  "Oboe": "Nasal woodwind with double reed",
+  Piccolo: "Small flute, octave above concert flute",
+  Oboe: "Nasal woodwind with double reed",
+  "English Horn": "Alto oboe, lower & rounder than oboe",
   "Violin I": "Highest string, singing tone",
+  "Violin II": "Second violin — inner harmony or double stops",
   "Alto Voice": "Second-highest voice range",
-  "Clarinet": "Warm woodwind, Bb transposing",
-  "Viola": "Mid-range string, mellow tone",
+  Clarinet: "Warm woodwind, Bb transposing",
+  Viola: "Mid-range string, alto clef",
   "French Horn": "Brass, mellow & warm, F transposing",
+  "Alto Saxophone": "Eb brass reed, mid register",
+  Marimba: "Bar percussion — melodic mallet part",
   "Tenor Voice": "Second-lowest voice range",
-  "Trumpet": "Bright brass, Bb transposing",
-  "Cello": "Rich low string, bass clef",
-  "Trombone": "Slide brass, bass range",
+  Trumpet: "Bright brass, Bb transposing",
+  "Tenor Saxophone": "Bb brass reed, tenor range",
+  Cello: "Rich low string, bass clef",
+  Trombone: "Slide brass, bass range",
+  Euphonium: "Conical low brass, lyrical baritone",
+  Guitar: "Plucked strings — chordal or single-line (treble)",
   "Bass Voice": "Lowest voice range",
-  "Bassoon": "Dark, reedy low woodwind",
+  Bassoon: "Dark, reedy low woodwind",
+  Contrabassoon: "Octave below bassoon",
   "Double Bass": "Lowest string instrument",
-  "Tuba": "Lowest brass instrument",
+  Tuba: "Lowest brass instrument",
+  "Bass Trombone": "Trombone with extra low register",
+  "Electric Bass": "Amplified bass guitar, rhythmic anchor",
 };
 
 const VOICE_ORDER: VoiceType[] = ["soprano", "alto", "tenor", "bass"];
@@ -48,12 +92,24 @@ export interface GenerationConfig {
   mood: "major" | "minor";
   genre?: Genre;
   rhythmDensity?: RhythmDensity;
+  bassRhythmMode?: BassRhythmMode;
   instruments: Record<VoiceType, string[]>;
   /** When true, infer harmony from melody + mood/genre (ignore chord symbols in file). */
   preferInferredChords?: boolean;
   /** Pickup length in quarter-note beats (0–3), or null to use the file’s detected pickup. */
   pickupBeats?: number | null;
 }
+
+const BASS_RHYTHM_LABELS: Record<BassRhythmMode, { title: string; hint: string }> = {
+  follow: {
+    title: "Follow melody",
+    hint: "Bass attacks line up with harmony motion (same as alto/tenor for your density).",
+  },
+  pedal: {
+    title: "Pedal bass",
+    hint: "Bass holds one chord tone per harmony change—less stiff doubling of the tune’s rhythm.",
+  },
+};
 
 const RHYTHM_DENSITY_LABELS: Record<RhythmDensity, { title: string; hint: string }> = {
   chordal: {
@@ -95,9 +151,11 @@ export const EnsembleBuilderPanel = React.forwardRef<
 >(({ onGenerateHarmonies, isGenerating = false, studyPrimaryVariant = "generate", studyPanelSubtitle, className, ...props }, ref) => {
   const mood = useGenerationConfigStore((s) => s.mood);
   const rhythmDensity = useGenerationConfigStore((s) => s.rhythmDensity);
+  const bassRhythmMode = useGenerationConfigStore((s) => s.bassRhythmMode);
   const selections = useGenerationConfigStore((s) => s.instruments);
   const setMood = useGenerationConfigStore((s) => s.setMood);
   const setRhythmDensity = useGenerationConfigStore((s) => s.setRhythmDensity);
+  const setBassRhythmMode = useGenerationConfigStore((s) => s.setBassRhythmMode);
   const toggleInstrument = useGenerationConfigStore((s) => s.toggleInstrument);
   const removeInstrument = useGenerationConfigStore((s) => s.removeInstrument);
   const restoreFromStorage = useGenerationConfigStore((s) => s.restoreFromStorage);
@@ -147,16 +205,16 @@ export const EnsembleBuilderPanel = React.forwardRef<
           className="font-brand text-[26px] font-normal leading-none"
           style={{ color: "var(--hf-text-primary)" }}
         >
-          Ensemble Builder
+          Harmony setup
         </h2>
         <p
-          className="font-mono text-[12px] font-normal leading-none"
+          className="font-mono text-[12px] font-normal leading-snug"
           style={{ color: "var(--hf-text-secondary)" }}
         >
           {studyPanelSubtitle ??
             (studyPrimaryVariant === "reviewer_melody"
-              ? "Set context for the assistant; you will add harmonies in the editor."
-              : "Choose mood, accompaniment density, and instruments for this arrangement.")}
+              ? "Set context for the assistant. You will add harmonies by hand in the editor."
+              : "Dial in mood, how busy the accompaniment feels, and who plays each line.")}
         </p>
         <p
           className="font-body text-[11px] leading-snug m-0 mt-[10px] max-w-prose"
@@ -275,6 +333,43 @@ export const EnsembleBuilderPanel = React.forwardRef<
           </span>
         </div>
 
+        <div className="flex flex-col gap-[8px]">
+          <span
+            className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Bass line
+            <HoverTooltip
+              ariaLabel="About bass rhythm"
+              content={
+                "Pedal bass: longer bass notes under each chord, even when inner parts move with the tune.\nFollow melody: bass uses the same rhythmic subdivisions as the other harmony parts."
+              }
+            />
+          </span>
+          <div className="flex flex-wrap gap-[8px]">
+            {(["follow", "pedal"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setBassRhythmMode(m)}
+                title={BASS_RHYTHM_LABELS[m].hint}
+                className={cn(
+                  "rounded-[6px] px-[16px] py-[10px] font-mono text-[12px] font-medium",
+                  "transition-opacity hover:opacity-90",
+                  bassRhythmMode === m
+                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
+                    : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]",
+                )}
+              >
+                {BASS_RHYTHM_LABELS[m].title}
+              </button>
+            ))}
+          </div>
+          <span className="font-mono text-[10px] opacity-70" style={{ color: "var(--hf-text-secondary)" }}>
+            {BASS_RHYTHM_LABELS[bassRhythmMode].hint}
+          </span>
+        </div>
+
         {studyPrimaryVariant !== "reviewer_melody" && (
           <p
             className="m-0 text-[10px] leading-snug pt-2 border-t"
@@ -284,7 +379,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
             }}
           >
             <strong style={{ color: "var(--hf-text-primary)", fontWeight: 600 }}>Classical-style</strong> triads and
-            voice-leading in the current key. Jazz, pop, and other styles are not available yet.
+            voice-leading in the current key. Jazz, pop, and other genres are not here yet.
           </p>
         )}
       </section>
@@ -446,6 +541,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
               mood,
               genre: "classical",
               rhythmDensity,
+              bassRhythmMode,
               instruments: selections,
               preferInferredChords,
               pickupBeats,

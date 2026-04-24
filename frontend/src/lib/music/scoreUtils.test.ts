@@ -6,12 +6,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cloneScore,
   convertRestToPitch,
   deleteNotesAsRests,
+  enforceMeasureBeatCaps,
   extractMelodyOnlyScore,
+  noteBeats,
   normalizeScoreRests,
+  propagateMultiSelectPitchDelta,
   replaceHarmonyMeasuresRange,
+  spliceHarmonyMeasuresFromAddonScore,
+  measureRangeForLocalizedHarmonyRegenerate,
   restsToNotes,
+  scoreHasMeasureOverflow,
   setPitchByLetter,
   transposeNotes,
 } from "./scoreUtils";
@@ -41,6 +48,108 @@ function makeScore(): EditableScore {
     divisions: 4,
   };
 }
+
+describe("propagateMultiSelectPitchDelta", () => {
+  it("applies the edited note’s chromatic delta to other unchanged selected notes", () => {
+    const prev: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "M",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "n1", pitch: "C4", duration: "q" },
+                { id: "n2", pitch: "D4", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 1,
+    };
+    const next = cloneScore(prev);
+    next.parts[0]!.measures[0]!.notes[0]!.pitch = "D4";
+    const out = propagateMultiSelectPitchDelta(prev, next, new Set(["n1", "n2"]));
+    expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("D4");
+    // Same +2 semitone delta as n1 (C4→D4); matches `midiToPitch` octave mapping.
+    expect(out.parts[0]!.measures[0]!.notes[1]!.pitch).toBe("E5");
+  });
+
+  it("no-ops when fewer than two notes are selected", () => {
+    const prev = makeScore();
+    const next = cloneScore(prev);
+    next.parts[0]!.measures[0]!.notes[0]!.pitch = "D5";
+    const out = propagateMultiSelectPitchDelta(prev, next, new Set(["n1"]));
+    expect(out).toEqual(next);
+  });
+});
+
+describe("enforceMeasureBeatCaps", () => {
+  it("splits nine quarter notes in 4/4 into multiple measures", () => {
+    const nineQs: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: Array.from({ length: 9 }, (_, i) => ({
+                id: `n${i}`,
+                pitch: "B4",
+                duration: "q" as const,
+              })),
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    expect(scoreHasMeasureOverflow(nineQs)).toBe(true);
+    const fixed = normalizeScoreRests(enforceMeasureBeatCaps(nineQs));
+    expect(scoreHasMeasureOverflow(fixed)).toBe(false);
+    expect(fixed.parts[0]!.measures.length).toBe(3);
+    const beatsPerM = fixed.parts[0]!.measures.map((m) =>
+      m.notes.reduce((s, n) => s + noteBeats(n), 0),
+    );
+    for (const b of beatsPerM) {
+      expect(b).toBeCloseTo(4, 5);
+    }
+  });
+
+  it("keeps a single 4/4 measure when totals equal four beats", () => {
+    const ok: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "M",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "q" },
+                { id: "b", pitch: "D5", duration: "q" },
+                { id: "c", pitch: "E5", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const out = enforceMeasureBeatCaps(ok);
+    expect(out.parts[0]!.measures.length).toBe(1);
+    expect(scoreHasMeasureOverflow(out)).toBe(false);
+  });
+});
 
 describe("deleteNotesAsRests", () => {
   it("replaces selected notes with same-duration rests", () => {
@@ -314,5 +423,238 @@ describe("extractMelodyOnlyScore / replaceHarmonyMeasuresRange", () => {
     expect(out.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("G4");
     expect(out.parts[1]!.measures[0]!.notes[0]!.id).not.toBe("h0");
     expect(out.parts[1]!.measures[1]!.notes[0]!.pitch).toBe("F4");
+  });
+});
+
+describe("measureRangeForLocalizedHarmonyRegenerate", () => {
+  it("uses fallback when selection is empty", () => {
+    expect(measureRangeForLocalizedHarmonyRegenerate([], 3)).toEqual({
+      startMeasure: 3,
+      endMeasure: 3,
+    });
+  });
+
+  it("uses single measure when selection is in one bar", () => {
+    const sel = [
+      { partId: "a", measureIndex: 2, noteIndex: 0, noteId: "n1" },
+      { partId: "a", measureIndex: 2, noteIndex: 1, noteId: "n2" },
+    ];
+    expect(measureRangeForLocalizedHarmonyRegenerate(sel, 0)).toEqual({
+      startMeasure: 2,
+      endMeasure: 2,
+    });
+  });
+
+  it("spans min–max when selection crosses measures", () => {
+    const sel = [
+      { partId: "a", measureIndex: 1, noteIndex: 0, noteId: "n1" },
+      { partId: "a", measureIndex: 4, noteIndex: 0, noteId: "n2" },
+    ];
+    expect(measureRangeForLocalizedHarmonyRegenerate(sel, 2)).toEqual({
+      startMeasure: 1,
+      endMeasure: 4,
+    });
+  });
+});
+
+describe("spliceHarmonyMeasuresFromAddonScore", () => {
+  it("splices one measure by index when part counts match", () => {
+    const live: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [
+            { id: "m0", notes: [{ id: "a0", pitch: "C5", duration: "q" }] },
+            { id: "m1", notes: [{ id: "a1", pitch: "D5", duration: "q" }] },
+          ],
+        },
+        {
+          id: "b",
+          name: "H",
+          clef: "treble",
+          measures: [
+            { id: "m0", notes: [{ id: "h0", pitch: "E4", duration: "q" }] },
+            { id: "m1", notes: [{ id: "h1", pitch: "F4", duration: "q" }] },
+          ],
+        },
+      ],
+    };
+    const gen: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "x0", notes: [{ id: "x0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "H",
+          clef: "treble",
+          measures: [{ id: "y0", notes: [{ id: "y0", pitch: "G4", duration: "q" }] }],
+        },
+      ],
+    };
+    const r = spliceHarmonyMeasuresFromAddonScore(live, gen, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.score.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("G4");
+    expect(r.score.parts[1]!.measures[1]!.notes[0]!.pitch).toBe("F4");
+  });
+
+  it("rejects when addon has more parts than the live score", () => {
+    const live: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "a0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "H1",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "h0", pitch: "E4", duration: "q" }] }],
+        },
+      ],
+    };
+    const gen: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "x0", notes: [{ id: "x0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "H1",
+          clef: "treble",
+          measures: [{ id: "y0", notes: [{ id: "y0", pitch: "G4", duration: "q" }] }],
+        },
+        {
+          id: "c",
+          name: "H2",
+          clef: "bass",
+          measures: [{ id: "z0", notes: [{ id: "z0", pitch: "C3", duration: "q" }] }],
+        },
+      ],
+    };
+    const r = spliceHarmonyMeasuresFromAddonScore(live, gen, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.score.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("E4");
+    expect(r.reason).toContain("Regenerate");
+  });
+
+  it("partial merge when addon has fewer harmony parts", () => {
+    const live: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "a0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "Violin",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "h0", pitch: "E4", duration: "q" }] }],
+        },
+        {
+          id: "c",
+          name: "Cello",
+          clef: "bass",
+          measures: [{ id: "m0", notes: [{ id: "c0", pitch: "C3", duration: "q" }] }],
+        },
+      ],
+    };
+    const gen: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "x0", notes: [{ id: "x0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "b",
+          name: "Violin",
+          clef: "treble",
+          measures: [{ id: "y0", notes: [{ id: "y0", pitch: "G4", duration: "q" }] }],
+        },
+      ],
+    };
+    const r = spliceHarmonyMeasuresFromAddonScore(live, gen, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.partialMerge).toBe(true);
+    expect(r.skippedHarmonyPartNames).toContain("Cello");
+    expect(r.score.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("G4");
+    expect(r.score.parts[2]!.measures[0]!.notes[0]!.pitch).toBe("C3");
+  });
+
+  it("maps harmony staves by part name when indices disagree", () => {
+    const live: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "a0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "t",
+          name: "Tenor",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "t0", pitch: "E4", duration: "q" }] }],
+        },
+        {
+          id: "al",
+          name: "Alto",
+          clef: "treble",
+          measures: [{ id: "m0", notes: [{ id: "al0", pitch: "C4", duration: "q" }] }],
+        },
+      ],
+    };
+    const gen: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "a",
+          name: "M",
+          clef: "treble",
+          measures: [{ id: "x0", notes: [{ id: "x0", pitch: "C5", duration: "q" }] }],
+        },
+        {
+          id: "al",
+          name: "Alto",
+          clef: "treble",
+          measures: [{ id: "y0", notes: [{ id: "y0", pitch: "D4", duration: "q" }] }],
+        },
+        {
+          id: "t",
+          name: "Tenor",
+          clef: "treble",
+          measures: [{ id: "z0", notes: [{ id: "z0", pitch: "F4", duration: "q" }] }],
+        },
+      ],
+    };
+    const r = spliceHarmonyMeasuresFromAddonScore(live, gen, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.score.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("F4");
+    expect(r.score.parts[2]!.measures[0]!.notes[0]!.pitch).toBe("D4");
   });
 });

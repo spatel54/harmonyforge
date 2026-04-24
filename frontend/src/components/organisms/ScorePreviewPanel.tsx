@@ -52,7 +52,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
     {
       score,
       scoreTitle = "The First Noel",
-      scoreMeta = "Traditional • 4 voices • Page 1 of 4",
+      scoreMeta = "Traditional · 4 voices · Page 1 of 4",
       onReupload,
       pdfPreviewUrl,
       pdfPreviewCaption,
@@ -148,6 +148,12 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
         {...props}
       >
         <div className="flex flex-col gap-[4px] w-full">
+          <p
+            className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.14em] text-center m-0 opacity-60"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Score preview
+          </p>
           <h2
             className="font-brand text-[22px] font-normal leading-none text-center"
             style={{ color: "var(--hf-text-primary)" }}
@@ -204,7 +210,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
                 aria-label="Show note names above each notehead in the preview"
               />
               <span className="font-mono text-[11px]" style={{ color: "var(--hf-text-secondary)" }}>
-                Show note names (C, F#, Bb, …) above each note
+                Letter names above each note (C, F#, Bb, …)
               </span>
             </label>
           ) : null}
@@ -226,10 +232,10 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
                   color: "var(--hf-text-primary)",
                   backgroundColor: "color-mix(in srgb, var(--hf-surface) 10%, transparent)",
                 }}
-                aria-label="Re-upload score"
+                aria-label="Choose a different score file"
               >
                 <Upload className="w-[13px] h-[13px] shrink-0" aria-hidden="true" />
-                Re-upload
+                New file
               </button>
             </div>
           ) : null}
@@ -240,7 +246,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
             "flex-1 min-h-[280px] w-full rounded-[8px] relative isolate overflow-hidden",
             "border border-[var(--hf-detail)] score-canvas-container",
           )}
-          aria-label="Score preview — read only"
+          aria-label="Score preview, read-only"
           role="img"
         >
           {score ? (
