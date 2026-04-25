@@ -517,6 +517,37 @@ a.hf-pressable:active {
   opacity: 0;
 }
 
+/* Click burst glyphs (playground) — brief radial pop of notes/tech symbols */
+.hf-cursor-burst-glyph {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  animation: hf-cursor-burst-pop 1.05s cubic-bezier(0.22, 0.85, 0.36, 1) forwards;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--hf-accent) 22%, transparent));
+  opacity: 0;
+}
+
+@keyframes hf-cursor-burst-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.45) rotate(calc(var(--hf-note-rot, 0deg) - 14deg));
+  }
+  18% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + var(--hf-note-drift-x, 0px)),
+        calc(-50% + var(--hf-note-drift-y, -22px))
+      )
+      scale(1.06) rotate(calc(var(--hf-note-rot, 0deg) + 16deg));
+  }
+}
+
 @keyframes hf-cursor-note-drift {
   0% {
     opacity: 0;
@@ -649,6 +680,11 @@ a.hf-pressable:active {
   }
 
   .hf-cursor-note {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .hf-cursor-burst-glyph {
     animation: none !important;
     opacity: 0 !important;
   }

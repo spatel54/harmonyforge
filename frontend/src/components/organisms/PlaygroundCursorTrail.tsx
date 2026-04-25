@@ -2,16 +2,29 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-const GLYPHS = ["♪", "♫", "♬", "♩", "𝄞"] as const;
+const NOTE_GLYPHS = ["♪", "♫", "♬", "♩", "𝄞"] as const;
+const TECH_GLYPHS = ["✦", "◌", "⌁", "⟡", "⌬", "⎔"] as const;
+const BURST_GLYPHS = [...NOTE_GLYPHS, ...TECH_GLYPHS] as const;
 
 type TrailNote = {
   id: string;
   x: number;
   y: number;
-  glyph: (typeof GLYPHS)[number];
+  glyph: (typeof NOTE_GLYPHS)[number];
   driftX: number;
   driftY: number;
   rot: number;
+};
+
+type BurstGlyph = {
+  id: string;
+  x: number;
+  y: number;
+  glyph: (typeof BURST_GLYPHS)[number];
+  driftX: number;
+  driftY: number;
+  rot: number;
+  sizePx: number;
 };
 
 const MAX_NOTES = 36;
@@ -19,8 +32,12 @@ const MIN_SPAWN_MS = 72;
 const MIN_MOVE_PX = 10;
 let idSeq = 0;
 
-function pickGlyph(): (typeof GLYPHS)[number] {
-  return GLYPHS[Math.floor(Math.random() * GLYPHS.length)]!;
+function pickTrailGlyph(): (typeof NOTE_GLYPHS)[number] {
+  return NOTE_GLYPHS[Math.floor(Math.random() * NOTE_GLYPHS.length)]!;
+}
+
+function pickBurstGlyph(): (typeof BURST_GLYPHS)[number] {
+  return BURST_GLYPHS[Math.floor(Math.random() * BURST_GLYPHS.length)]!;
 }
 
 /**
@@ -31,12 +48,17 @@ export function PlaygroundCursorTrail() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [trailOn, setTrailOn] = useState(false);
   const [notes, setNotes] = useState<TrailNote[]>([]);
+  const [bursts, setBursts] = useState<BurstGlyph[]>([]);
   const lastSpawnRef = useRef({ t: 0, cx: 0, cy: 0 });
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const removeNote = useCallback((id: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const removeBurst = useCallback((id: string) => {
+    setBursts((prev) => prev.filter((b) => b.id !== id));
   }, []);
 
   useEffect(() => {
@@ -96,7 +118,7 @@ export function PlaygroundCursorTrail() {
             id,
             x: lx,
             y: ly,
-            glyph: pickGlyph(),
+            glyph: pickTrailGlyph(),
             driftX,
             driftY,
             rot,
@@ -128,6 +150,55 @@ export function PlaygroundCursorTrail() {
     };
   }, [trailOn]);
 
+  useEffect(() => {
+    if (!trailOn) return;
+
+    const spawnBurst = (clientX: number, clientY: number) => {
+      const host = hostRef.current;
+      const root = host?.parentElement;
+      if (!host || !root) return;
+      const rect = root.getBoundingClientRect();
+      if (
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top ||
+        clientY > rect.bottom
+      ) {
+        return;
+      }
+
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      const count = 9 + Math.floor(Math.random() * 4);
+      const now = performance.now();
+      const ring: BurstGlyph[] = Array.from({ length: count }, (_, i) => {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.35;
+        const radius = 34 + Math.random() * 46;
+        return {
+          id: `b-${++idSeq}-${now.toFixed(0)}-${i}`,
+          x,
+          y,
+          glyph: pickBurstGlyph(),
+          driftX: Math.cos(angle) * radius,
+          driftY: Math.sin(angle) * radius - (12 + Math.random() * 18),
+          rot: (Math.random() - 0.5) * 70,
+          sizePx: 14 + Math.random() * 9,
+        };
+      });
+      setBursts((prev) => [...prev, ...ring].slice(-64));
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      spawnBurst(e.clientX, e.clientY);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [trailOn]);
+
   return (
     <div
       ref={hostRef}
@@ -152,6 +223,27 @@ export function PlaygroundCursorTrail() {
             onAnimationEnd={() => removeNote(n.id)}
           >
             {n.glyph}
+          </span>
+        ))}
+      {trailOn &&
+        bursts.map((b) => (
+          <span
+            key={b.id}
+            className="hf-cursor-burst-glyph"
+            style={
+              {
+                left: b.x,
+                top: b.y,
+                fontSize: `${b.sizePx}px`,
+                "--hf-note-drift-x": `${b.driftX}px`,
+                "--hf-note-drift-y": `${b.driftY}px`,
+                "--hf-note-rot": `${b.rot}deg`,
+                color: "color-mix(in srgb, var(--hf-accent) 56%, var(--hf-text-secondary))",
+              } as React.CSSProperties
+            }
+            onAnimationEnd={() => removeBurst(b.id)}
+          >
+            {b.glyph}
           </span>
         ))}
     </div>

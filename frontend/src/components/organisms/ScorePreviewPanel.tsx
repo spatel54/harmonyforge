@@ -262,7 +262,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
                 onRiffInstanceId={setRiffInstanceId}
               />
               {measureCount > 0 ? (
-                <div className="pointer-events-none absolute inset-0 z-[100] flex items-start justify-end p-3">
+                <div className="absolute top-3 right-3 z-[100]">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -280,7 +280,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
                           : "Loading…"
                     }
                     className={cn(
-                      "pointer-events-auto inline-flex items-center justify-center rounded-full w-11 h-11 shrink-0 transition-opacity shadow-md",
+                      "inline-flex items-center justify-center rounded-full w-11 h-11 shrink-0 transition-opacity shadow-md",
                       "disabled:opacity-40 disabled:cursor-not-allowed",
                       "hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hf-accent)]",
                     )}

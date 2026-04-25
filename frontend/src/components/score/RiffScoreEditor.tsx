@@ -1350,6 +1350,7 @@ export function RiffScoreEditor({
       ref={containerRef}
       className={cn(
         "relative w-full h-full min-h-[200px] riffscore-hf-wrapper",
+        presentation && "riffscore-hf-wrapper--presentation",
         showNoteNameLabels && (!presentation || allowNoteNameLabelsInPresentation) && "pt-5",
         className,
       )}
@@ -1396,6 +1397,16 @@ export function RiffScoreEditor({
           min-height: 0 !important;
           scroll-behavior: smooth !important;
           overscroll-behavior: contain !important;
+        }
+        /* Presentation preview: use RiffScore's native horizontal scroller target. */
+        .riffscore-hf-wrapper.riffscore-hf-wrapper--presentation .riff-ScoreEditor__content {
+          overflow: hidden !important;
+        }
+        .riffscore-hf-wrapper.riffscore-hf-wrapper--presentation .riff-ScoreCanvas {
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          -webkit-overflow-scrolling: touch !important;
+          pointer-events: auto !important;
         }
         @media (prefers-reduced-motion: reduce) {
           .riffscore-hf-wrapper .riff-ScoreEditor__content {

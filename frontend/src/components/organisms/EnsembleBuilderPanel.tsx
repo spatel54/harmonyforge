@@ -216,25 +216,15 @@ export const EnsembleBuilderPanel = React.forwardRef<
               ? "Set context for the assistant. You will add harmonies by hand in the editor."
               : "Dial in mood, how busy the accompaniment feels, and who plays each line.")}
         </p>
-        <p
-          className="font-body text-[11px] leading-snug m-0 mt-[10px] max-w-prose"
-          style={{ color: "var(--hf-text-secondary)" }}
-        >
-          {studyPrimaryVariant === "reviewer_melody" ? (
-            <>
-              Harmonies are not written by generative AI in this flow. Chat-style AI—for explanations and
-              suggestions—lives in <span style={{ color: "var(--hf-text-primary)" }}>Theory Inspector</span> on the
-              next screen.
-            </>
-          ) : (
-            <>
-              Generated harmonies come from the engine&apos;s{" "}
-              <span style={{ color: "var(--hf-text-primary)" }}>algorithms</span> (theory rules and search), not from
-              generative AI. <span style={{ color: "var(--hf-text-primary)" }}>AI</span> appears only in{" "}
-              <span style={{ color: "var(--hf-text-primary)" }}>Theory Inspector</span> on the next screen.
-            </>
-          )}
-        </p>
+        {studyPrimaryVariant === "reviewer_melody" ? (
+          <p
+            className="font-body text-[11px] leading-snug m-0 mt-[10px] max-w-prose"
+            style={{ color: "var(--hf-text-secondary)" }}
+          >
+            Harmony generation is algorithmic. AI chat appears in{" "}
+            <span style={{ color: "var(--hf-text-primary)" }}>Theory Inspector</span>.
+          </p>
+        ) : null}
       </div>
 
       <GlassBoxPedagogyCallout
@@ -243,30 +233,19 @@ export const EnsembleBuilderPanel = React.forwardRef<
 
       {studyPrimaryVariant === "generate" ? (
         <div
-          className="rounded-[8px] border p-4 grid sm:grid-cols-2 gap-4"
+          className="rounded-[8px] border p-4"
           style={{
             borderColor: "color-mix(in srgb, var(--hf-detail) 55%, transparent)",
             backgroundColor: "color-mix(in srgb, var(--hf-bg) 40%, transparent)",
           }}
         >
-          <div>
-            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wide m-0" style={{ color: "var(--hf-text-secondary)" }}>
-              Your rhythm & phrasing (protected)
-            </h3>
-            <p className="font-body text-[11px] leading-snug m-0 mt-2" style={{ color: "var(--hf-text-primary)" }}>
-              Tempo, note lengths, and the shape of your melody line are yours. Harmony generation adds vertical
-              voices—it does not rewrite your melody&apos;s timing.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wide m-0" style={{ color: "var(--hf-text-secondary)" }}>
-              Harmony engine (this panel)
-            </h3>
-            <p className="font-body text-[11px] leading-snug m-0 mt-2" style={{ color: "var(--hf-text-primary)" }}>
-              Mood, backing density, bass behavior, and instrument labels shape how new parts are voiced. These
-              settings guide vertical harmony generation without re-running your melody phrasing.
-            </p>
-          </div>
+          <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wide m-0" style={{ color: "var(--hf-text-secondary)" }}>
+            Rhythm stays yours
+          </h3>
+          <p className="font-body text-[11px] leading-snug m-0 mt-2" style={{ color: "var(--hf-text-primary)" }}>
+            Harmonies come from theory-rule algorithms (not generative AI). Generative AI appears in Theory Inspector on the next screen. Your tempo and note lengths stay as
+            written; this panel only sets voicing around your line.
+          </p>
         </div>
       ) : null}
 
