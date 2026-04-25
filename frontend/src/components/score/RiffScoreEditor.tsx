@@ -51,8 +51,9 @@ import {
   shouldShowChordNotation,
 } from "@/lib/music/riffscoreAdapter";
 import { cn } from "@/lib/utils";
-import { cloneScore, getNoteById, setNoteDynamics, toggleNoteDots, transposeNotes } from "@/lib/music/scoreUtils";
+import { getNoteById, setNoteDynamics, toggleNoteDots, toggleNoteRests, transposeNotes } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
+import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import {
   extractNotePositions,
@@ -71,6 +72,7 @@ import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
+import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
 /** Map an instrument name to a recognisable Lucide icon by family. */
 function getInstrumentIcon(name: string): LucideIcon {
@@ -276,6 +278,8 @@ export interface RiffScoreEditorProps {
    * Parent should clear tool selection, RiffScore selection, and any inspector score focus tint.
    */
   onScoreBackgroundInteract?: () => void;
+  /** Optional adapter to route toolbar actions through a page-level command bus. */
+  onToolbarAction?: (toolId: string, sourceActionId: SandboxToolbarActionId) => boolean | void;
 }
 
 export function RiffScoreEditor({
@@ -305,6 +309,7 @@ export function RiffScoreEditor({
   onRiffInstanceId,
   onRestInputCommit,
   onScoreBackgroundInteract,
+  onToolbarAction,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -404,14 +409,30 @@ export function RiffScoreEditor({
   onInspectorSelectMeasureRef.current = onInspectorSelectMeasure;
 
   const downloadXml = () => {
-    if (!score) return;
-    const blob = new Blob([scoreToMusicXML(score)], { type: "application/xml" });
+    const live = getLiveScoreAfterFlush(
+      { flushToZustand: () => flushToZustandRef.current() },
+      () => useScoreStore.getState().score ?? score,
+    );
+    if (!live) return;
+    const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(blob);
     anchor.download = "harmony-forge-score.xml";
     anchor.click();
     URL.revokeObjectURL(anchor.href);
   };
+
+  const runToolbarAction = useCallback(
+    (actionId: SandboxToolbarActionId, fallback: () => void) => {
+      const toolId = mapSandboxToolbarActionToToolId(actionId);
+      if (toolId && onToolbarAction) {
+        const handled = onToolbarAction(toolId, actionId);
+        if (handled !== false) return;
+      }
+      fallback();
+    },
+    [onToolbarAction],
+  );
 
   const runSelectStaffInRiffScore = (staffIndex: number) => {
     const api = apiRef.current;
@@ -471,18 +492,7 @@ export function RiffScoreEditor({
       const liveScore = useScoreStore.getState().score ?? score;
       const ids = getActiveNoteIds();
       if (ids.size === 0) return;
-      const next = cloneScore(liveScore);
-      for (const part of next.parts) {
-        for (const measure of part.measures) {
-          for (const note of measure.notes) {
-            if (!ids.has(note.id)) continue;
-            note.isRest = !note.isRest;
-            if (note.isRest) note.pitch = "B4";
-            else if (!note.pitch.match(/^[A-G](#|b)?\d+$/)) note.pitch = "C4";
-          }
-        }
-      }
-      applyScore(next);
+      applyScore(toggleNoteRests(liveScore, ids));
     });
   };
 
@@ -512,7 +522,7 @@ export function RiffScoreEditor({
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
-            runEditorHistoryOp("undo");
+            runToolbarAction("hf-action-undo", () => runEditorHistoryOp("undo"));
           },
         },
         {
@@ -523,7 +533,7 @@ export function RiffScoreEditor({
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
-            runEditorHistoryOp("redo");
+            runToolbarAction("hf-action-redo", () => runEditorHistoryOp("redo"));
           },
         },
         {
@@ -534,7 +544,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 1)),
+          onClick: () =>
+            runToolbarAction("hf-action-transpose-up", () =>
+              applyOnSelection((current, ids) => transposeNotes(current, ids, 1)),
+            ),
         },
         {
           id: "hf-action-transpose-down",
@@ -544,7 +557,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -1)),
+          onClick: () =>
+            runToolbarAction("hf-action-transpose-down", () =>
+              applyOnSelection((current, ids) => transposeNotes(current, ids, -1)),
+            ),
         },
         {
           id: "hf-action-octave-up",
@@ -554,7 +570,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, 12)),
+          onClick: () =>
+            runToolbarAction("hf-action-octave-up", () =>
+              applyOnSelection((current, ids) => transposeNotes(current, ids, 12)),
+            ),
         },
         {
           id: "hf-action-octave-down",
@@ -564,7 +583,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => transposeNotes(current, ids, -12)),
+          onClick: () =>
+            runToolbarAction("hf-action-octave-down", () =>
+              applyOnSelection((current, ids) => transposeNotes(current, ids, -12)),
+            ),
         },
         {
           id: "hf-action-dot-toggle",
@@ -574,7 +596,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => toggleNoteDots(current, ids)),
+          onClick: () =>
+            runToolbarAction("hf-action-dot-toggle", () =>
+              applyOnSelection((current, ids) => toggleNoteDots(current, ids)),
+            ),
         },
         {
           id: "hf-action-rest-toggle",
@@ -584,7 +609,7 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: toggleSelectedRests,
+          onClick: () => runToolbarAction("hf-action-rest-toggle", toggleSelectedRests),
         },
         {
           id: "hf-action-dyn-p",
@@ -594,7 +619,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "p")),
+          onClick: () =>
+            runToolbarAction("hf-action-dyn-p", () =>
+              applyOnSelection((current, ids) => setNoteDynamics(current, ids, "p")),
+            ),
         },
         {
           id: "hf-action-dyn-f",
@@ -604,7 +632,10 @@ export function RiffScoreEditor({
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => applyOnSelection((current, ids) => setNoteDynamics(current, ids, "f")),
+          onClick: () =>
+            runToolbarAction("hf-action-dyn-f", () =>
+              applyOnSelection((current, ids) => setNoteDynamics(current, ids, "f")),
+            ),
         },
         {
           id: "hf-action-export-xml",
@@ -614,7 +645,7 @@ export function RiffScoreEditor({
           disabled: !score,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: downloadXml,
+          onClick: () => runToolbarAction("hf-action-export-xml", downloadXml),
         },
         {
           id: "hf-action-print",
@@ -624,7 +655,7 @@ export function RiffScoreEditor({
           disabled: !score,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => window.print(),
+          onClick: () => runToolbarAction("hf-action-print", () => window.print()),
         },
       );
 
@@ -634,7 +665,7 @@ export function RiffScoreEditor({
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasSelection, score, selectedNoteIds, runEditorHistoryOp],
+    [hasSelection, score, selectedNoteIds, runEditorHistoryOp, runToolbarAction],
   );
 
   // Build config from score, passing current theme

@@ -19,7 +19,10 @@ import {
   measureRangeForLocalizedHarmonyRegenerate,
   restsToNotes,
   scoreHasMeasureOverflow,
+  setNoteDynamics,
   setPitchByLetter,
+  toggleNoteDots,
+  toggleNoteRests,
   transposeNotes,
 } from "./scoreUtils";
 import type { EditableScore } from "./scoreTypes";
@@ -228,6 +231,38 @@ describe("deleteNotesAsRests", () => {
     expect(notes.length).toBeGreaterThanOrEqual(4);
     expect(notes[0]!.isRest).toBe(true);
     expect(notes[0]!.duration).toBe("q");
+  });
+});
+
+describe("toolbar-targeted selection transforms", () => {
+  it("toggleNoteRests flips selected notes and preserves non-selected events", () => {
+    const score = makeScore();
+    const next = toggleNoteRests(score, new Set(["n2", "n3"]));
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[1]!.pitch).toBe("B4");
+    expect(notes[2]!.isRest).toBe(true);
+    expect(notes[0]!.isRest).toBeUndefined();
+    expect(notes[3]!.isRest).toBeUndefined();
+  });
+
+  it("toggleNoteDots only updates selected notes", () => {
+    const score = makeScore();
+    const next = toggleNoteDots(score, new Set(["n1", "n4"]));
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[0]!.dots).toBe(1);
+    expect(notes[3]!.dots).toBe(1);
+    expect(notes[1]!.dots).toBeUndefined();
+  });
+
+  it("setNoteDynamics writes dynamics for selected ids including rests", () => {
+    const score = toggleNoteRests(makeScore(), new Set(["n2"]));
+    const next = setNoteDynamics(score, new Set(["n2", "n3"]), "f");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[1]!.dynamics).toBe("f");
+    expect(notes[2]!.dynamics).toBe("f");
+    expect(notes[0]!.dynamics).toBeUndefined();
   });
 });
 

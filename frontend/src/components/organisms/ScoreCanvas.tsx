@@ -9,6 +9,7 @@ import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import type { MusicEditorAPI } from "riffscore";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
+import type { SandboxToolbarActionId } from "@/components/score/toolbarActionMap";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
@@ -45,6 +46,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   onPaletteSymbolDrop?: (toolId: string) => void;
   /** Commit note-input ghost over a selected rest (pitch + duration handled by parent). */
   onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
+  /** Route editor toolbar actions to sandbox command bus (optional). */
+  onToolbarAction?: (toolId: string, sourceActionId: SandboxToolbarActionId) => boolean | void;
   /** When false, notation is read-only (sandbox View mode). Default true. */
   enableScoreEditing?: boolean;
 }
@@ -76,6 +79,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       noteInputPitchLabelEnabled = false,
       onPaletteSymbolDrop,
       onRestInputCommit,
+      onToolbarAction,
       enableScoreEditing = true,
       className,
       ...props
@@ -454,6 +458,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}
               onRestInputCommit={onRestInputCommit}
+              onToolbarAction={onToolbarAction}
               enableScoreEditing={enableScoreEditing}
               onScoreBackgroundInteract={onCanvasClick}
             />

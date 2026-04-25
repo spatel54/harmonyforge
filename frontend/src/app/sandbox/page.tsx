@@ -12,6 +12,7 @@ import {
   extractNotes,
   setNoteDurations,
   toggleNoteDots,
+  toggleNoteRests,
   transposeNotes,
   setPitchByLetter,
   restsToNotes,
@@ -68,6 +69,10 @@ import {
 import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { OnboardingOverlay } from "@/components/organisms/OnboardingOverlay";
+import {
+  type SandboxToolbarActionId,
+} from "@/components/score/toolbarActionMap";
+import { SANDBOX_TOOLBAR_SUPPORTED_TOOL_IDS } from "./toolbarContracts";
 import { TheoryInspectorFabHint } from "@/components/organisms/TheoryInspectorFabHint";
 import { WorkspaceResetModal } from "@/components/organisms/WorkspaceResetModal";
 import { SandboxHotkeysDialog } from "@/components/molecules/SandboxHotkeysDialog";
@@ -705,6 +710,17 @@ function TactileSandboxPageInner({
     setIsExportModalOpen(true);
   }, [generatedMusicXML]);
 
+  const downloadLiveXml = React.useCallback(() => {
+    const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
+    if (!live) return;
+    const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "harmony-forge-score.xml";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, []);
+
   /**
    * Print the score alone. Temporarily tag <body> with `hf-printing-score`
    * so the new @media print rules bless only `ExportPrintRoot`; afterprint
@@ -1001,6 +1017,9 @@ function TactileSandboxPageInner({
         applyScore(next);
       } else if (durationMap[toolId]) {
         setActiveTool(toolId);
+      } else if (toolId === "duration-rest-toggle" && score && selection.length > 0) {
+        const noteIds = new Set(selection.map((s) => s.noteId));
+        applyScore(toggleNoteRests(score, noteIds));
       } else if (toolId === "duration-dotted" && score && selection.length > 0) {
         const noteIds = new Set(selection.map((s) => s.noteId));
         const next = toggleNoteDots(score, noteIds);
@@ -1037,12 +1056,13 @@ function TactileSandboxPageInner({
       } else if (toolId === "dynamics-expression-text") {
         annotateSelection("Expression text");
       } else if (
-        ["dynamics-piano", "dynamics-cresc", "dynamics-decresc"].includes(toolId) &&
+        ["dynamics-piano", "dynamics-forte", "dynamics-cresc", "dynamics-decresc"].includes(toolId) &&
         score &&
         selection.length > 0
       ) {
         const dynMap: Record<string, string> = {
           "dynamics-piano": "p",
+          "dynamics-forte": "f",
           "dynamics-cresc": "crescendo",
           "dynamics-decresc": "decrescendo",
         };
@@ -1247,15 +1267,10 @@ function TactileSandboxPageInner({
         if (live) navigator.clipboard?.writeText(scoreToMusicXML(live));
       } else if (toolId === "score-print") {
         printScoreOnly();
+      } else if (toolId === "score-export-xml") {
+        downloadLiveXml();
       } else if (toolId === "score-save") {
-        const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
-        if (!live) return;
-        const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "harmony-forge-score.xml";
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadLiveXml();
       } else if (toolId === "score-export") {
         openExportModal();
       } else if (toolId === "score-parts" || toolId === "score-layers") {
@@ -1278,7 +1293,17 @@ function TactileSandboxPageInner({
         setActiveTool(toolId);
       }
     },
-    [score, selection, deleteSelection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly]
+    [score, selection, deleteSelection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly, downloadLiveXml]
+  );
+
+  const handleToolbarAction = React.useCallback(
+    (toolId: string, _sourceActionId: SandboxToolbarActionId) => {
+      void _sourceActionId;
+      if (!SANDBOX_TOOLBAR_SUPPORTED_TOOL_IDS.has(toolId)) return false;
+      handleToolSelect(toolId);
+      return true;
+    },
+    [handleToolSelect],
   );
 
   React.useEffect(() => {
@@ -2228,6 +2253,7 @@ function TactileSandboxPageInner({
               onPaletteSymbolDrop={(toolId) => {
                 handleToolSelect(toolId);
               }}
+              onToolbarAction={handleToolbarAction}
               onRestInputCommit={handleRestInputCommit}
             />
             {layersPanelOpen && score && (

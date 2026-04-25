@@ -649,6 +649,26 @@ export function restsToNotes(
 }
 
 /**
+ * Toggle selected notes between rest and pitched note states.
+ * When turning a rest back into a note and pitch is invalid, use C4 fallback.
+ */
+export function toggleNoteRests(score: EditableScore, noteIds: Set<string>): EditableScore {
+  if (noteIds.size === 0) return score;
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        note.isRest = !note.isRest;
+        if (note.isRest) note.pitch = "B4";
+        else if (!note.pitch.match(/^[A-G](#|b)?\d+$/)) note.pitch = "C4";
+      }
+    }
+  }
+  return next;
+}
+
+/**
  * Convert a single rest into a pitched note at an explicit pitch; duration is
  * preserved. Used by drag-from-palette and keyboard-with-cursor affordances.
  */
