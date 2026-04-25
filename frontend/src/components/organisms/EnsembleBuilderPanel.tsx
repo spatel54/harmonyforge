@@ -241,6 +241,35 @@ export const EnsembleBuilderPanel = React.forwardRef<
         variant={studyPrimaryVariant === "reviewer_melody" ? "ensemble-reviewer" : "ensemble-generate"}
       />
 
+      {studyPrimaryVariant === "generate" ? (
+        <div
+          className="rounded-[8px] border p-4 grid sm:grid-cols-2 gap-4"
+          style={{
+            borderColor: "color-mix(in srgb, var(--hf-detail) 55%, transparent)",
+            backgroundColor: "color-mix(in srgb, var(--hf-bg) 40%, transparent)",
+          }}
+        >
+          <div>
+            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wide m-0" style={{ color: "var(--hf-text-secondary)" }}>
+              Your rhythm & phrasing (protected)
+            </h3>
+            <p className="font-body text-[11px] leading-snug m-0 mt-2" style={{ color: "var(--hf-text-primary)" }}>
+              Tempo, note lengths, and the shape of your melody line are yours. Harmony generation adds vertical
+              voices—it does not rewrite your melody&apos;s timing.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wide m-0" style={{ color: "var(--hf-text-secondary)" }}>
+              Harmony engine (this panel)
+            </h3>
+            <p className="font-body text-[11px] leading-snug m-0 mt-2" style={{ color: "var(--hf-text-primary)" }}>
+              Mood, backing density, bass behavior, and instrument labels shape how new parts are voiced. These
+              settings guide vertical harmony generation without re-running your melody phrasing.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Sound & style — mood + backing density */}
       <section
         className="rounded-[8px] border p-4 flex flex-col gap-4"

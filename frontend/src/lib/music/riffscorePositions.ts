@@ -1099,3 +1099,35 @@ export function pitchAtStaffVerticalInContainer(
 
   return pitchFromStaffGeometry(part.clef, lineYsFive, centerYContainer);
 }
+
+const DEFAULT_NOTE_HIT_PAD = 14;
+
+/**
+ * When several note bboxes overlap (e.g. chord stack), return the topmost on-screen
+ * (smallest center Y). Helps prefer the upper notehead in tall vertical clusters (Iteration 7).
+ */
+export function findTopmostNotePositionAt(
+  positions: readonly NotePosition[],
+  mx: number,
+  my: number,
+  pad: number = DEFAULT_NOTE_HIT_PAD,
+): NotePosition | null {
+  const hits: NotePosition[] = [];
+  for (const p of positions) {
+    if (
+      mx >= p.x - pad &&
+      mx <= p.x + p.w + pad &&
+      my >= p.y - pad &&
+      my <= p.y + p.h + pad
+    ) {
+      hits.push(p);
+    }
+  }
+  if (hits.length === 0) return null;
+  if (hits.length === 1) return hits[0] ?? null;
+  return hits.reduce((best, cur) => {
+    const cBest = best.y + best.h * 0.5;
+    const cCur = cur.y + cur.h * 0.5;
+    return cCur < cBest ? cur : best;
+  });
+}

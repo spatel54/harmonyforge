@@ -112,6 +112,15 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
     title: "With notes selected",
     rows: [
       {
+        keys: "↑ · ↓",
+        description:
+          "Move selected notes by one semitone (layout-safe: uses Arrow key codes). RiffScore’s own arrow handler is bypassed so direction matches the label.",
+      },
+      {
+        keys: "⌘/Ctrl + ↑ · ↓",
+        description: "Transpose selected notes by one octave up or down.",
+      },
+      {
         keys: "1 – 6",
         description:
           "Set duration: 1 = 32nd, 2 = 16th, 3 = eighth, 4 = quarter, 5 = half, 6 = whole. Number row, Digit1–6 (even with Shift), or numpad 1–6.",

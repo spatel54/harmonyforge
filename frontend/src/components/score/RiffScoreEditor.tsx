@@ -493,7 +493,7 @@ export function RiffScoreEditor({
         {
           id: "hf-action-octave-up",
           label: "Octave ↑",
-          title: "Transpose selected notes up one octave (⌘↑)",
+          title: "Transpose selected notes up one octave (⌘/Ctrl+↑ — also handled in sandbox keys)",
           icon: <span className="text-[10px] font-semibold">8+</span>,
           disabled: !hasSelection,
           showLabel: true,
@@ -503,7 +503,7 @@ export function RiffScoreEditor({
         {
           id: "hf-action-octave-down",
           label: "Octave ↓",
-          title: "Transpose selected notes down one octave (⌘↓)",
+          title: "Transpose selected notes down one octave (⌘/Ctrl+↓ — also handled in sandbox keys)",
           icon: <span className="text-[10px] font-semibold">8-</span>,
           disabled: !hasSelection,
           showLabel: true,

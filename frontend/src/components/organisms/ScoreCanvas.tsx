@@ -7,6 +7,7 @@ import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import type { ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
+import type { MusicEditorAPI } from "riffscore";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -37,6 +38,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
       | { kind: "part"; staffIndex: number },
   ) => void;
   onRiffScoreSessionReady?: (session: RiffScoreSessionHandles) => void;
+  /** Native editor API — optional (e.g. pause RiffScore when using alternate audition playback). */
+  onEditorApiReady?: (api: MusicEditorAPI) => void;
   noteInputPitchLabelEnabled?: boolean;
   /** Dropped notation-panel symbols apply the same tool id as a palette click. */
   onPaletteSymbolDrop?: (toolId: string) => void;
@@ -69,6 +72,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onInspectorSelectPart,
       onInspectorInferredRegion,
       onRiffScoreSessionReady,
+      onEditorApiReady,
       noteInputPitchLabelEnabled = false,
       onPaletteSymbolDrop,
       onRestInputCommit,
@@ -445,6 +449,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onInspectorSelectPart={onInspectorSelectPart}
               onInspectorInferredRegion={onInspectorInferredRegion}
               onSessionReady={onRiffScoreSessionReady}
+              onEditorApiReady={onEditorApiReady}
               noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
               showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}

@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25) — **user-study follow-up**: **interaction** (unified **↑/↓** + **⌘/Ctrl+↑/↓** pitch in `sandbox/page.tsx`); **playback** timbre map + **Piano / By part** preview; **Theory Inspector** proactive alternatives + phrasing-guarded stylist; **Ensemble** “your rhythm vs harmony engine” copy; **engine** melody-duration audit
 - [Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)](#wl-ux-team-playground-2026-04-24) — **copy/UI polish** across **`/`** · **`/document`** · **`/sandbox`** · **`/team`**; **team** collapsibles + “how we work together”; **music-stand** hover pulse + **♫**-shaped aureole (no rectangular hover card)
 - [Work log — Team page & global credits (2026-04-23)](#wl-team-credits-2026-04-23) — **`TeamNavButton`** in headers, **`/team`** creator profiles (bios, quotes, **`next/image`**), **`frontend/public/creators/`** headshots
 - [Work log — Iteration 6 (2026-04-23)](#wl-iteration-6-2026-04-23) — **pedal bass engine option + expanded ensembles + Theory Inspector Guided/Concise + tighter prompts + float/dock inspector + Alt+bar measure selection + multi-select chat FACT + localized bar harmony API (`/api/generate-harmony-range`)**
@@ -44,6 +45,21 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="last-updated-2026-04-25"></a>
+
+### Last updated (2026-04-25)
+
+- **Iteration 7 (study feedback — [Iteration7.txt](Iteration7.txt)):** See **[Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25)** for **end goal**, **approach**, and **file-level** notes. **Manual repro (baseline):** (1) **Drag** — reported wrong vertical note in dense/chord clusters; RiffScore owns pointer selection, HF **`pitchGroupRef`** + **`syncMultiPitchFromBaseline`** own multi-select propagation. (2) **Octave/arrow** — single-note **Arrow** + **⌘/Ctrl+Arrow** previously relied on RiffScore defaults; now centralized in **capture-phase** `keydown` in **`sandbox/page.tsx`** with **`e.code`**. **Verification (2026-04-25):** **`make test`** **276** · **`make lint`** clean; additive **Part 1** melody-duration case in **`filePipeline.test.ts`**.
+
+<a id="wl-iteration-7-2026-04-25"></a>
+
+#### Work log — Iteration 7 (2026-04-25)
+
+- **End goal:** Stabilize **click-drag** and **keyboard pitch**, improve **audition trust** (timbre + A/B), make **Theory Inspector** feel **proactive** (alternatives, not “search only”), and **separate** user **rhythmic phrasing** from **vertical harmony** in UI + stylist defaults.
+- **Learnings (architecture):** Pitch transposes for toolbar/HF are **`transposeNotes`** + **`getPitchGroupNoteIds()`**; RiffScore **`play()`** still uses its **piano** sampler—HF **`usePlayback`** can use **per-part timbre** when not delegating, or a **Piano** mode. **`explanationLevel.ts`** = shared **`resolveExplanationLevel`** for API/tests; panel keeps **beginner** as default.
+- **Verification:** **`make test`** **276** · **`make lint`** clean · **`make build`** green (2026-04-25; full **`make verify`**); engine regression **`satbToMusicXML additiveHarmonies preserves written melody note durations on Part 1`** in **`filePipeline.test.ts`**.
+- **Open:** touch still has no hover; dense-score **RiffScore** hit-testing may need upstream patch if issues persist after HF arrow routing.
 
 <a id="last-updated-2026-04-24"></a>
 

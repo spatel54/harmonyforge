@@ -32,6 +32,10 @@ interface SuggestRequestBody {
   userMessage?: string;
   /** M5 RQ2: when "minimal", strip rationale/summary from the JSON response */
   suggestionExplanationMode?: SuggestionExplanationMode;
+  /** When false, server prompt forces suggestedDuration null (Iteration 7). */
+  allowRhythmInSuggestions?: boolean;
+  /** When false, omit harmonic-alternatives block from the Stylist prompt. */
+  includeHarmonicAlternatives?: boolean;
 }
 
 /**
@@ -67,6 +71,9 @@ export async function POST(request: NextRequest) {
 
   const taxonomySection = getTaxonomyContext(genre, violationType);
 
+  const allowRhythmInSuggestions = body.allowRhythmInSuggestions === true;
+  const includeHarmonicAlternatives = body.includeHarmonicAlternatives !== false;
+
   const systemPrompt = buildStylistStructuredPrompt({
     genre,
     taxonomySection,
@@ -74,6 +81,8 @@ export async function POST(request: NextRequest) {
     violationContext,
     scoreContext,
     suggestionExplanationMode,
+    allowRhythmInSuggestions,
+    includeHarmonicAlternatives,
   });
 
   const messages = [

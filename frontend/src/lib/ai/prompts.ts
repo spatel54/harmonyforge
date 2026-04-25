@@ -229,6 +229,10 @@ interface StructuredPromptContext extends PromptContext {
   }>;
   /** M5 RQ2: suppress stylist prose in structured JSON */
   suggestionExplanationMode?: SuggestionExplanationMode;
+  /** When false, Stylist must set suggestedDuration to null on every correction (Iteration 7). */
+  allowRhythmInSuggestions?: boolean;
+  /** When true, also emit optional musicalAlternatives (passing chords, inversions, etc.). */
+  includeHarmonicAlternatives?: boolean;
 }
 
 /**
@@ -238,6 +242,8 @@ interface StructuredPromptContext extends PromptContext {
 export function buildStylistStructuredPrompt(
   ctx: StructuredPromptContext,
 ): string {
+  const allowRhythm = ctx.allowRhythmInSuggestions ?? false;
+  const includeAlt = ctx.includeHarmonicAlternatives ?? true;
   const violationLine = ctx.violationType
     ? `\nCurrent violation: ${ctx.violationType}${ctx.violationContext ? ` — ${ctx.violationContext}` : ""}`
     : "";
@@ -261,6 +267,16 @@ export function buildStylistStructuredPrompt(
       ? "- Rationale and summary must be empty strings as stated above."
       : "- Provide a ruleLabel (short name, ≤8 words) and rationale: **≤3 short sentences** OR **≤3 bullet lines** (plain language, one idea per line). End rationale with **one** source tag when the fix follows a classical norm (e.g. \"Aldwell & Schachter\" or \"Open Music Theory\")—not a paragraph of references.";
 
+  const durationBullet = allowRhythm
+    ? `- **suggestedDuration** (field on each correction): use MusicXML-style durations (\`w\`, \`h\`, \`q\`, \`8\`, \`16\`, \`32\`) when changing rhythm helps—**longer** values for breathing room / pedal-like support, **shorter** or adjusted values to thin texture or avoid parallels. Set to **null** to leave duration unchanged. When pitch-only fixes feel narrow or stiff, prefer at least one option that uses **duration or rests** (e.g. shorten a busy voice) instead of only nudging pitch.`
+    : `- **suggestedDuration** must be **null** on every correction. The user is keeping **notated rhythm, note lengths, and phrasing**; suggest **pitch / voice-leading** changes only. Do not propose written-length or rest changes in this session.`;
+
+  const alternativesBlock = includeAlt
+    ? `
+- **musicalAlternatives** (optional JSON array, max 3 entries): proactively offer **grounded** harmonic options the user could try next—**passing chords**, **inversions**, **secondary dominants**, **sus4 → V7**, **chord-quality swaps** (e.g. G → G7), or **re-voicings**—using only what you can infer from the score context and editor focus. Each entry: **shortLabel** (very short chip) + **description** (one concrete sentence). These are **ideas**, not automatic score edits; **corrections** may be empty if you only have alternatives.
+`
+    : "";
+
   return `You are the HarmonyForge Stylist. You suggest specific pitch corrections to resolve voice-leading violations.
 
 Genre context: ${ctx.genre}
@@ -278,11 +294,12 @@ ${CITATION_AND_BREVITY}
 ${THEORY_INSPECTOR_AUDIENCE}
 ${minimalRules}
 Rules:
-- Suggest 1-3 concrete corrections that resolve the violation (pitch and/or rhythm).
+- Suggest 1-3 concrete corrections that resolve the violation (pitch${allowRhythm ? " and/or rhythm" : " only"}).
 - Each correction MUST use a noteId from the list above (e.g. "note_0", "note_1", etc.) — copy the noteId exactly.
 - The suggestedPitch must be in scientific notation (e.g., "A4", "F#3", "Bb2").
-- **suggestedDuration** (field on each correction): use MusicXML-style durations (\`w\`, \`h\`, \`q\`, \`8\`, \`16\`, \`32\`) when changing rhythm helps—**longer** values for breathing room / pedal-like support, **shorter** or adjusted values to thin texture or avoid parallels. Set to **null** to leave duration unchanged. When pitch-only fixes feel narrow or stiff, prefer at least one option that uses **duration or rests** (e.g. shorten a busy voice) instead of only nudging pitch.
+- ${durationBullet}
 - ${rationaleRuleLine}
+${alternativesBlock}
 - Do not fabricate notes/rules; if no valid correction is supported by provided context, return zero corrections with a clear summary—state honestly if the fix is **one option** or could **trade off** another voice.
 - When multiple valid interventions exist, **vary the approach** across corrections (not only stepwise pitch edits)—e.g. rhythmic space vs voice-leading tweak.
 - Respect the genre's rules: classical requires strict avoidance; jazz/pop may permit the pattern.

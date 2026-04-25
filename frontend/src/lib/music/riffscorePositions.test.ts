@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findTopmostNotePositionAt,
   selectMainStaffFiveLineYsFromClusters,
   type StaffHorizLineCluster,
 } from "./riffscorePositions";
@@ -48,5 +49,21 @@ describe("selectMainStaffFiveLineYsFromClusters", () => {
 
   it("returns null when fewer than five clusters", () => {
     expect(selectMainStaffFiveLineYsFromClusters(clustersFromYsAndWidths([{ y: 1, w: 1 }]))).toBeNull();
+  });
+});
+
+describe("findTopmostNotePositionAt", () => {
+  const sel = (id: string) => ({
+    partId: "p1",
+    measureIndex: 0,
+    noteIndex: 0,
+    noteId: id,
+  });
+
+  it("returns the upper note in a vertical overlap", () => {
+    const high = { x: 10, y: 40, w: 10, h: 10, selection: sel("a") };
+    const low = { x: 10, y: 55, w: 10, h: 10, selection: sel("b") };
+    const got = findTopmostNotePositionAt([low, high], 14, 48);
+    expect(got?.selection.noteId).toBe("a");
   });
 });

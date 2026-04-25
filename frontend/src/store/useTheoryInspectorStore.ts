@@ -155,6 +155,18 @@ export interface TheoryInspectorState {
   /** Tags hidden for this session (× on strip). */
   dismissedChatTags: string[];
   dismissChatTag: (tag: string) => void;
+
+  /**
+   * When false (default), Stylist / apply ignores LLM `suggestedDuration` so the user’s
+   * notated phrasing is preserved (Iteration 7). When true, duration edits may apply.
+   */
+  allowRhythmInSuggestions: boolean;
+  setAllowRhythmInSuggestions: (v: boolean) => void;
+  /**
+   * When true, selection changes can auto-request alternatives (debounced) when API + proactive flow allow.
+   */
+  proactiveAlternativesEnabled: boolean;
+  setProactiveAlternativesEnabled: (v: boolean) => void;
 }
 
 export const useTheoryInspectorStore = create<TheoryInspectorState>(
@@ -272,5 +284,12 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
           ? s
           : { dismissedChatTags: [...s.dismissedChatTags, tag] },
       ),
+
+    allowRhythmInSuggestions: false,
+    setAllowRhythmInSuggestions: (allowRhythmInSuggestions) => set({ allowRhythmInSuggestions }),
+
+    proactiveAlternativesEnabled: false,
+    setProactiveAlternativesEnabled: (proactiveAlternativesEnabled) =>
+      set({ proactiveAlternativesEnabled }),
   }),
 );

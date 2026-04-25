@@ -3,7 +3,11 @@
 import React from "react";
 import { Check, X, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ScoreCorrection, CorrectionStatus } from "@/lib/music/suggestionTypes";
+import type {
+  ScoreCorrection,
+  CorrectionStatus,
+  MusicalAlternativeHint,
+} from "@/lib/music/suggestionTypes";
 
 export interface SuggestionCardProps extends React.HTMLAttributes<HTMLDivElement> {
   corrections: ScoreCorrection[];
@@ -16,6 +20,8 @@ export interface SuggestionCardProps extends React.HTMLAttributes<HTMLDivElement
   onRejectCorrection: (correctionId: string) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
+  /** Proactive passing-chord / inversion ideas (Iteration 7) — not auto-applied. */
+  musicalAlternatives?: MusicalAlternativeHint[];
 }
 
 /**
@@ -37,6 +43,7 @@ export const SuggestionCard = React.forwardRef<
       onRejectCorrection,
       onAcceptAll,
       onRejectAll,
+      musicalAlternatives,
       className,
       ...props
     },
@@ -89,6 +96,27 @@ export const SuggestionCard = React.forwardRef<
                 ? "No specific corrections could be generated for this score."
                 : `${corrections.length} correction${corrections.length > 1 ? "s" : ""} suggested:`)}
         </p>
+
+        {musicalAlternatives && musicalAlternatives.length > 0 ? (
+          <div
+            className="flex flex-col gap-[4px] rounded-[4px] px-[8px] py-[6px] mb-[4px]"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--hf-accent) 10%, transparent)",
+              border: "1px solid var(--hf-detail)",
+            }}
+          >
+            <div className="font-mono text-[9px] uppercase tracking-wide" style={{ color: "var(--hf-text-secondary)" }}>
+              Try next (harmonic ideas)
+            </div>
+            <ul className="m-0 pl-[14px] list-disc space-y-[4px]">
+              {musicalAlternatives.map((a, i) => (
+                <li key={i} className="text-[10px] leading-snug" style={{ color: "var(--hf-text-primary)" }}>
+                  <span className="font-mono font-semibold">{a.shortLabel}:</span> {a.description}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {/* Correction list */}
         <div className="flex flex-col gap-[4px]">

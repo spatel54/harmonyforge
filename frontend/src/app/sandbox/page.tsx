@@ -210,9 +210,20 @@ function TactileSandboxPageInner({
 
   // Build suggestion batch map for the panel
   const suggestionBatchMap = React.useMemo(() => {
-    const map = new Map<string, { corrections: import("@/lib/music/suggestionTypes").ScoreCorrection[]; summary: string }>();
+    const map = new Map<
+      string,
+      {
+        corrections: import("@/lib/music/suggestionTypes").ScoreCorrection[];
+        summary: string;
+        musicalAlternatives?: import("@/lib/music/suggestionTypes").MusicalAlternativeHint[];
+      }
+    >();
     for (const batch of suggestionStore.batches) {
-      map.set(batch.id, { corrections: batch.corrections, summary: batch.summary });
+      map.set(batch.id, {
+        corrections: batch.corrections,
+        summary: batch.summary,
+        musicalAlternatives: batch.musicalAlternatives,
+      });
     }
     return map;
   }, [suggestionStore.batches]);
@@ -230,7 +241,9 @@ function TactileSandboxPageInner({
       const correction = allCorrections.find((c) => c.id === correctionId);
       if (!correction) return;
       logStudyEvent("suggestion_accepted", { correctionId });
-      const nextScore = applySuggestion(live, correction);
+      const nextScore = applySuggestion(live, correction, {
+        allowRhythm: useTheoryInspectorStore.getState().allowRhythmInSuggestions,
+      });
       applyScore(nextScore);
       suggestionStore.acceptCorrection(correctionId);
     },
@@ -257,7 +270,9 @@ function TactileSandboxPageInner({
       );
       if (pending.length === 0) return;
       logStudyEvent("suggestion_accept_all", { batchId });
-      const nextScore = applySuggestions(live, pending);
+      const nextScore = applySuggestions(live, pending, {
+        allowRhythm: useTheoryInspectorStore.getState().allowRhythmInSuggestions,
+      });
       applyScore(nextScore);
       suggestionStore.acceptAll(batchId);
     },
@@ -319,7 +334,11 @@ function TactileSandboxPageInner({
         ruleLabel: action.summary.slice(0, 120),
         rationale: "",
       };
-      applyScore(applySuggestion(live, correction));
+      applyScore(
+        applySuggestion(live, correction, {
+          allowRhythm: useTheoryInspectorStore.getState().allowRhythmInSuggestions,
+        }),
+      );
       const ins = useTheoryInspectorStore.getState().selectedNoteInsight;
       patchSelectedNoteInsight({
         ideaActionStatuses: {
@@ -1463,41 +1482,39 @@ function TactileSandboxPageInner({
         }
       }
       if (selection.length === 0 && score) {
-        if (e.key === "ArrowLeft") {
+        if (e.code === "ArrowLeft") {
           e.preventDefault();
           moveCursorHorizontally(-1);
           return;
         }
-        if (e.key === "ArrowRight") {
+        if (e.code === "ArrowRight") {
           e.preventDefault();
           moveCursorHorizontally(1);
           return;
         }
-        if ((isNoteInputMode || isRepitchMode) && e.key === "ArrowUp") {
+        if ((isNoteInputMode || isRepitchMode) && e.code === "ArrowUp") {
           e.preventDefault();
           moveCursorVertically(-1);
           return;
         }
-        if ((isNoteInputMode || isRepitchMode) && e.key === "ArrowDown") {
+        if ((isNoteInputMode || isRepitchMode) && e.code === "ArrowDown") {
           e.preventDefault();
           moveCursorVertically(1);
         }
       }
       if (selection.length > 0 && score) {
-        if (
-          !e.metaKey &&
-          !e.ctrlKey &&
-          !e.altKey &&
-          (e.key === "ArrowUp" || e.key === "ArrowDown")
-        ) {
+        // Own all vertical pitch motion (1 semitone, or 1 octave with ⌘/Ctrl) so RiffScore
+        // never applies inverted or single-note defaults (Iteration 7).
+        if ((e.code === "ArrowUp" || e.code === "ArrowDown") && !e.altKey) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
           const noteIds =
             riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-          if (noteIds.size >= 2) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            applyScore(transposeNotes(score, noteIds, e.key === "ArrowUp" ? 1 : -1));
-            return;
-          }
+          const isOctave = e.metaKey || e.ctrlKey;
+          const up = e.code === "ArrowUp";
+          const delta = isOctave ? (up ? 12 : -12) : up ? 1 : -1;
+          applyScore(transposeNotes(score, noteIds, delta));
+          return;
         }
         const key = e.key.toUpperCase();
         let digit: string | null = null;
@@ -1542,7 +1559,6 @@ function TactileSandboxPageInner({
           e.preventDefault();
           handleToolSelect("pitch-accidental-natural");
         }
-        // ↑/↓ pitch: RiffScore native keyboard (same as Configuration score preview).
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -2426,6 +2442,9 @@ function TactileSandboxPageInner({
               onRejectCorrection={handleRejectCorrection}
               onAcceptAllCorrections={handleAcceptAll}
               onRejectAllCorrections={handleRejectAll}
+              onRequestStylist={() => {
+                void requestRegionSuggestion();
+              }}
               onExplainMore={(msgId) => explainViolationMore(msgId)}
               onSuggestFix={
                 score

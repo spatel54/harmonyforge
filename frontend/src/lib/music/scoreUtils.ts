@@ -891,12 +891,14 @@ export function insertNote(
 export function applySuggestion(
   score: EditableScore,
   correction: ScoreCorrection,
+  opts?: { allowRhythm?: boolean },
 ): EditableScore {
+  const allowRhythm = opts?.allowRhythm ?? false;
   const next = cloneScore(score);
   const found = getNoteById(next, correction.noteId);
   if (!found) return score;
   found.note.pitch = correction.suggestedPitch;
-  if (correction.suggestedDuration) {
+  if (allowRhythm && correction.suggestedDuration) {
     found.note.duration = correction.suggestedDuration;
   }
   return next;
@@ -906,13 +908,15 @@ export function applySuggestion(
 export function applySuggestions(
   score: EditableScore,
   corrections: ScoreCorrection[],
+  opts?: { allowRhythm?: boolean },
 ): EditableScore {
+  const allowRhythm = opts?.allowRhythm ?? false;
   const next = cloneScore(score);
   for (const correction of corrections) {
     const found = getNoteById(next, correction.noteId);
     if (!found) continue;
     found.note.pitch = correction.suggestedPitch;
-    if (correction.suggestedDuration) {
+    if (allowRhythm && correction.suggestedDuration) {
       found.note.duration = correction.suggestedDuration;
     }
   }

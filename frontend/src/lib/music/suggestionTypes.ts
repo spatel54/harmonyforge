@@ -21,6 +21,12 @@ export interface ScoreCorrection {
   rationale: string;
 }
 
+/** Proactive harmonic ideas from the Stylist (Iteration 7) — not auto-applied. */
+export interface MusicalAlternativeHint {
+  shortLabel: string;
+  description: string;
+}
+
 /** A grouped set of corrections from a single AI request. */
 export interface SuggestionBatch {
   id: string;
@@ -29,6 +35,8 @@ export interface SuggestionBatch {
   violationType?: string;
   status: "pending" | "partial" | "resolved";
   createdAt: number;
+  /** Optional passing-chord / inversion / quality ideas — display-only unless user acts manually. */
+  musicalAlternatives?: MusicalAlternativeHint[];
 }
 
 export type CorrectionStatus = "pending" | "accepted" | "rejected";

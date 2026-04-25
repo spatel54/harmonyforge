@@ -165,6 +165,38 @@ describe("File pipeline", () => {
     expect(fluteIdx).toBeLessThan(celloIdx);
   });
 
+  it("satbToMusicXML additiveHarmonies preserves written melody note durations on Part 1", () => {
+    const parsed: ParsedScore = {
+      key: { tonic: "C", mode: "major" },
+      melody: [
+        { pitch: "G4", beat: 0, duration: 0.5 },
+        { pitch: "A4", beat: 0.5, duration: 0.5 },
+      ],
+      melodyPartName: "Melody",
+      timeSignature: { beats: 4, beatType: 4 },
+      totalBeats: 4,
+      totalMeasures: 1,
+    };
+    const withChords = ensureChords(parsed);
+    const result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+    expect(result).not.toBeNull();
+    const xml = satbToMusicXML(
+      result!,
+      { Soprano: ["Flute"], Bass: ["Cello"] } as Record<string, string[]>,
+      withChords,
+      { format: "partwise", additiveHarmonies: true },
+    );
+    const partMatch = xml.match(/<part id="P1">([\s\S]*?)<\/part>/);
+    expect(partMatch).toBeTruthy();
+    const p1 = partMatch![1]!;
+    const eighths = (p1.match(/<type>eighth<\/type>/g) || []).length;
+    expect(eighths).toBeGreaterThanOrEqual(2);
+  });
+
   it("satbToMusicXML emits alto/bass clefs for viola, cello, bassoon (not all treble)", () => {
     const parsed: ParsedScore = {
       key: { tonic: "C", mode: "major" },

@@ -103,7 +103,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
     }, [riffInstanceId]);
 
     const togglePlayback = React.useCallback(async () => {
-      if (measureCount <= 0) return;
+      if (measureCount <= 0 || !score) return;
       let api = resolveRiffApi();
       if (!api && riffInstanceId) {
         for (let i = 0; i < 40; i++) {
@@ -127,7 +127,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
       } catch {
         setPlaying(false);
       }
-    }, [measureCount, playing, resolveRiffApi, riffInstanceId]);
+    }, [measureCount, playing, resolveRiffApi, riffInstanceId, score]);
 
     const canUseTransport = Boolean(riffInstanceId) && measureCount > 0;
 

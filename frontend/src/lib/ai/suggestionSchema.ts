@@ -25,13 +25,29 @@ export const correctionSchema = z.object({
     .describe("1-2 sentence explanation of why this correction resolves the violation"),
 });
 
+export const musicalAlternativeSchema = z.object({
+  shortLabel: z
+    .string()
+    .describe('Chip text, e.g. "G7(sus4)" or "Passing ii6"'),
+  description: z
+    .string()
+    .describe("One sentence grounded in the score context; actionable for a human arranger"),
+});
+
 export const suggestResponseSchema = z.object({
   corrections: z
     .array(correctionSchema)
-    .describe("List of note corrections to resolve the violation"),
+    .describe("List of note corrections to resolve the violation (may be empty if only alternatives apply)"),
   summary: z
     .string()
     .describe("Overall explanation of the suggested corrections"),
+  musicalAlternatives: z
+    .array(musicalAlternativeSchema)
+    .max(3)
+    .optional()
+    .describe(
+      "Optional proactive ideas: passing chords, inversions, V7, sus resolutions—grounded in context",
+    ),
 });
 
 export type SuggestResponse = z.infer<typeof suggestResponseSchema>;

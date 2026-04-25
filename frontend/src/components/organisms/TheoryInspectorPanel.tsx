@@ -64,7 +64,12 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   onHistory?: () => void;
   onClose?: () => void;
   /** Suggestion card support */
-  suggestionBatches?: Map<string, { corrections: ScoreCorrection[]; summary: string }>;
+  suggestionBatches?: Map<
+    string,
+    { corrections: ScoreCorrection[]; summary: string; musicalAlternatives?: import("@/lib/music/suggestionTypes").MusicalAlternativeHint[] }
+  >;
+  /** Run structured Stylist pass (same as violation “suggest fix”). */
+  onRequestStylist?: () => void;
   correctionStatuses?: Record<string, CorrectionStatus>;
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
@@ -141,6 +146,7 @@ export const TheoryInspectorPanel = React.forwardRef<
       onRejectCorrection,
       onAcceptAllCorrections,
       onRejectAllCorrections,
+      onRequestStylist,
       onAcceptIdeaAction,
       onRejectIdeaAction,
       onStarterPromptClick,
@@ -181,6 +187,16 @@ export const TheoryInspectorPanel = React.forwardRef<
     const dismissChatTag = useTheoryInspectorStore((s) => s.dismissChatTag);
     const dismissedChatTags = useTheoryInspectorStore((s) => s.dismissedChatTags);
     const score = useScoreStore((s) => s.score);
+    const allowRhythmInSuggestions = useTheoryInspectorStore((s) => s.allowRhythmInSuggestions);
+    const setAllowRhythmInSuggestions = useTheoryInspectorStore(
+      (s) => s.setAllowRhythmInSuggestions,
+    );
+    const proactiveAlternativesEnabled = useTheoryInspectorStore(
+      (s) => s.proactiveAlternativesEnabled,
+    );
+    const setProactiveAlternativesEnabled = useTheoryInspectorStore(
+      (s) => s.setProactiveAlternativesEnabled,
+    );
 
     // AI first-visit modal
     const [showAiModal, setShowAiModal] = React.useState(false);
@@ -325,6 +341,7 @@ export const TheoryInspectorPanel = React.forwardRef<
               corrections={batch.corrections}
               correctionStatuses={correctionStatuses}
               summary={batch.summary}
+              musicalAlternatives={batch.musicalAlternatives}
               suppressProseSummary={suppressSuggestionProse}
               timestamp={msg.timestamp}
               onAcceptCorrection={(id) => onAcceptCorrection?.(id)}
@@ -987,6 +1004,46 @@ export const TheoryInspectorPanel = React.forwardRef<
               ))}
             </div>
           ) : null}
+
+          {inspectorActiveTab === "chat" && tutorEnabled && (
+            <div
+              className="flex flex-wrap items-center gap-x-4 gap-y-1.5 w-full px-[12px] py-[6px] shrink-0 font-mono text-[10px]"
+              style={{
+                backgroundColor: "var(--hf-bg)",
+                borderTop: "1px solid var(--hf-detail)",
+                color: "var(--hf-text-secondary)",
+              }}
+            >
+              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="rounded border-[var(--hf-detail)] size-3 accent-[var(--hf-surface)]"
+                  checked={allowRhythmInSuggestions}
+                  onChange={(e) => setAllowRhythmInSuggestions(e.target.checked)}
+                />
+                <span>Allow rhythm in stylist fixes</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="rounded border-[var(--hf-detail)] size-3 accent-[var(--hf-surface)]"
+                  checked={proactiveAlternativesEnabled}
+                  onChange={(e) => setProactiveAlternativesEnabled(e.target.checked)}
+                />
+                <span>Proactive focus (coming soon)</span>
+              </label>
+              {onRequestStylist && score && score.parts.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={onRequestStylist}
+                  className="hf-pressable ml-auto font-mono text-[10px] rounded px-2 py-0.5 border"
+                  style={{ borderColor: "var(--hf-detail)", color: "var(--hf-text-primary)" }}
+                >
+                  Suggest alternatives
+                </button>
+              ) : null}
+            </div>
+          )}
 
           {inspectorActiveTab === "chat" && (
             <div

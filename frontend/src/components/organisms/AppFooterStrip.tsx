@@ -36,6 +36,8 @@ export function AppFooterStrip({ className, lead, end, ...props }: AppFooterStri
           <SiteCopyright />
           <Link
             href="/team"
+            target="_blank"
+            rel="noopener noreferrer"
             className="font-mono text-[10px] underline underline-offset-2 opacity-80 hover:opacity-100 shrink-0 transition-opacity hf-pressable rounded-sm px-0.5 -mx-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-bg)]"
             style={{ color: "var(--hf-text-secondary)" }}
           >

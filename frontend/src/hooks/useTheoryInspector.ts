@@ -6,7 +6,7 @@ import { useScoreStore } from "@/store/useScoreStore";
 import { useToolStore } from "@/store/useToolStore";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import type { TheoryInspectorMessage } from "@/components/organisms/TheoryInspectorPanel";
-import type { EditableScore } from "@/lib/music/scoreTypes";
+import type { EditableScore, DurationType } from "@/lib/music/scoreTypes";
 import {
   getViolationLabel,
   type ViolationKey,
@@ -55,7 +55,14 @@ import {
   scoreToAuditedSlots,
   type AuditedSlot,
 } from "@/lib/music/theoryInspectorSlots";
-import type { ScoreCorrection, LLMCorrection } from "@/lib/music/suggestionTypes";
+import type { ScoreCorrection, LLMCorrection, MusicalAlternativeHint } from "@/lib/music/suggestionTypes";
+
+function parseLlmDurationToken(raw: string | null | undefined): DurationType | undefined {
+  if (raw == null) return undefined;
+  const t = raw.trim();
+  if (t === "w" || t === "h" || t === "q" || t === "8" || t === "16" || t === "32") return t;
+  return undefined;
+}
 import {
   CANONICAL_ISSUE_LABEL,
   type ScoreIssueHighlight,
@@ -1254,6 +1261,7 @@ export function useTheoryInspector() {
       }
 
       const stSuggest = useTheoryInspectorStore.getState();
+      const allowRhythmInSuggestions = stSuggest.allowRhythmInSuggestions;
       const focus = stSuggest.inspectorScoreFocus;
       const isRegionScoped = focus?.kind === "measure" || focus?.kind === "part";
       let scopedScoreContext = scoreContext;
@@ -1282,6 +1290,8 @@ export function useTheoryInspector() {
             violationType,
             scoreContext: scopedScoreContext,
             suggestionExplanationMode: getSuggestionExplanationMode(),
+            allowRhythmInSuggestions,
+            includeHarmonicAlternatives: true,
           }),
         });
 
@@ -1293,23 +1303,23 @@ export function useTheoryInspector() {
         const data = (await response.json()) as {
           corrections: LLMCorrection[];
           summary: string;
+          musicalAlternatives?: MusicalAlternativeHint[];
         };
 
-        // Hydrate corrections: LLM returns "note_0", "note_1" etc.
-        // Map these indices back to real noteIds via the scoreContext array order.
+        const indexList = scopedScoreContext.length > 0 ? scopedScoreContext : scoreContext;
+
+        // Hydrate corrections: LLM returns "note_0", "note_1" etc. (indices into the sent scoreContext list).
         const hydrated: ScoreCorrection[] = [];
         for (const llmC of data.corrections) {
-          // Parse "note_X" index
           const idxMatch = llmC.noteId.match(/^note_(\d+)$/);
-          const scEntry = idxMatch
-            ? scoreContext[parseInt(idxMatch[1], 10)]
-            : undefined;
+          const scEntry = idxMatch ? indexList[parseInt(idxMatch[1], 10)] : undefined;
           if (!scEntry) continue;
 
           const found = getNoteById(score, scEntry.noteId);
           if (!found) continue;
 
-          hydrated.push({
+          const maybeDur = parseLlmDurationToken(llmC.suggestedDuration);
+          const row: ScoreCorrection = {
             id: msgId("sc"),
             noteId: scEntry.noteId,
             partId: found.part.id,
@@ -1319,15 +1329,25 @@ export function useTheoryInspector() {
             suggestedPitch: llmC.suggestedPitch,
             ruleLabel: llmC.ruleLabel,
             rationale: llmC.rationale,
-          });
+          };
+          if (allowRhythmInSuggestions && maybeDur) {
+            row.originalDuration = found.note.duration;
+            row.suggestedDuration = maybeDur;
+          }
+          hydrated.push(row);
         }
 
-        if (hydrated.length > 0) {
+        const alts = data.musicalAlternatives?.filter(
+          (a) => a.shortLabel?.trim() && a.description?.trim(),
+        );
+
+        if (hydrated.length > 0 || (alts && alts.length > 0)) {
           const batchId = msgId("batch");
           suggestionStore.addBatch({
             id: batchId,
             corrections: hydrated,
             summary: data.summary,
+            musicalAlternatives: alts,
             violationType: violationType
               ? getViolationLabel(violationType)
               : undefined,
@@ -1335,7 +1355,6 @@ export function useTheoryInspector() {
             createdAt: Date.now(),
           });
 
-          // Add a suggestion message to the chat
           store.addMessage({
             id: msgId("sug"),
             type: "suggestion",
