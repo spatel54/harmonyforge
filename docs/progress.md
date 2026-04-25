@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Iteration 7 follow-up (2026-04-25 PM)](#wl-iteration-7-followup-2026-04-25-pm) — playground click-burst UI, concise Harmony setup copy merge, Team footer new-tab behavior, preview scrollbar fix attempts, Theory Inspector explanation empty-state prompt, undo/redo reliability pass; **current failure: toolbar `Octave ↓` still intermittently fails for some users**
 - [Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25) — **user-study follow-up**: **interaction** (unified **↑/↓** + **⌘/Ctrl+↑/↓** pitch in `sandbox/page.tsx`); **playback** timbre map + **Piano / By part** preview; **Theory Inspector** proactive alternatives + phrasing-guarded stylist; **Ensemble** “your rhythm vs harmony engine” copy; **engine** melody-duration audit
 - [Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)](#wl-ux-team-playground-2026-04-24) — **copy/UI polish** across **`/`** · **`/document`** · **`/sandbox`** · **`/team`**; **team** collapsibles + “how we work together”; **music-stand** hover pulse + **♫**-shaped aureole (no rectangular hover card)
 - [Work log — Team page & global credits (2026-04-23)](#wl-team-credits-2026-04-23) — **`TeamNavButton`** in headers, **`/team`** creator profiles (bios, quotes, **`next/image`**), **`frontend/public/creators/`** headshots
@@ -51,6 +52,24 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 ### Last updated (2026-04-25)
 
 - **Iteration 7 (study feedback — [Iteration7.txt](Iteration7.txt)):** See **[Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25)** for **end goal**, **approach**, and **file-level** notes. **Manual repro (baseline):** (1) **Drag** — reported wrong vertical note in dense/chord clusters; RiffScore owns pointer selection, HF **`pitchGroupRef`** + **`syncMultiPitchFromBaseline`** own multi-select propagation. (2) **Octave/arrow** — single-note **Arrow** + **⌘/Ctrl+Arrow** previously relied on RiffScore defaults; now centralized in **capture-phase** `keydown` in **`sandbox/page.tsx`** with **`e.code`**. **Verification (2026-04-25):** **`make test`** **276** · **`make lint`** clean; additive **Part 1** melody-duration case in **`filePipeline.test.ts`**.
+- **Iteration 7 follow-up (2026-04-25 PM):** See **[Work log — Iteration 7 follow-up (2026-04-25 PM)](#wl-iteration-7-followup-2026-04-25-pm)** for UI polish + bugfix pass after live testing. **Current failure:** sandbox toolbar **`Octave ↓`** still intermittently fails for some users despite selection/history sync patches; root cause likely RiffScore selection timing vs HF action dispatch.
+
+<a id="wl-iteration-7-followup-2026-04-25-pm"></a>
+
+#### Work log — Iteration 7 follow-up (2026-04-25 PM)
+
+- **End goal:** Convert same-day study/demo feedback into immediate UX polish and stability fixes without regressing Iteration 7 architecture constraints (ADR 003, no JSON score-delta sync detour).
+- **Approach:** Ship small, reversible patches in place: remove confusing UI first, then improve affordances/copy density, then tackle interaction bugs by tightening editor/store sync and event propagation around RiffScore.
+- **Steps done so far:**
+  - Removed **Preview timbre selector** UI and “By instrument” references from Sandbox/Document-facing controls; reverted to standard editor playback path.
+  - Updated footer **Team** link to open in a **new tab** (`target="_blank"`, `rel="noopener noreferrer"`).
+  - Added Playground **click burst** effect (soft note + tech/AI glyph particles) to complement cursor trail.
+  - Compressed Document **Harmony setup** copy and merged explanatory text into a single concise section for generate flow.
+  - Added Theory Inspector **Explanation** empty state: “Click a note to see its explanation.”
+  - Patched Configure preview scrollbar interaction twice: (1) removed full-screen play-button overlay hit area, (2) presentation-mode overflow target correction (`riff-ScoreCanvas` x-scroll ownership).
+  - Added undo/redo reliability hardening: flush-before/after history ops + stronger key event propagation stops; then additional live-selection resolution for toolbar transforms.
+- **Verification:** Multiple rounds of **`make test`** (276 passing) and **`make lint`** clean after each patch tranche.
+- **Current failure / active investigation:** **Toolbar `Octave ↓` (`8-`) still reported as not working** in some sessions. We have added live selection reads from RiffScore API + frame-delayed apply; remaining suspicion is race between RiffScore internal selection state and HF toolbar plugin callbacks under specific interaction order. Next step: instrument action path (delta, selected note ids, API selection snapshot) and compare toolbar vs hotkey path execution in-session.
 
 <a id="wl-iteration-7-2026-04-25"></a>
 

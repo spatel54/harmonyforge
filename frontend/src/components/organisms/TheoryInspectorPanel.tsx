@@ -512,6 +512,22 @@ export const TheoryInspectorPanel = React.forwardRef<
           >
             {inspectorActiveTab === "explanation" ? (
               <>
+          {!noteInsight && !inspectorScoreFocus ? (
+            <div
+              className="flex-1 min-h-[180px] flex items-center justify-center rounded-[8px] border px-4 py-6 text-center"
+              style={{
+                borderColor: "var(--hf-detail)",
+                backgroundColor: "color-mix(in srgb, var(--hf-bg) 55%, transparent)",
+              }}
+            >
+              <p
+                className="m-0 font-mono text-[12px] leading-snug"
+                style={{ color: "var(--hf-text-secondary)" }}
+              >
+                Click a note to see its explanation.
+              </p>
+            </div>
+          ) : null}
           {!noteInsight &&
             inspectorScoreFocus &&
             (inspectorScoreFocus.kind === "measure" ||

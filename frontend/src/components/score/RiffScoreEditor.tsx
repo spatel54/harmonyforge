@@ -366,6 +366,18 @@ export function RiffScoreEditor({
     useRiffScoreSync(apiRef, score, getPitchGroupNoteIds);
   const flushToZustandRef = useRef(flushToZustand);
   flushToZustandRef.current = flushToZustand;
+  const runEditorHistoryOp = useCallback((op: "undo" | "redo") => {
+    const api = apiRef.current;
+    if (!api) return;
+    // Ensure the latest editor state is in Zustand first, then execute history,
+    // then sync back so toolbar/hotkeys feel single-press reliable.
+    flushToZustandRef.current();
+    requestAnimationFrame(() => {
+      if (op === "undo") api.undo();
+      else api.redo();
+      requestAnimationFrame(() => flushToZustandRef.current());
+    });
+  }, []);
   const getRsToHfRef = useRef(getRsToHf);
   getRsToHfRef.current = getRsToHf;
   const syncMultiPitchFromBaselineRef = useRef(syncMultiPitchFromBaseline);
@@ -408,26 +420,70 @@ export function RiffScoreEditor({
     api.selectAll("staff");
   };
 
+  const getActiveNoteIds = (): Set<string> => {
+    const fromGroup = getPitchGroupNoteIdsRef.current();
+    if (fromGroup.size > 0) return fromGroup;
+    const api = apiRef.current;
+    const liveScore = useScoreStore.getState().score ?? score;
+    if (api && liveScore) {
+      try {
+        const sel = api.getSelection() as {
+          selectedNotes?: Array<{
+            staffIndex: number;
+            measureIndex: number;
+            eventId: string;
+            noteId: string | null;
+          }>;
+        };
+        const sn = sel.selectedNotes ?? [];
+        if (sn.length > 0) {
+          const mapped = mapRiffSelectedNotesToHFSelections(liveScore, sn, getRsToHfRef.current());
+          const fromApi = new Set(mapped.map((m) => m.noteId));
+          if (fromApi.size > 0) return fromApi;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const fromStore = new Set(useToolStore.getState().selection.map((s) => s.noteId));
+    if (fromStore.size > 0) return fromStore;
+    return selectedNoteIds;
+  };
+
   const applyOnSelection = (transform: (current: EditableScore, noteIds: Set<string>) => EditableScore) => {
-    if (!score || !hasSelection) return;
-    const next = transform(score, selectedNoteIds);
-    applyScore(next);
+    if (!score) return;
+    // Toolbar clicks can race with selection sync; flush first, then apply on next
+    // frame using live editor/store selection so actions fire on first click.
+    flushToZustandRef.current();
+    requestAnimationFrame(() => {
+      const liveScore = useScoreStore.getState().score ?? score;
+      const ids = getActiveNoteIds();
+      if (ids.size === 0) return;
+      const next = transform(liveScore, ids);
+      applyScore(next);
+    });
   };
 
   const toggleSelectedRests = () => {
-    if (!score || !hasSelection) return;
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      for (const measure of part.measures) {
-        for (const note of measure.notes) {
-          if (!selectedNoteIds.has(note.id)) continue;
-          note.isRest = !note.isRest;
-          if (note.isRest) note.pitch = "B4";
-          else if (!note.pitch.match(/^[A-G](#|b)?\d+$/)) note.pitch = "C4";
+    if (!score) return;
+    flushToZustandRef.current();
+    requestAnimationFrame(() => {
+      const liveScore = useScoreStore.getState().score ?? score;
+      const ids = getActiveNoteIds();
+      if (ids.size === 0) return;
+      const next = cloneScore(liveScore);
+      for (const part of next.parts) {
+        for (const measure of part.measures) {
+          for (const note of measure.notes) {
+            if (!ids.has(note.id)) continue;
+            note.isRest = !note.isRest;
+            if (note.isRest) note.pitch = "B4";
+            else if (!note.pitch.match(/^[A-G](#|b)?\d+$/)) note.pitch = "C4";
+          }
         }
       }
-    }
-    applyScore(next);
+      applyScore(next);
+    });
   };
 
   /* RiffScore toolbar: onClick handlers read apiRef only when the user clicks, not during render. */
@@ -456,7 +512,7 @@ export function RiffScoreEditor({
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
-            apiRef.current?.undo();
+            runEditorHistoryOp("undo");
           },
         },
         {
@@ -467,7 +523,7 @@ export function RiffScoreEditor({
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () => {
-            apiRef.current?.redo();
+            runEditorHistoryOp("redo");
           },
         },
         {
@@ -578,7 +634,7 @@ export function RiffScoreEditor({
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasSelection, score, selectedNoteIds],
+    [hasSelection, score, selectedNoteIds, runEditorHistoryOp],
   );
 
   // Build config from score, passing current theme
@@ -909,10 +965,10 @@ export function RiffScoreEditor({
     const session: RiffScoreSessionHandles = {
       flushToZustand,
       editorUndo: () => {
-        apiRef.current?.undo();
+        runEditorHistoryOp("undo");
       },
       editorRedo: () => {
-        apiRef.current?.redo();
+        runEditorHistoryOp("redo");
       },
       editorSelectAll: () => {
         apiRef.current?.selectAll("score");
@@ -923,7 +979,7 @@ export function RiffScoreEditor({
       getPitchGroupNoteIds,
     };
     onSessionReady(session);
-  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds]);
+  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, runEditorHistoryOp]);
 
   useEffect(() => {
     if (!isReady || !onEditorApiReady) return;

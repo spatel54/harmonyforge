@@ -1301,14 +1301,19 @@ function TactileSandboxPageInner({
         }
         if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "z") {
           e.preventDefault();
-          e.stopPropagation();
+          e.stopImmediatePropagation();
           if (e.shiftKey) riffSessionRef.current?.editorRedo();
           else riffSessionRef.current?.editorUndo();
+          return;
         }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "y") {
+        if (
+          allowEdit &&
+          ((e.metaKey || e.ctrlKey) && keyLower === "y")
+        ) {
           e.preventDefault();
-          e.stopPropagation();
+          e.stopImmediatePropagation();
           riffSessionRef.current?.editorRedo();
+          return;
         }
         if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "c") {
           if (selection.length > 0 && score) {
