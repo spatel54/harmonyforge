@@ -288,7 +288,7 @@ export function editableScoreToRiffConfig(
   const ui = {
     showToolbar,
     scale: options?.scale ?? 1,
-    theme: options?.theme ?? "DARK",
+    theme: options?.theme ?? "LIGHT",
     showBackground: false,
     showScoreTitle: false,
     toolbarPlugins: showToolbar ? options?.toolbarPlugins ?? [] : [],

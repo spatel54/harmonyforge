@@ -1179,7 +1179,7 @@ export function useTheoryInspector() {
             parts.push(`${getViolationLabel(key as ViolationKey)} (${count})`);
           }
         }
-        const summary = `SATB audit · ${result.totalSlots} slots · HER ${(result.her * 100).toFixed(1)}%`;
+        const summary = `SATB audit · ${result.totalSlots} chord moments · ${(result.her * 100).toFixed(1)}% with any flagged rule`;
         const detail =
           parts.length > 0
             ? `Flags: ${parts.join(" · ")}. Highlights are on the score — chat here for detail or fixes.`

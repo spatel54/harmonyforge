@@ -69,10 +69,6 @@ import {
 import { useSuggestionStore } from "@/store/useSuggestionStore";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { OnboardingOverlay } from "@/components/organisms/OnboardingOverlay";
-import {
-  type SandboxToolbarActionId,
-} from "@/components/score/toolbarActionMap";
-import { SANDBOX_TOOLBAR_SUPPORTED_TOOL_IDS } from "./toolbarContracts";
 import { TheoryInspectorFabHint } from "@/components/organisms/TheoryInspectorFabHint";
 import { WorkspaceResetModal } from "@/components/organisms/WorkspaceResetModal";
 import { SandboxHotkeysDialog } from "@/components/molecules/SandboxHotkeysDialog";
@@ -1011,26 +1007,39 @@ function TactileSandboxPageInner({
       };
       if (editHandlers[toolId]) {
         editHandlers[toolId]();
-      } else if (durationMap[toolId] && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        const next = setNoteDurations(score, noteIds, durationMap[toolId]);
+      } else if (durationMap[toolId] && selection.length > 0) {
+        riffSessionRef.current?.flushToZustand?.();
+        const live = useScoreStore.getState().score;
+        if (!live) return;
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+        const next = setNoteDurations(live, noteIds, durationMap[toolId]);
         applyScore(next);
       } else if (durationMap[toolId]) {
         setActiveTool(toolId);
-      } else if (toolId === "duration-rest-toggle" && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(toggleNoteRests(score, noteIds));
-      } else if (toolId === "duration-dotted" && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        const next = toggleNoteDots(score, noteIds);
+      } else if (toolId === "duration-rest-toggle" && selection.length > 0) {
+        riffSessionRef.current?.flushToZustand?.();
+        const live = useScoreStore.getState().score;
+        if (!live) return;
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+        applyScore(toggleNoteRests(live, noteIds));
+      } else if (toolId === "duration-dotted" && selection.length > 0) {
+        riffSessionRef.current?.flushToZustand?.();
+        const live = useScoreStore.getState().score;
+        if (!live) return;
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+        const next = toggleNoteDots(live, noteIds);
         applyScore(next);
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
-      } else if (pitchHandlers[toolId] !== undefined && score && selection.length > 0) {
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        const next = transposeNotes(score, noteIds, pitchHandlers[toolId]);
-        applyScore(next);
+      } else if (pitchHandlers[toolId] !== undefined) {
+        const noteIds = riffSessionRef.current?.getTransposeTargetNoteIds?.() ?? new Set<string>();
+        if (noteIds.size === 0) return;
+        const live = useScoreStore.getState().score;
+        if (!live) return;
+        applyScore(transposeNotes(live, noteIds, pitchHandlers[toolId]));
       } else if (toolId === "pitch-accidental-sharp") {
         applyAccidentalToSelection("#");
       } else if (toolId === "pitch-accidental-flat") {
@@ -1057,17 +1066,20 @@ function TactileSandboxPageInner({
         annotateSelection("Expression text");
       } else if (
         ["dynamics-piano", "dynamics-forte", "dynamics-cresc", "dynamics-decresc"].includes(toolId) &&
-        score &&
         selection.length > 0
       ) {
+        riffSessionRef.current?.flushToZustand?.();
+        const live = useScoreStore.getState().score;
+        if (!live) return;
         const dynMap: Record<string, string> = {
           "dynamics-piano": "p",
           "dynamics-forte": "f",
           "dynamics-cresc": "crescendo",
           "dynamics-decresc": "decrescendo",
         };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        const next = setNoteDynamics(score, noteIds, dynMap[toolId] ?? "p");
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+        const next = setNoteDynamics(live, noteIds, dynMap[toolId] ?? "p");
         applyScore(next);
       } else if (toolId === "measure-insert-before" && score) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
@@ -1218,9 +1230,11 @@ function TactileSandboxPageInner({
           toolId === "dynamics-fff" ||
           toolId === "dynamics-sfz" ||
           toolId === "dynamics-fp") &&
-        score &&
         selection.length > 0
       ) {
+        riffSessionRef.current?.flushToZustand?.();
+        const live = useScoreStore.getState().score;
+        if (!live) return;
         const map: Record<string, string> = {
           "dynamics-ppp": "ppp",
           "dynamics-pp": "pp",
@@ -1232,8 +1246,9 @@ function TactileSandboxPageInner({
           "dynamics-sfz": "sfz",
           "dynamics-fp": "fp",
         };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(setNoteDynamics(score, noteIds, map[toolId] ?? "mp"));
+        const noteIds =
+          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
+        applyScore(setNoteDynamics(live, noteIds, map[toolId] ?? "mp"));
       } else if (toolId === "artic-fermata" && score && selection.length > 0) {
         const noteIds = new Set(selection.map((s) => s.noteId));
         applyScore(addArticulation(score, noteIds, "fermata"));
@@ -1297,9 +1312,7 @@ function TactileSandboxPageInner({
   );
 
   const handleToolbarAction = React.useCallback(
-    (toolId: string, _sourceActionId: SandboxToolbarActionId) => {
-      void _sourceActionId;
-      if (!SANDBOX_TOOLBAR_SUPPORTED_TOOL_IDS.has(toolId)) return false;
+    (toolId: string) => {
       handleToolSelect(toolId);
       return true;
     },
@@ -1511,6 +1524,22 @@ function TactileSandboxPageInner({
           });
         }
       }
+      // Chromatic ↑/↓ (⌘/Ctrl = octave): match toolbar +/- semitone. getTransposeTargetNoteIds
+      // flushes RS→Zustand first — transpose from store score, not React closure (can lag one tick).
+      if (score && (e.code === "ArrowUp" || e.code === "ArrowDown") && !e.altKey) {
+        const noteIds = riffSessionRef.current?.getTransposeTargetNoteIds?.() ?? new Set<string>();
+        if (noteIds.size > 0) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const isOctave = e.metaKey || e.ctrlKey;
+          const up = e.code === "ArrowUp";
+          const delta = isOctave ? (up ? 12 : -12) : up ? 1 : -1;
+          const liveScore = useScoreStore.getState().score;
+          if (!liveScore) return;
+          applyScore(transposeNotes(liveScore, noteIds, delta));
+          return;
+        }
+      }
       if (selection.length === 0 && score) {
         if (e.code === "ArrowLeft") {
           e.preventDefault();
@@ -1533,19 +1562,6 @@ function TactileSandboxPageInner({
         }
       }
       if (selection.length > 0 && score) {
-        // Own all vertical pitch motion (1 semitone, or 1 octave with ⌘/Ctrl) so RiffScore
-        // never applies inverted or single-note defaults (Iteration 7).
-        if ((e.code === "ArrowUp" || e.code === "ArrowDown") && !e.altKey) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          const noteIds =
-            riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-          const isOctave = e.metaKey || e.ctrlKey;
-          const up = e.code === "ArrowUp";
-          const delta = isOctave ? (up ? 12 : -12) : up ? 1 : -1;
-          applyScore(transposeNotes(score, noteIds, delta));
-          return;
-        }
         const key = e.key.toUpperCase();
         let digit: string | null = null;
         if (/^[1-9]$/.test(key)) digit = key;
@@ -2254,6 +2270,7 @@ function TactileSandboxPageInner({
                 handleToolSelect(toolId);
               }}
               onToolbarAction={handleToolbarAction}
+              onToolbarPrint={printScoreOnly}
               onRestInputCommit={handleRestInputCommit}
             />
             {layersPanelOpen && score && (

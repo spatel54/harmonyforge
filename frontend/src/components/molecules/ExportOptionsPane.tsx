@@ -184,7 +184,7 @@ export function ExportOptionsPane({
                   )}
                   {validation.valid
                     ? "No violations"
-                    : `HER: ${(validation.her * 100).toFixed(0)}% · ${validation.violations.parallelFifths + validation.violations.parallelOctaves + validation.violations.rangeViolations + validation.violations.spacingViolations + validation.violations.voiceOrderViolations + validation.violations.voiceOverlapViolations} violation(s)`}
+                    : `${(validation.her * 100).toFixed(0)}% of moments flagged · ${validation.violations.parallelFifths + validation.violations.parallelOctaves + validation.violations.rangeViolations + validation.violations.spacingViolations + validation.violations.voiceOrderViolations + validation.violations.voiceOverlapViolations} violation(s)`}
                 </div>
                 {!validation.valid && (
                   <div className="mt-1 font-mono opacity-80">

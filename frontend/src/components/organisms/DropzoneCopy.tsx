@@ -31,6 +31,9 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
     }, []);
     const isDark = mounted && resolvedTheme === "dark";
     const prefersReducedMotion = useReducedMotion() === true;
+    // Defer reduced-motion to after mount so SSR + first client paint match (useReducedMotion can
+    // differ between server and hydration).
+    const reduceMotion = mounted && prefersReducedMotion;
 
     const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
@@ -129,7 +132,7 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
               "hf-dropzone-note-aureole pointer-events-none absolute left-1/2 top-[46%] z-0 w-[min(92vw,480px)] max-w-full -translate-x-1/2 -translate-y-1/2",
               "opacity-0 transition-opacity duration-500 ease-out",
               glowActive && "opacity-100",
-              glowActive && !prefersReducedMotion && "hf-dropzone-note-aureole--pulse",
+              glowActive && !reduceMotion && "hf-dropzone-note-aureole--pulse",
             )}
             aria-hidden
           >
@@ -137,7 +140,7 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
               className="hf-dropzone-note-aureole-blur w-full [&>svg]:w-full [&>svg]:h-auto [&>svg]:max-h-[min(52vh,420px)]"
               style={{
                 color: "var(--hf-accent)",
-                filter: prefersReducedMotion ? undefined : "blur(22px)",
+                filter: reduceMotion ? undefined : "blur(22px)",
               }}
             >
               <svg

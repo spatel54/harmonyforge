@@ -51,7 +51,14 @@ import {
   shouldShowChordNotation,
 } from "@/lib/music/riffscoreAdapter";
 import { cn } from "@/lib/utils";
-import { getNoteById, setNoteDynamics, toggleNoteDots, toggleNoteRests, transposeNotes } from "@/lib/music/scoreUtils";
+import {
+  cloneScore,
+  getNoteById,
+  setNoteDynamics,
+  toggleNoteDots,
+  toggleNoteRests,
+  transposeNotes,
+} from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
@@ -278,8 +285,13 @@ export interface RiffScoreEditorProps {
    * Parent should clear tool selection, RiffScore selection, and any inspector score focus tint.
    */
   onScoreBackgroundInteract?: () => void;
-  /** Optional adapter to route toolbar actions through a page-level command bus. */
+  /**
+   * Optional: intercept toolbar actions before editor fallbacks. Return `false` to run
+   * fallbacks (flush + `getActiveNoteIds` for transforms). Prefer leaving unset on sandbox.
+   */
   onToolbarAction?: (toolId: string, sourceActionId: SandboxToolbarActionId) => boolean | void;
+  /** Score-only print (e.g. sandbox `printScoreOnly`); falls back to `window.print` if unset. */
+  onToolbarPrint?: () => void;
 }
 
 export function RiffScoreEditor({
@@ -310,6 +322,7 @@ export function RiffScoreEditor({
   onRestInputCommit,
   onScoreBackgroundInteract,
   onToolbarAction,
+  onToolbarPrint,
 }: RiffScoreEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<MusicEditorAPI | null>(null);
@@ -470,6 +483,14 @@ export function RiffScoreEditor({
     if (fromStore.size > 0) return fromStore;
     return selectedNoteIds;
   };
+
+  const getActiveNoteIdsRef = useRef(getActiveNoteIds);
+  getActiveNoteIdsRef.current = getActiveNoteIds;
+
+  const getTransposeTargetNoteIds = useCallback((): Set<string> => {
+    flushToZustandRef.current();
+    return getActiveNoteIdsRef.current();
+  }, []);
 
   const applyOnSelection = (transform: (current: EditableScore, noteIds: Set<string>) => EditableScore) => {
     if (!score) return;
@@ -655,7 +676,11 @@ export function RiffScoreEditor({
           disabled: !score,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => runToolbarAction("hf-action-print", () => window.print()),
+          onClick: () =>
+            runToolbarAction("hf-action-print", () => {
+              if (onToolbarPrint) onToolbarPrint();
+              else window.print();
+            }),
         },
       );
 
@@ -665,7 +690,7 @@ export function RiffScoreEditor({
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasSelection, score, selectedNoteIds, runEditorHistoryOp, runToolbarAction],
+    [hasSelection, score, selectedNoteIds, runEditorHistoryOp, runToolbarAction, onToolbarPrint],
   );
 
   // Build config from score, passing current theme
@@ -1008,9 +1033,10 @@ export function RiffScoreEditor({
         apiRef.current?.deselectAll();
       },
       getPitchGroupNoteIds,
+      getTransposeTargetNoteIds,
     };
     onSessionReady(session);
-  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, runEditorHistoryOp]);
+  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, getTransposeTargetNoteIds, runEditorHistoryOp]);
 
   useEffect(() => {
     if (!isReady || !onEditorApiReady) return;

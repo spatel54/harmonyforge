@@ -1083,8 +1083,8 @@ export const TheoryInspectorPanel = React.forwardRef<
                   onKeyDown={handleKeyDown}
                   placeholder={
                     messages.length === 0
-                      ? "Ask anything — tap a suggestion below or type here"
-                      : "Ask a follow-up question"
+                      ? "Ask about this score, or tap a suggestion below"
+                      : "Follow up…"
                   }
                   disabled={chatInputLocked}
                   className="flex-1 bg-transparent border-none outline-none font-body text-[12px] font-normal disabled:opacity-50"

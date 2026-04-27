@@ -15,6 +15,11 @@ export type RiffScoreSessionHandles = {
    * this still returns every note in the last multi-selection so hotkeys and pull propagation stay aligned.
    */
   getPitchGroupNoteIds: () => Set<string>;
+  /**
+   * Flush editor → Zustand, then resolve target note ids the same way as toolbar transpose (+/- semitone).
+   * Used by sandbox arrow handling so chromatic transpose wins even when HF selection is briefly out of sync with RiffScore.
+   */
+  getTransposeTargetNoteIds: () => Set<string>;
 };
 
 export const RiffScoreSessionContext = createContext<RiffScoreSessionHandles | null>(null);

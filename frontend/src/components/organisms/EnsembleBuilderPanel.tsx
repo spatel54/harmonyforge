@@ -161,15 +161,11 @@ export const EnsembleBuilderPanel = React.forwardRef<
   const restoreFromStorage = useGenerationConfigStore((s) => s.restoreFromStorage);
   const reset = useGenerationConfigStore((s) => s.reset);
   const pickupBeats = useGenerationConfigStore((s) => s.pickupBeats);
-  const setPickupBeats = useGenerationConfigStore((s) => s.setPickupBeats);
   const preferInferredChords = useGenerationConfigStore((s) => s.preferInferredChords);
-  const setPreferInferredChords = useGenerationConfigStore((s) => s.setPreferInferredChords);
 
   React.useEffect(() => {
     restoreFromStorage();
   }, [restoreFromStorage]);
-
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
 
   const handleToggle = (voice: VoiceType, instrument: string) => {
     toggleInstrument(voice, instrument);
@@ -391,91 +387,6 @@ export const EnsembleBuilderPanel = React.forwardRef<
           </p>
         )}
       </section>
-
-      <div
-        className="rounded-[8px] border p-4 flex flex-col gap-3"
-        style={{
-          borderColor: "color-mix(in srgb, var(--hf-detail) 65%, transparent)",
-          backgroundColor: "color-mix(in srgb, var(--hf-surface) 7%, transparent)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setAdvancedOpen((v) => !v)}
-          className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] cursor-pointer border-0 bg-transparent p-0 flex items-center justify-between gap-2 w-full text-left"
-          style={{ color: "var(--hf-text-secondary)" }}
-          aria-expanded={advancedOpen}
-        >
-          Advanced
-          <span className="text-[10px] opacity-70">{advancedOpen ? "Hide" : "Show"}</span>
-        </button>
-        {advancedOpen && (
-        <div className="flex flex-col gap-4 pt-2">
-          <div className="flex flex-col gap-[8px]">
-            <span
-              className="font-mono text-[11px] font-medium leading-none flex items-center gap-[6px]"
-              style={{ color: "var(--hf-text-secondary)" }}
-            >
-              Pickup (anacrusis)
-              <HoverTooltip
-                ariaLabel="About pickup"
-                content={
-                  "Beats before the first full bar. Auto uses what the file shows. Or set 0–3 quarter-note beats to override for generation."
-                }
-              />
-            </span>
-            <div className="flex flex-wrap gap-[8px]">
-              <button
-                type="button"
-                onClick={() => setPickupBeats(null)}
-                className={cn(
-                  "rounded-[6px] px-[14px] py-[8px] font-mono text-[11px] font-medium",
-                  "transition-opacity hover:opacity-90",
-                  pickupBeats === null
-                    ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                    : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]",
-                )}
-              >
-                Auto
-              </button>
-              {([0, 1, 2, 3] as const).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setPickupBeats(b)}
-                  className={cn(
-                    "rounded-[6px] px-[14px] py-[8px] font-mono text-[11px] font-medium",
-                    "transition-opacity hover:opacity-90",
-                    pickupBeats === b
-                      ? "bg-[var(--hf-accent)] text-[#1a0f0c]"
-                      : "bg-[var(--hf-surface)]/20 text-[var(--hf-text-primary)] border border-[var(--hf-detail)]",
-                  )}
-                >
-                  {b} beat{b === 1 ? "" : "s"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="mt-1 rounded border-[var(--hf-detail)]"
-              checked={preferInferredChords}
-              onChange={(e) => setPreferInferredChords(e.target.checked)}
-            />
-            <span className="flex flex-col gap-1">
-              <span className="font-mono text-[11px] font-medium" style={{ color: "var(--hf-text-primary)" }}>
-                Prefer inferred chords
-              </span>
-              <span className="font-body text-[10px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                Ignore chord symbols in the upload and infer harmony from the melody plus mood (useful when chord
-                charts are missing or untrusted).
-              </span>
-            </span>
-          </label>
-        </div>
-        )}
-      </div>
 
       {/* Voice List — Node iVLue */}
       <section

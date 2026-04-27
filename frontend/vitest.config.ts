@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    setupFiles: ["./src/test/setup-storage.ts"],
     environment: "node",
     // Enable Jest-style globals so engine tests (migrated from Jest) work without
     // adding explicit `import { describe, it, expect }` lines to every file.

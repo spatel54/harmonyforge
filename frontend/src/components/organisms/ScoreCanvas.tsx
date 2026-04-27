@@ -48,6 +48,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
   /** Route editor toolbar actions to sandbox command bus (optional). */
   onToolbarAction?: (toolId: string, sourceActionId: SandboxToolbarActionId) => boolean | void;
+  /** Score-only print from toolbar PRN (sandbox); optional. */
+  onToolbarPrint?: () => void;
   /** When false, notation is read-only (sandbox View mode). Default true. */
   enableScoreEditing?: boolean;
 }
@@ -80,6 +82,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onPaletteSymbolDrop,
       onRestInputCommit,
       onToolbarAction,
+      onToolbarPrint,
       enableScoreEditing = true,
       className,
       ...props
@@ -459,6 +462,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               onPaletteSymbolDrop={onPaletteSymbolDrop}
               onRestInputCommit={onRestInputCommit}
               onToolbarAction={onToolbarAction}
+              onToolbarPrint={onToolbarPrint}
               enableScoreEditing={enableScoreEditing}
               onScoreBackgroundInteract={onCanvasClick}
             />

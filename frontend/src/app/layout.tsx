@@ -47,7 +47,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <NonBlockingFontshareLink />
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <StudySessionProvider>
             <StudyConsentGate>
               <a href="#main-content" className="skip-link">

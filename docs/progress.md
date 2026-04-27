@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27) — **flush-aware transpose** (**`useScoreStore.getState().score`** after RS flush); **toolbar ↔ palette parity** via **`onToolbarAction` → `handleToolSelect`** (returns **`true`**, no double **`applyOnSelection`**); chromatic **↑/↓** + pitch toolbar **`getTransposeTargetNoteIds`**; score-only print; **Advanced** Document hidden; **`make verify`** **281** tests — **open:** manual QA; **watch:** toolbar **`Octave ↓`** after unified path (Iteration 7 residual — re-verify in browser)
 - [Work log — Iteration 7 follow-up (2026-04-25 PM)](#wl-iteration-7-followup-2026-04-25-pm) — playground click-burst UI, concise Harmony setup copy merge, Team footer new-tab behavior, preview scrollbar fix attempts, Theory Inspector explanation empty-state prompt, undo/redo reliability pass; **current failure: toolbar `Octave ↓` still intermittently fails for some users**
 - [Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25) — **user-study follow-up**: **interaction** (unified **↑/↓** + **⌘/Ctrl+↑/↓** pitch in `sandbox/page.tsx`); **playback** timbre map + **Piano / By part** preview; **Theory Inspector** proactive alternatives + phrasing-guarded stylist; **Ensemble** “your rhythm vs harmony engine” copy; **engine** melody-duration audit
 - [Work log — Cross-surface UX, team narrative & Playground stand (2026-04-24)](#wl-ux-team-playground-2026-04-24) — **copy/UI polish** across **`/`** · **`/document`** · **`/sandbox`** · **`/team`**; **team** collapsibles + “how we work together”; **music-stand** hover pulse + **♫**-shaped aureole (no rectangular hover card)
@@ -46,6 +47,51 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="last-updated-2026-04-27"></a>
+
+### Last updated (2026-04-27)
+
+- **Narrative (end goal · approach · steps · failures):** **[Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27)** — single place for this tranche (includes **follow-up: flush parity + unified toolbar dispatch**).
+- **Sandbox toolbar bridge:** [`toolbarActionMap.ts`](../frontend/src/components/score/toolbarActionMap.ts) maps RiffScore **`hf-action-*`** ids to **`handleToolSelect`** tool ids. **[`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx)** passes **`onToolbarAction`** → **`handleToolbarAction`** → **`handleToolSelect(toolId)`** + **`return true`** into **`ScoreCanvas`** so **`RiffScoreEditor.runToolbarAction`** does **not** run internal **`applyOnSelection`** fallbacks (avoids **rAF** double-path vs palette). Toolbar **PRN** still uses **`onToolbarPrint`** → **`printScoreOnly`**. [`toolbarActionMap.test.ts`](../frontend/src/components/score/toolbarActionMap.test.ts) asserts stable **action → toolId** mapping.
+- **Keyboard chromatic transpose + store truth:** **`getTransposeTargetNoteIds`** (**[`RiffScoreSessionContext`](../frontend/src/context/RiffScoreSessionContext.tsx)**) = **`flushToZustand`** + **`getActiveNoteIds`**. **[`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx)** capture-phase **`keydown`** applies **`transposeNotes`** using **`useScoreStore.getState().score`** **after** flush — **not** the React **`score`** closure (which could lag one tick and mismatch post-flush note IDs). **`stopImmediatePropagation`** when transpose ids exist.
+- **Document — Advanced hidden:** **[`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx)** no longer shows **Pickup (anacrusis)** or **Prefer inferred chords** (store **`pickupBeats`** / **`preferInferredChords`** still feed **`onGenerateHarmonies`** at defaults / persisted values).
+- **Theme:** [`layout.tsx`](../frontend/src/app/layout.tsx) — `defaultTheme="light"`, **`enableSystem={false}`** so the app does not follow OS dark mode until the user toggles. [`riffscoreAdapter`](../frontend/src/lib/music/riffscoreAdapter.ts) defaults RiffScore **`ui.theme`** to **`LIGHT`** when options omit it.
+- **Copy:** Theory Inspector audit summary and export validation strip the HER acronym from participant-facing strings; Theory Inspector chat input placeholders tightened.
+- **Build / tests:** [`RiffScoreEditor`](../frontend/src/components/score/RiffScoreEditor.tsx) imports **`cloneScore`** for multi-pitch baseline (fixes production typecheck). Vitest [`setup-storage.ts`](../frontend/src/test/setup-storage.ts) polyfills incomplete Node **`localStorage`** so **`useGenerationConfigStore`** + Zustand **`persist`** behave under Vitest 3. **`make verify`:** **281** tests, lint, build (2026-04-27).
+
+<a id="wl-sandbox-reliability-2026-04-27"></a>
+
+#### Work log — Sandbox editor reliability & UX trim (2026-04-27)
+
+- **End goal**
+  - **Tactile Sandbox** editing stays **trustworthy**: **RiffScore** beige toolbar (UN, RE, +1, −1, 8+/8−, DOT, RST, p, f, XML, PRN) and **F9 notation palette** apply the **same** HarmonyForge score mutations (**[`handleToolSelect`](../frontend/src/app/sandbox/page.tsx)**) with **flush-correct** **`EditableScore`** — no stale React **`score`** vs post-flush IDs.
+  - **Semantic parity:** Keyboard **↑ / ↓** (and **⌘/Ctrl+↑ / ↓** for octave) match **chromatic ±1 / ±12** (**[`transposeNotes`](../frontend/src/lib/music/scoreUtils.ts)**), not RiffScore’s internal staff-step when HF owns the gesture.
+  - **Document / Ensemble:** **Advanced** (pickup, prefer inferred chords) hidden from **[`EnsembleBuilderPanel`](../frontend/src/components/organisms/EnsembleBuilderPanel.tsx)** while **`useGenerationConfigStore`** still feeds generation.
+  - **Product polish:** Default **light** theme; Theory Inspector copy cleanup where noted in-session.
+
+- **Approach (evolved in-tranche)**
+  - **Early direction:** Rely on **`RiffScoreEditor`** **`applyOnSelection`** fallbacks only (**flush → rAF → transpose**) so native toolbar stayed authoritative.
+  - **Follow-up (flush parity + single dispatcher):** After **`flushToZustand`**, Zustand holds the merged score **synchronously**, but React’s **`score`** can lag **one frame** — **`transposeNotes(closureScore, …)`** risks wrong pitches. **Fix:** read **`useScoreStore.getState().score`** for transforms after flush / **`getTransposeTargetNoteIds()`**. Route toolbar via **`onToolbarAction`** → **`handleToolSelect`** + **`return true`** so toolbar **does not** also run **`applyOnSelection`** (removes **rAF** timing split vs palette; octave buttons share keyboard **`handleToolSelect`** path).
+  - **Print:** **`onToolbarPrint`** → **`printScoreOnly`** (score-only body class), not full-page **`window.print()`**.
+  - **Arrows:** **`getTransposeTargetNoteIds`** before transpose; **`stopImmediatePropagation`** when ids exist.
+  - **Verification:** **`make verify`** after changes.
+
+- **Steps done so far**
+  1. **`toolbarActionMap`** — stable **`hf-action-*` → tool id**; **[`toolbarActionMap.test.ts`](../frontend/src/components/score/toolbarActionMap.test.ts)**.
+  2. **`getTransposeTargetNoteIds`** on **[`RiffScoreSessionHandles`](../frontend/src/context/RiffScoreSessionContext.tsx)**; **`sandbox/page.tsx`** chromatic **↑/↓** uses **`noteIds.size > 0`** (not HF **`selection.length`** alone); transpose runs **above** note-input cursor arrows.
+  3. **`EnsembleBuilderPanel`** — **Advanced** UI removed (store-driven **`pickupBeats`** / **`preferInferredChords`** unchanged).
+  4. **Theme / tests / infra** — **`layout.tsx`** light default; **`cloneScore`** import; Vitest **`setup-storage.ts`** **`localStorage`** polyfill.
+  5. **Follow-up — post-flush live score:** Arrow handler uses **`useScoreStore.getState().score`** after **`getTransposeTargetNoteIds()`** (guard **`null`**).
+  6. **Follow-up — `handleToolSelect`:** **`flushToZustand`** + **`useScoreStore.getState().score`** for duration-on-selection, **DOT**, **RST**, dynamics; pitch tools use **`getTransposeTargetNoteIds()`** + live score (transpose works when RS has selection but HF store **`selection`** empty).
+  7. **Follow-up — `handleToolbarAction`:** **`ScoreCanvas`** **`onToolbarAction={handleToolbarAction}`** — **`handleToolSelect(toolId)`** + **`return true`** (toolbar/plugin parity with F9 palette; no double-apply).
+
+- **Current failure / open work**
+  - **Iteration 7 residual (to re-test):** Toolbar **`Octave ↓` (`8-`)** was **intermittent** when toolbar used **`applyOnSelection` + rAF** alone. **Unified `handleToolSelect` path** should align **8−** with **hotkeys**; **not yet closed in docs** until **manual QA** on **`/sandbox`** (multi-select, odd click order).
+  - **Manual QA checklist:** **↑/↓** / **⌘+↑/↓** vs **+1/−1/8+/8−**; **XML** / **PRN**; Theory Inspector open; note-input **cursor ↑/↓** still moves staff when **no** transpose targets (**`noteIds.size === 0`**).
+
+- **Learnings**
+  - **RS flush → Zustand is synchronous**; React **`score`** is not always co-temporal — chromatic edits must read **`useScoreStore.getState().score`** after **`flushToZustand`** / **`getTransposeTargetNoteIds`** when applying **`transposeNotes`** (and related selection mutations).
 
 <a id="last-updated-2026-04-25"></a>
 
@@ -2210,6 +2256,10 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 - **Live score contract:** RiffScore edits are lazy-synced; always **`flushToZustand`** (via **`getLiveScoreAfterFlush`**) before reading **`useScoreStore`** for toolbar copy/save/print, export modal snapshot, and **`handleExport`**.
 - **Formats:** Client-side **`scoreToMidiBuffer`** (SMF type 1, meta tempo + one track per part), **`html-to-image`** PNG of export preview pane, **`fflate`** ZIP (MusicXML + MIDI + JSON + server chord-chart text), **`scoreToWavBuffer`** (**`Tone.Offline`** + PCM16 WAV). PDF remains **`window.print()`** with **`.hf-sandbox-print-target`** / **`.hf-print-hide`** print CSS.
 - **Coachmark bridge:** **`setExportModalOpen(true)`** must refresh XML like the header — use **`openExportModal`** so preview/validation match flushed state.
+
+### Sandbox flush parity & toolbar dispatch (2026-04-27)
+- **After `flushToZustand`:** Prefer **`useScoreStore.getState().score`** for **`transposeNotes`** / selection mutations when the flush just ran — React **`score`** can lag the store by one render.
+- **Single dispatcher:** **`onToolbarAction` → `handleToolSelect`** + **`return true`** keeps RiffScore plugin **`hf-action-*`** clicks aligned with F9 palette and avoids **`runToolbarAction`** internal **`applyOnSelection`** (**rAF**) racing transpose.
 
 ### Theory Inspector layout & ghost labels (2026-04-06)
 - **Split scroll:** Keep `useLayoutEffect` auto-scroll on the **chat** pane only so long note-insight content does not reset chat scroll position.
