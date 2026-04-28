@@ -68,8 +68,6 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
     string,
     { corrections: ScoreCorrection[]; summary: string; musicalAlternatives?: import("@/lib/music/suggestionTypes").MusicalAlternativeHint[] }
   >;
-  /** Run structured Stylist pass (same as violation “suggest fix”). */
-  onRequestStylist?: () => void;
   correctionStatuses?: Record<string, CorrectionStatus>;
   onAcceptCorrection?: (correctionId: string) => void;
   onRejectCorrection?: (correctionId: string) => void;
@@ -78,7 +76,7 @@ export interface TheoryInspectorPanelProps extends React.HTMLAttributes<HTMLDivE
   /** Apply tutor <<<IDEA_ACTIONS>>> pitch edits */
   onAcceptIdeaAction?: (action: IdeaAction) => void;
   onRejectIdeaAction?: (action: IdeaAction) => void;
-  /** Fires when a starter prompt chip is clicked (text passed verbatim to chat). */
+  /** Fires when a starter prompt chip is clicked (chat text, or stylist seed handled by parent). */
   onStarterPromptClick?: (prompt: string) => void;
   /** Measure focus: classical localized regenerate hook (backend optional). */
   onEditFocusedRegion?: (payload: EditFocusedRegionPayload) => void;
@@ -146,7 +144,6 @@ export const TheoryInspectorPanel = React.forwardRef<
       onRejectCorrection,
       onAcceptAllCorrections,
       onRejectAllCorrections,
-      onRequestStylist,
       onAcceptIdeaAction,
       onRejectIdeaAction,
       onStarterPromptClick,
@@ -191,12 +188,6 @@ export const TheoryInspectorPanel = React.forwardRef<
     const allowRhythmInSuggestions = useTheoryInspectorStore((s) => s.allowRhythmInSuggestions);
     const setAllowRhythmInSuggestions = useTheoryInspectorStore(
       (s) => s.setAllowRhythmInSuggestions,
-    );
-    const proactiveAlternativesEnabled = useTheoryInspectorStore(
-      (s) => s.proactiveAlternativesEnabled,
-    );
-    const setProactiveAlternativesEnabled = useTheoryInspectorStore(
-      (s) => s.setProactiveAlternativesEnabled,
     );
 
     // AI first-visit modal
@@ -539,7 +530,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                 className="m-0 font-mono text-[12px] leading-snug"
                 style={{ color: "var(--hf-text-secondary)" }}
               >
-                Click a note to see its explanation.
+                Tap a note on the score for a plain-English readout.
               </p>
             </div>
           ) : null}
@@ -619,7 +610,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                   className="text-[11px] mt-[6px] leading-snug"
                   style={{ color: "var(--hf-text-secondary)" }}
                 >
-                  Chat uses the facts below. Click a note for note-level engine context.
+                  Chat uses the facts below. Click a note for that note’s story.
                 </div>
                 <pre
                   className="mt-[10px] m-0 max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words font-mono text-[10px]"
@@ -664,12 +655,12 @@ export const TheoryInspectorPanel = React.forwardRef<
                     }
                   >
                     {noteInsight.insightKind === "melody-guide"
-                      ? `Input melody · chord moment ${noteInsight.slotIndex}`
+                      ? `Melody · harmony moment ${noteInsight.slotIndex}`
                       : noteInsight.inspectorMode === "origin-justifier"
-                        ? `Chord moment ${noteInsight.slotIndex} · still matches first generation`
+                        ? `Harmony moment ${noteInsight.slotIndex} · same as first generation`
                         : noteInsight.inspectorMode === "harmonic-guide"
-                          ? `Chord moment ${noteInsight.slotIndex} · live score (edited or guide-only)`
-                          : `Chord moment ${noteInsight.slotIndex}`}
+                          ? `Harmony moment ${noteInsight.slotIndex} · what’s on the score now`
+                          : `Harmony moment ${noteInsight.slotIndex}`}
                   </div>
                   {(noteInsight.originalEnginePitch != null || noteInsight.userModifiedPitch) && (
                     <div
@@ -681,19 +672,19 @@ export const TheoryInspectorPanel = React.forwardRef<
                       }}
                     >
                       <div className="font-body text-[10px] font-medium mb-[4px]" style={{ color: "var(--hf-text-secondary)" }}>
-                        First save vs what you see now
+                        First version vs now
                       </div>
                       <div className="text-[10px] mb-[2px]" style={{ color: "var(--hf-text-secondary)" }}>
-                        Pitch when the score was first loaded vs current pitch.
+                        What HarmonyForge wrote when you opened the score vs the pitch on screen today.
                       </div>
                       <div>
                         {noteInsight.originalEnginePitch != null ? (
                           <>
-                            <span style={{ color: "var(--hf-text-secondary)" }}>At first load: </span>
+                            <span style={{ color: "var(--hf-text-secondary)" }}>At first open: </span>
                             <span className="font-medium">{noteInsight.originalEnginePitch}</span>
                           </>
                         ) : (
-                          <span style={{ color: "var(--hf-text-secondary)" }}>No saved first pitch for this note.</span>
+                          <span style={{ color: "var(--hf-text-secondary)" }}>No saved “first” pitch for this note.</span>
                         )}
                       </div>
                       <div className="mt-[4px]">
@@ -745,7 +736,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                           What the tool first wrote
                         </div>
                         <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                          Frozen snapshot from when the score was generated (if we have it).
+                          Snapshot from when the score was first generated, when we have it.
                         </div>
                         <MarkdownText content={noteInsight.engineOriginExplanation} variant="panel" onKeywordClick={onKeywordClick} />
                       </div>
@@ -762,11 +753,11 @@ export const TheoryInspectorPanel = React.forwardRef<
                       <div className="font-body text-[13px] font-medium mb-[2px]" style={{ color: "var(--hf-text-primary)" }}>
                         What this click means
                       </div>
-                      <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                        {noteInsight.insightKind === "melody-guide"
-                          ? "How your tune sits at this beat with the other staves. (HarmonyForge did not generate the melody—focus on fit and rhythm; full detail is in the export.)"
-                          : "Why HarmonyForge’s axiomatic engine chose the original harmony pitch at generation, and how that relates to what you see now—then use the export to verify every staff."}
-                      </div>
+                        <div className="font-body text-[10px] mb-[8px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
+                          {noteInsight.insightKind === "melody-guide"
+                            ? "How your tune lines up with the other parts here. (The melody is yours—this is about fit and rhythm; the export has the full picture.)"
+                            : "Why the first harmony pass picked the original pitch, and how that relates to what you’re looking at now. Use the export to double-check every staff."}
+                        </div>
                       <MarkdownText content={noteInsight.currentPitchGuideExplanation} variant="panel" onKeywordClick={onKeywordClick} />
                     </div>
 
@@ -782,7 +773,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                         Verifiable score export
                       </div>
                       <div className="font-body text-[10px] mb-[6px] leading-snug" style={{ color: "var(--hf-text-secondary)" }}>
-                        Copied from your score so answers stay checkable—use this to confirm rhythm, meter, and what each staff is doing.
+                        Lifted straight from your score so you can verify rhythm, meter, and each staff yourself.
                       </div>
                       <pre
                         className="m-0 whitespace-pre-wrap break-words font-mono text-[11px]"
@@ -1043,43 +1034,27 @@ export const TheoryInspectorPanel = React.forwardRef<
           ) : null}
 
           {inspectorActiveTab === "chat" && tutorEnabled && (
-            <div
-              className="flex flex-wrap items-center gap-x-4 gap-y-1.5 w-full px-[12px] py-[6px] shrink-0 font-mono text-[10px]"
+            <details
+              className="w-full px-[12px] py-[2px] shrink-0 font-mono text-[10px]"
               style={{
                 backgroundColor: "var(--hf-bg)",
                 borderTop: "1px solid var(--hf-detail)",
                 color: "var(--hf-text-secondary)",
               }}
             >
-              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+              <summary className="cursor-pointer select-none py-[6px] text-[10px]">
+                Stylist options
+              </summary>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none pb-[8px] pl-[2px]">
                 <input
                   type="checkbox"
                   className="rounded border-[var(--hf-detail)] size-3 accent-[var(--hf-surface)]"
                   checked={allowRhythmInSuggestions}
                   onChange={(e) => setAllowRhythmInSuggestions(e.target.checked)}
                 />
-                <span>Allow rhythm in stylist fixes</span>
+                <span>Suggestions can change note lengths</span>
               </label>
-              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="rounded border-[var(--hf-detail)] size-3 accent-[var(--hf-surface)]"
-                  checked={proactiveAlternativesEnabled}
-                  onChange={(e) => setProactiveAlternativesEnabled(e.target.checked)}
-                />
-                <span>Proactive focus (coming soon)</span>
-              </label>
-              {onRequestStylist && score && score.parts.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={onRequestStylist}
-                  className="hf-pressable ml-auto font-mono text-[10px] rounded px-2 py-0.5 border"
-                  style={{ borderColor: "var(--hf-detail)", color: "var(--hf-text-primary)" }}
-                >
-                  Suggest alternatives
-                </button>
-              ) : null}
-            </div>
+            </details>
           )}
 
           {inspectorActiveTab === "chat" && (

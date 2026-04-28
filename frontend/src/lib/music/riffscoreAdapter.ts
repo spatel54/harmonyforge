@@ -213,10 +213,12 @@ export function buildIdMap(hfScore: EditableScore, rsScore: RsScore): { hfToRs: 
 
 function hfNoteToRsEvent(note: HfNote): ScoreEvent {
   const isRest = Boolean(note.isRest);
-  const { accidental } = parsePitch(note.pitch);
+  const { letter, accidental, octave } = parsePitch(note.pitch);
   const rsNote: RsNote = {
     id: `rs-${note.id}`,
-    pitch: isRest ? null : note.pitch,
+    // RiffScore expects letter+octave in `pitch` and `#`/`b` only in `accidental`
+    // (HF stores combined strings like "C#4" in Zustand).
+    pitch: isRest ? null : `${letter}${octave}`,
     accidental: isRest ? null : accidental,
     tied: !isRest && (note.tie === "start" || note.tie === "continue"),
     isRest,

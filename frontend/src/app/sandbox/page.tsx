@@ -35,6 +35,7 @@ import {
   applySuggestions,
   measureRangeForLocalizedHarmonyRegenerate,
   spliceHarmonyMeasuresFromAddonScore,
+  collectPitchesForNoteIds,
 } from "@/lib/music/scoreUtils";
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
@@ -83,6 +84,7 @@ import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 import { getStudyCondition } from "@/lib/study/studyConfig";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import type { IdeaAction } from "@/lib/ai/ideaActionSchema";
+import { CHAT_STYLIST_SEED_PROMPT } from "@/lib/ai/theoryInspectorTags";
 import { resolveIdeaActionNoteId } from "@/lib/music/ideaActionResolve";
 import { applyIntent, type Intent } from "@/lib/ai/intentRouter";
 import { useGenerationConfigStore } from "@/store/useGenerationConfigStore";
@@ -93,6 +95,7 @@ import {
 } from "@/context/RiffScoreSessionContext";
 import { handleSandboxScoreKeyDown, type SandboxScoreKeyboardCtx } from "@/lib/sandbox/sandboxScoreKeyboard";
 import { scheduleTransposeSelectedNotes } from "@/lib/sandbox/sandboxScoreTranspose";
+import { previewSandboxPitches } from "@/lib/sandbox/sandboxPitchPreview";
 
 const ENGINE_URL = "";
 
@@ -785,11 +788,13 @@ function TactileSandboxPageInner({
   }, []);
 
   const applyAccidentalToSelection = React.useCallback((accidental: "#" | "b" | "natural") => {
-    if (!score) return;
+    riffSessionRef.current?.flushToZustand?.();
+    const live = useScoreStore.getState().score;
+    if (!live) return;
     const ids =
       riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
     if (ids.size === 0) return;
-    const next = cloneScore(score);
+    const next = cloneScore(live);
     for (const part of next.parts) {
       for (const measure of part.measures) {
         for (const note of measure.notes) {
@@ -799,7 +804,8 @@ function TactileSandboxPageInner({
       }
     }
     applyScore(next);
-  }, [score, selection, applyScore, withAccidental]);
+    previewSandboxPitches(collectPitchesForNoteIds(next, ids));
+  }, [selection, applyScore, withAccidental]);
 
   const toggleTieOnSelection = React.useCallback(() => {
     if (!score || selection.length === 0) return;
@@ -2198,9 +2204,6 @@ function TactileSandboxPageInner({
               onRejectCorrection={handleRejectCorrection}
               onAcceptAllCorrections={handleAcceptAll}
               onRejectAllCorrections={handleRejectAll}
-              onRequestStylist={() => {
-                void requestRegionSuggestion();
-              }}
               onExplainMore={(msgId) => explainViolationMore(msgId)}
               onSuggestFix={
                 score
@@ -2210,6 +2213,10 @@ function TactileSandboxPageInner({
               onAcceptIdeaAction={handleAcceptIdeaAction}
               onRejectIdeaAction={handleRejectIdeaAction}
               onStarterPromptClick={(prompt) => {
+                if (prompt === CHAT_STYLIST_SEED_PROMPT) {
+                  void requestRegionSuggestion();
+                  return;
+                }
                 void sendInspectorMessage(prompt);
               }}
               onEditFocusedRegion={

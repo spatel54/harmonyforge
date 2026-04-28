@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27) — **`hfNoteToRsEvent`** splits **letter+octave** vs **`accidental`** for RiffScore; sandbox **sharp/flat** path **flush → live score → Salamander preview**; Inspector **Stylist options** **`details`** + chat seed **`Try other harmony ideas`** → **`requestSuggestion`**; Explanation tab **lay copy** — **open:** manual QA (dense scores, multi-select, touch); **program watch:** toolbar **`Octave ↓`** ([Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm))
 - [Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27) — **keyboard ↑/↓** = **diatonic white-key steps** + **natural-only** stored pitches; **⌘/Ctrl+↑/↓** = octave then **natural letters**; **Salamander** pitch preview matches RiffScore clicks; **`getServerOpenAIEnv`** **swaps** mistaken **`OPENAI_API_KEY` ↔ `OPENAI_MODEL`** + **`configHint`** in Theory Inspector; **SATB audit** chat line = short **red vs blue** explanation — **open:** manual QA (arrows, preview, **Octave ↓**); confirm **Vercel** env on **Preview** + redeploy
 - [Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27) — **flush-aware transpose** (**`useScoreStore.getState().score`** after RS flush); **toolbar ↔ palette parity** via **`onToolbarAction` → `handleToolSelect`** (returns **`true`**, no double **`applyOnSelection`**); chromatic **↑/↓** + pitch toolbar **`getTransposeTargetNoteIds`**; score-only print; **Advanced** Document hidden; **`make verify`** **281** tests — **open:** manual QA; **watch:** toolbar **`Octave ↓`** after unified path (Iteration 7 residual — re-verify in browser)
 - [Work log — Iteration 7 follow-up (2026-04-25 PM)](#wl-iteration-7-followup-2026-04-25-pm) — playground click-burst UI, concise Harmony setup copy merge, Team footer new-tab behavior, preview scrollbar fix attempts, Theory Inspector explanation empty-state prompt, undo/redo reliability pass; **current failure: toolbar `Octave ↓` still intermittently fails for some users**
@@ -48,6 +49,40 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="last-updated-2026-04-27-accidentals-inspector"></a>
+
+### Last updated (2026-04-27 — accidentals, inspector lay UX)
+
+- **Narrative (end goal · approach · steps · open work):** **[Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27)** — fix double-encoded accidentals on **`loadScore`**; accidental tools aligned with **transpose** flush/preview pattern; Inspector chat **concise** + Explanation **plain language**.
+- **Tests:** Full gate **`make test`** was **297** Vitest passing when this tranche was logged (includes **`riffscoreAdapter`** sharp/flat cases).
+
+<a id="wl-accidentals-inspector-lay-ux-2026-04-27"></a>
+
+#### Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)
+
+- **End goal**
+  - **Sandbox accidentals:** Applying **sharp / flat / natural** (F9 palette, toolbar, **`+` / `-` / `=`** keys) must keep notes **clickable**, **playback** healthy, and play a **short Salamander preview** after the edit—same auditory feedback users get after **chromatic transpose**.
+  - **RiffScore contract:** The editor expects **split** encoding: **`pitch`** = letter + octave only (e.g. **`F5`**), **`accidental`** = **`sharp` | `flat` | null**. HarmonyForge’s Zustand model may keep combined strings (**`F#5`**); the bug was **pushing both** a combined string **and** a redundant **`accidental`** into **`loadScore`**, which broke interaction after accidental edits.
+  - **Theory Inspector:** Chat stays **low-clutter**: stylist rhythm preference is **optional** and behind a **disclosure**; **structured stylist** suggestions stay **discoverable** via a **chat seed**, not a second full-width button; **Explanation** tab uses **everyday wording** instead of internal jargon (**“axiomatic engine”**, **“four-part snapshot”**, etc.).
+
+- **Approach**
+  - **Adapter (`frontend/src/lib/music/riffscoreAdapter.ts`):** In **`hfNoteToRsEvent`**, parse **`note.pitch`** with **`parsePitch`**, set **`pitch: \`${letter}${octave}\``** and **`accidental`** from the parse. Round-trip from RS still merges via **`rsPitchToHf`** into HF combined strings.
+  - **Sandbox (`frontend/src/app/sandbox/page.tsx`):** **`applyAccidentalToSelection`** — **`riffSessionRef.flushToZustand()`**, read **`useScoreStore.getState().score`** (not stale React **`score`**), mutate **`cloneScore(live)`**, **`applyScore(next)`**, then **`previewSandboxPitches(collectPitchesForNoteIds(next, ids))`**.
+  - **Inspector UI:** Remove **`proactiveAlternativesEnabled`** from **`useTheoryInspectorStore`** and the **“Proactive focus (coming soon)”** checkbox; replace the old chat footer with **`<details>` “Stylist options”** and label **`allowRhythmInSuggestions`** as **“Suggestions can change note lengths”**; add **`CHAT_STYLIST_SEED_PROMPT`** (**`Try other harmony ideas`**) to **`CHAT_SEED_TAG_PROMPTS`**; **`sandbox/page.tsx`** **`onStarterPromptClick`** calls **`requestSuggestion()`** when the prompt matches that constant; drop **`onRequestStylist`** from **`TheoryInspectorPanel`**.
+  - **Copy:** Revise **`TheoryInspectorPanel`** subtitles / empty state / region hints and deterministic paragraphs in **`useTheoryInspector.ts`** (additive, SATB, melody paths).
+
+- **Steps done so far**
+  1. **`hfNoteToRsEvent`** normalization + **`riffscoreAdapter.test.ts`** (e.g. **`F#5`** → **`pitch` `F5`**, **`accidental` `sharp`**; flat case **`Bb4`**).
+  2. Accidental selection path: **flush**, **live score**, **preview** (parity with **`scheduleTransposeSelectedNotes`**).
+  3. Store/panel/tags/sandbox wiring as above; **`proactiveAlternativesEnabled`** removed entirely.
+  4. Lay copy in **`useTheoryInspector.ts`** and **`TheoryInspectorPanel.tsx`**.
+  5. **`make test`:** **297** passing; brief **Learnings** bullets under [Learnings — Accidentals…](#learnings-accidentals-inspector-2026-04-27).
+
+- **Current failure / open work**
+  - **Manual QA not closed in CI:** Exercise accidentals on **dense scores**, **multi-select**, **touch** (no keyboard palette parity), and **alto/tenor** staves after **`loadScore`**.
+  - **Unrelated program residual:** Toolbar **`Octave ↓`** still listed under **[Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm)** — separate from this tranche; needs another **in-browser** pass after unified **`handleToolSelect`** work.
+  - **Deploy hygiene:** Same as other 2026-04-27 items — **Vercel Preview** env vars and **redeploy** after changing secrets.
 
 <a id="last-updated-2026-04-27-inspector-sandbox"></a>
 
@@ -2302,6 +2337,16 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 ### Sandbox flush parity & toolbar dispatch (2026-04-27)
 - **After `flushToZustand`:** Prefer **`useScoreStore.getState().score`** for **`transposeNotes`** / selection mutations when the flush just ran — React **`score`** can lag the store by one render.
 - **Single dispatcher:** **`onToolbarAction` → `handleToolSelect`** + **`return true`** keeps RiffScore plugin **`hf-action-*`** clicks aligned with F9 palette and avoids **`runToolbarAction`** internal **`applyOnSelection`** (**rAF**) racing transpose.
+
+<a id="learnings-accidentals-inspector-2026-04-27"></a>
+
+### Accidentals, RiffScore load, and inspector chat chrome (2026-04-27)
+
+Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27)**.
+
+- **`hfNoteToRsEvent`:** HarmonyForge stores combined pitch strings (**`C#4`**); RiffScore expects **`pitch: "C4"`** + **`accidental: "sharp"`**. Sending both the **`#`** in **`pitch`** and **`accidental`** duplicated the accidental and broke note interaction after sharp/flat.
+- **Accidental tools:** **`flushToZustand`** → mutate live score → **`previewSandboxPitches`** (same as transpose) keeps audio and store aligned.
+- **Inspector:** Stylist rhythm toggle lives under a compact **`details`**; **`Try other harmony ideas`** is a chat seed that routes to **`requestSuggestion`** instead of a separate button.
 
 ### Theory Inspector layout & ghost labels (2026-04-06)
 - **Split scroll:** Keep `useLayoutEffect` auto-scroll on the **chat** pane only so long note-insight content does not reset chat scroll position.

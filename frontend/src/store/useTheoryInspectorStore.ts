@@ -166,11 +166,6 @@ export interface TheoryInspectorState {
    */
   allowRhythmInSuggestions: boolean;
   setAllowRhythmInSuggestions: (v: boolean) => void;
-  /**
-   * When true, selection changes can auto-request alternatives (debounced) when API + proactive flow allow.
-   */
-  proactiveAlternativesEnabled: boolean;
-  setProactiveAlternativesEnabled: (v: boolean) => void;
 }
 
 export const useTheoryInspectorStore = create<TheoryInspectorState>(
@@ -294,9 +289,5 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     allowRhythmInSuggestions: false,
     setAllowRhythmInSuggestions: (allowRhythmInSuggestions) => set({ allowRhythmInSuggestions }),
-
-    proactiveAlternativesEnabled: false,
-    setProactiveAlternativesEnabled: (proactiveAlternativesEnabled) =>
-      set({ proactiveAlternativesEnabled }),
   }),
 );

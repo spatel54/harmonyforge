@@ -156,6 +156,52 @@ describe("riffscoreAdapter", () => {
     expect(editableScoreToRsScore(bari).staves[0]?.clef).toBe("tenor");
   });
 
+  it("maps HF sharp/flat pitch strings to split RiffScore pitch + accidental", () => {
+    const sharpScore: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P1",
+          name: "S",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              notes: [{ id: "n1", pitch: "F#5", duration: "q" as const }],
+              timeSignature: "4/4",
+              keySignature: 0,
+            },
+          ],
+        },
+      ],
+    };
+    const flatScore: EditableScore = {
+      ...sharpScore,
+      parts: [
+        {
+          ...sharpScore.parts[0]!,
+          measures: [
+            {
+              id: "m1",
+              notes: [{ id: "n1", pitch: "Bb4", duration: "q" as const }],
+              timeSignature: "4/4",
+              keySignature: 0,
+            },
+          ],
+        },
+      ],
+    };
+    const rsSharp = editableScoreToRsScore(sharpScore);
+    const rsFlat = editableScoreToRsScore(flatScore);
+    const nSharp = rsSharp.staves[0]!.measures[0]!.events[0]!.notes[0]!;
+    const nFlat = rsFlat.staves[0]!.measures[0]!.events[0]!.notes[0]!;
+    expect(nSharp.pitch).toBe("F5");
+    expect(nSharp.accidental).toBe("sharp");
+    expect(nFlat.pitch).toBe("B4");
+    expect(nFlat.accidental).toBe("flat");
+  });
+
   it("buildIdMap maps RiffScore event id (rse-…) for rests to HF note id", () => {
     const hfScore: EditableScore = {
       divisions: 1,

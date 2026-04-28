@@ -135,7 +135,7 @@ const NOTE_EXPLAIN_TUTOR_RESPONSE_RULES =
 
 /** Shown in the Harmonic Guide card when pitch still matches generation (Mode A). */
 const SLIM_HARMONIC_GUIDE_ORIGIN =
-  "The **current pitch matches** what HarmonyForge first wrote at load. For vertical intervals and voice motion at this moment, see **Engine evidence** below.";
+  "This note is still the **same pitch** HarmonyForge wrote when you first opened the score. For how it lines up with the other staves right now, see the evidence block below.";
 
 function voiceLayman(voice: VoiceKey): string {
   switch (voice) {
@@ -172,7 +172,7 @@ function laymanFromFinding(f: TraceFinding): string {
 }
 
 /**
- * Plain “why did the axiomatic pass put this pitch here?” for the **What this click means** card.
+ * Plain “why was this pitch chosen at generation?” for the **What this click means** card.
  */
 function buildAxiomaticEngineWhyParagraph(
   originalEnginePitch: string,
@@ -182,9 +182,9 @@ function buildAxiomaticEngineWhyParagraph(
 ): string {
   const core = buildLaymanChordExplanation(originalEnginePitch, voice, noteFindings);
   const suffix = userModifiedPitch
-    ? "\n\nThat reasoning describes **HarmonyForge’s first output** at this note. If you changed the pitch since then, the **live** score (and **Verifiable score export**) is authoritative for what you hear now."
+    ? "\n\nThat explanation is about **the first version** of this note. If you moved it since then, trust **what’s on the page now** (and the copy-paste block below) for what you hear."
     : "";
-  return `**Why HarmonyForge’s axiomatic engine originally wrote ${originalEnginePitch} on ${voiceLayman(voice)}:** ${core}${suffix}`;
+  return `**Why HarmonyForge first put ${originalEnginePitch} on ${voiceLayman(voice)}:** ${core}${suffix}`;
 }
 
 function buildLaymanChordExplanation(
@@ -195,16 +195,16 @@ function buildLaymanChordExplanation(
   const role = voiceLayman(voice);
   if (noteFindings.length === 0) {
     return (
-      `At generation time HarmonyForge wrote ${originalPitch} for ${role} here to complete the four-part chord snapshot together with the other three generator lines. ` +
-      `Nothing in the automatic checks recorded at generation complained about this line for that moment: sensible range, spacing, stacking, and no flagged parallel motion into a weak interval for your part.`
+      `When the score was generated, HarmonyForge chose ${originalPitch} for ${role} so this chord moment would line up with the other three harmony parts. ` +
+      `The built-in checks at that time didn’t flag range, spacing, or parallel-motion issues for this note.`
     );
   }
   const plain = noteFindings.map(laymanFromFinding);
   const serious = noteFindings.some((f) => f.severity === "error");
   return (
-    `At generation HarmonyForge still placed ${originalPitch} on ${role}, and the checker at that time ${serious ? "flagged a real issue" : "noted something borderline"}: ` +
+    `HarmonyForge still used ${originalPitch} on ${role} here, and the checker ${serious ? "called out a real concern" : "mentioned something to watch"}: ` +
     `${plain.join(" ")} ` +
-    `So the engine’s pitch choice was still aimed at filling the harmony, but the stored check marks this line (or its combination with neighbors) under those automatic rules—not because the pitch class is forbidden on its own.`
+    `So the pitch was picked to fit the chord, but the log is about how this line behaves with its neighbors—not that this letter name is “illegal” by itself.`
   );
 }
 
@@ -385,28 +385,28 @@ function buildFallbackNoteInsight(
 
   const engineOriginExplanation =
     originalEnginePitch !== null
-      ? `When this arrangement was generated, HarmonyForge wrote **${originalEnginePitch}** on the “${partName}” staff at this moment (measure ${found.measureIdx + 1}). ` +
-        `With only ${n} part line(s), the editor does not expose the full four-voice SATB snapshot, so you will not see the same slot-by-slot engine trace as on a strict S/A/T/B score—but this pitch is still what the deterministic pass originally emitted on this note.`
+      ? `When this arrangement was generated, HarmonyForge wrote **${originalEnginePitch}** on “${partName}” here (bar ${found.measureIdx + 1}). ` +
+        `This score has ${n} staff line(s), so you won’t get the same “four voices in one box” trace as on a classic S/A/T/B layout—but this was still the program’s first pitch on this note.`
       : undefined;
 
   const mbFallback = parseMeasureBeats(found.measure.timeSignature);
   const rhythmPhrase = describeNotationForTutor(found.note, mbFallback);
   const fullCurrentGuide =
-    `**${currentPitch}** on “${partName}” (measure ${found.measureIdx + 1}). ${rhythmPhrase.charAt(0).toUpperCase() + rhythmPhrase.slice(1)} ` +
+    `**${currentPitch}** on “${partName}” (bar ${found.measureIdx + 1}). ${rhythmPhrase.charAt(0).toUpperCase() + rhythmPhrase.slice(1)} ` +
     (userModifiedPitch
-      ? `You changed this note since generation; the export below matches the live score. `
+      ? `You’ve moved this note since the first generation; the copy below matches what’s on screen. `
       : "") +
-    `Open **Verifiable score export** for every staff at this beat and the full bar.`;
+    `Use **Verifiable score export** to see every staff at this moment and the whole measure.`;
 
   const additiveWhy =
     originalEnginePitch !== null
-      ? `**Why HarmonyForge’s axiomatic pass emitted ${originalEnginePitch} on “${partName}”:** The deterministic solver assigned harmony pitches for your chosen ensemble to fit the melody and inferred chord context at this moment (additive score—no full four-voice slot grid in the inspector).${userModifiedPitch ? " You’ve edited since; the export below is the live truth." : ""}`
+      ? `**Why HarmonyForge first wrote ${originalEnginePitch} on “${partName}”:** The harmony step picked pitches for your lineup to fit the tune and the chords it inferred here.${userModifiedPitch ? " You’ve edited since—what you see in the export is what counts now." : ""}`
       : "";
 
   const currentPitchGuideExplanation =
     inspectorMode === "origin-justifier"
       ? originalEnginePitch !== null
-        ? `**This note still matches the first HarmonyForge output.**\n\n${additiveWhy}`
+        ? `**This note still matches the first generation.**\n\n${additiveWhy}`
         : SLIM_HARMONIC_GUIDE_ORIGIN
       : `${fullCurrentGuide}${additiveWhy ? `\n\n${additiveWhy}` : ""}`;
 
@@ -481,9 +481,9 @@ function buildLiveNoteExplainInsight(
     const mbMelody = parseMeasureBeats(found.measure.timeSignature);
     const melodyRhythm = describeNotationForTutor(found.note, mbMelody);
     const currentPitchGuideExplanation =
-      `You clicked your **tune** (“${partName}”) in measure ${found.measureIdx + 1}. ` +
-      `This written pitch is **${currentPitch}**. ${melodyRhythm.charAt(0).toUpperCase() + melodyRhythm.slice(1)} ` +
-      `**Verifiable score export** lists every staff at this beat and the full bar.`;
+      `You clicked the **melody** (“${partName}”) in bar ${found.measureIdx + 1}. ` +
+      `Written pitch: **${currentPitch}**. ${melodyRhythm.charAt(0).toUpperCase() + melodyRhythm.slice(1)} ` +
+      `**Verifiable score export** shows all staves at this moment and the full bar.`;
 
     return {
       noteId,
@@ -625,12 +625,12 @@ function buildLiveNoteExplainInsight(
   const mbSatb = parseMeasureBeats(found.measure.timeSignature);
   const satbRhythmPhrase = describeNotationForTutor(found.note, mbSatb);
   const fullSatbCurrentGuide =
-    `Chord moment **${slotIndex + 1}** — your **${voice}** line (${voiceLayman(voice)}) sounds **${currentPitch}**. ` +
+    `Chord moment **${slotIndex + 1}** — **${voice}** (${voiceLayman(voice)}) is **${currentPitch}** here. ` +
     `${satbRhythmPhrase.charAt(0).toUpperCase() + satbRhythmPhrase.slice(1)}` +
     (userModifiedPitch
-      ? ` You edited this line since the first generation; **What the tool first wrote** stays frozen to that pass.`
+      ? ` You changed this line since the first generation; **What the tool first wrote** still shows that original pass.`
       : "") +
-    ` **Verifiable score export** has all four parts, intervals, and bar-wide rhythm.`;
+    ` **Verifiable score export** has all four parts, the intervals, and rhythms for the bar.`;
 
   const satbWhy =
     originalEnginePitch !== null
@@ -645,7 +645,7 @@ function buildLiveNoteExplainInsight(
   const currentPitchGuideExplanation =
     inspectorMode === "origin-justifier"
       ? originalEnginePitch !== null
-        ? `**This note still matches the first HarmonyForge output.**\n\n${satbWhy}`
+        ? `**This note still matches the first generation.**\n\n${satbWhy}`
         : SLIM_HARMONIC_GUIDE_ORIGIN
       : `${fullSatbCurrentGuide}${satbWhy ? `\n\n${satbWhy}` : ""}`;
 

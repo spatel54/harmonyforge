@@ -3,7 +3,10 @@ import { parseIntentBlock, type ParsedIntentResult } from "@/lib/ai/intentRouter
 export const TAGS_START = "<<<TAGS>>>";
 export const TAGS_END = "<<<END_TAGS>>>";
 
-/** Hardcoded chat starter prompts (Phase 1.4) — label equals sent text. */
+/** Triggers structured stylist suggestions (not a chat message). Handled in sandbox `onStarterPromptClick`. */
+export const CHAT_STYLIST_SEED_PROMPT = "Try other harmony ideas";
+
+/** Hardcoded chat starter prompts (Phase 1.4) — label equals sent text (except stylist seed). */
 export const CHAT_SEED_TAG_PROMPTS = [
   "Why this note?",
   "Check my voice leading",
@@ -11,6 +14,7 @@ export const CHAT_SEED_TAG_PROMPTS = [
   "Suggest a passing chord",
   "What else fits here?",
   "Show voice motion",
+  CHAT_STYLIST_SEED_PROMPT,
 ] as const;
 
 const SEED_SET = new Set<string>(CHAT_SEED_TAG_PROMPTS);
@@ -64,7 +68,7 @@ export function parseTagsThenIntent(text: string): {
   return { tags, intent, cleaned };
 }
 
-const MAX_DYNAMIC_TAGS = 3; // 5 seeds + 3 AI = 8 total cap
+const MAX_DYNAMIC_TAGS = 3; // seed strip + 3 AI = cap
 
 /**
  * Merge new AI tags: dedupe, ignore seeds, cap dynamic count, drop oldest first.
