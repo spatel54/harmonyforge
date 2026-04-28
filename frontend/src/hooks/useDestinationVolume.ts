@@ -26,6 +26,11 @@ function loadStoredVolumeDb(): number {
   }
 }
 
+/** Read persisted playback gain (e.g. short pitch previews outside `useDestinationVolume`). */
+export function readPlaybackVolumeDb(): number {
+  return loadStoredVolumeDb();
+}
+
 function saveVolumeDb(volumeDb: number): void {
   if (typeof window === "undefined") return;
   try {

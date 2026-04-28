@@ -4,5 +4,8 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   const tag = target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   if (target.isContentEditable) return true;
-  return Boolean(target.closest("[contenteditable='true']"));
+  if (target.closest("[contenteditable='true']")) return true;
+  const role = target.getAttribute("role");
+  if (role === "textbox" || role === "searchbox" || role === "combobox") return true;
+  return Boolean(target.closest('[role="textbox"],[role="searchbox"],[role="combobox"]'));
 }

@@ -376,7 +376,10 @@ export function RiffScoreEditor({
       pitchGroupRef.current = new Set(fromSel);
       return new Set(pitchGroupRef.current);
     }
-    if (pitchGroupRef.current.size >= 2) return new Set(pitchGroupRef.current);
+    const group = pitchGroupRef.current;
+    if (group.size >= 2 && fromSel.size > 0 && [...fromSel].every((id) => group.has(id))) {
+      return new Set(group);
+    }
     return fromSel;
   }, [selection]);
 
@@ -559,28 +562,28 @@ export function RiffScoreEditor({
         },
         {
           id: "hf-action-transpose-up",
-          label: "+ Semitone",
-          title: "Transpose selected notes up one semitone (↑)",
-          icon: <span className="text-[10px] font-semibold">+1</span>,
+          label: "Step ↑",
+          title: "Transpose selected notes up one whole step (↑)",
+          icon: <span className="text-[10px] font-semibold">+2</span>,
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () =>
             runToolbarAction("hf-action-transpose-up", () =>
-              applyOnSelection((current, ids) => transposeNotes(current, ids, 1)),
+              applyOnSelection((current, ids) => transposeNotes(current, ids, 2)),
             ),
         },
         {
           id: "hf-action-transpose-down",
-          label: "− Semitone",
-          title: "Transpose selected notes down one semitone (↓)",
-          icon: <span className="text-[10px] font-semibold">-1</span>,
+          label: "Step ↓",
+          title: "Transpose selected notes down one whole step (↓)",
+          icon: <span className="text-[10px] font-semibold">−2</span>,
           disabled: !hasSelection,
           showLabel: true,
           className: "hf-plugin-btn hf-plugin-btn--action",
           onClick: () =>
             runToolbarAction("hf-action-transpose-down", () =>
-              applyOnSelection((current, ids) => transposeNotes(current, ids, -1)),
+              applyOnSelection((current, ids) => transposeNotes(current, ids, -2)),
             ),
         },
         {
@@ -1438,9 +1441,8 @@ export function RiffScoreEditor({
     [onPaletteSymbolDrop],
   );
 
-  // ↑/↓ pitch (and other score shortcuts): rely on RiffScore interaction.enableKeyboard only.
-  // Document preview never passes HF `selection`, so native behavior matches Configuration there.
-  // A window-level transpose listener here conflicted with RiffScore when `selection` was set (sandbox).
+  // Sandbox `/sandbox`: whole-step ↑/↓ and toolbar step/octave are handled in `sandboxScoreKeyboard.ts`
+  // (window capture). Document preview omits that layer; RiffScore keeps native keys there.
 
   const handleKeyDown = useCallback(() => {
     // Reserved for wrapper-level shortcuts if needed.

@@ -13,9 +13,6 @@ import {
   setNoteDurations,
   toggleNoteDots,
   toggleNoteRests,
-  transposeNotes,
-  setPitchByLetter,
-  restsToNotes,
   addArticulation,
   setNoteDynamics,
   insertMeasureBefore,
@@ -94,7 +91,8 @@ import {
   RiffScoreSessionContext,
   type RiffScoreSessionHandles,
 } from "@/context/RiffScoreSessionContext";
-import { isTypingTarget } from "@/lib/ui/isTypingTarget";
+import { handleSandboxScoreKeyDown, type SandboxScoreKeyboardCtx } from "@/lib/sandbox/sandboxScoreKeyboard";
+import { scheduleTransposeSelectedNotes } from "@/lib/sandbox/sandboxScoreTranspose";
 
 const ENGINE_URL = "";
 
@@ -150,21 +148,13 @@ function applyFloatResizeDelta(
   return { left, top, w, h };
 }
 
-const DURATION_TOOL_ORDER = [
-  "duration-32nd",
-  "duration-16th",
-  "duration-eighth",
-  "duration-quarter",
-  "duration-half",
-  "duration-whole",
-] as const;
-
 function TactileSandboxPageInner({
   onRiffScoreSessionReady,
 }: {
   onRiffScoreSessionReady: (session: RiffScoreSessionHandles) => void;
 }) {
   const riffSessionRef = React.useRef<RiffScoreSessionHandles | null>(null);
+  const sandboxKeyboardCtxRef = React.useRef<SandboxScoreKeyboardCtx | null>(null);
   const handleRiffScoreSessionReady = React.useCallback(
     (session: RiffScoreSessionHandles) => {
       riffSessionRef.current = session;
@@ -428,6 +418,7 @@ function TactileSandboxPageInner({
   const [inspectorFabHintDismissed, setInspectorFabHintDismissed] = React.useState(true);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
+  const openHotkeyHelp = React.useCallback(() => setHotkeysDialogOpen(true), []);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
   const [inspectorDockMode, setInspectorDockMode] = React.useState<"sidebar" | "floating">("sidebar");
   const lastExplainedRef = React.useRef<{ noteId: string; at: number } | null>(null);
@@ -1000,8 +991,8 @@ function TactileSandboxPageInner({
         "duration-64th": "32",
       };
       const pitchHandlers: Record<string, number> = {
-        "pitch-up-semitone": 1,
-        "pitch-down-semitone": -1,
+        "pitch-up-semitone": 2,
+        "pitch-down-semitone": -2,
         "pitch-up-octave": 12,
         "pitch-down-octave": -12,
       };
@@ -1035,11 +1026,11 @@ function TactileSandboxPageInner({
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
       } else if (pitchHandlers[toolId] !== undefined) {
-        const noteIds = riffSessionRef.current?.getTransposeTargetNoteIds?.() ?? new Set<string>();
-        if (noteIds.size === 0) return;
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        applyScore(transposeNotes(live, noteIds, pitchHandlers[toolId]));
+        scheduleTransposeSelectedNotes(
+          riffSessionRef.current,
+          pitchHandlers[toolId],
+          new Set(selection.map((s) => s.noteId)),
+        );
       } else if (toolId === "pitch-accidental-sharp") {
         applyAccidentalToSelection("#");
       } else if (toolId === "pitch-accidental-flat") {
@@ -1312,325 +1303,12 @@ function TactileSandboxPageInner({
   );
 
   const handleToolbarAction = React.useCallback(
-    (toolId: string) => {
+    (toolId: string, _sourceActionId?: unknown) => {
       handleToolSelect(toolId);
       return true;
     },
     [handleToolSelect],
   );
-
-  React.useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const typing = isTypingTarget(e.target);
-      const keyLower = e.key.toLowerCase();
-      const allowEdit = notationMode === "edit";
-
-      if (!typing) {
-        if (e.key === "Escape") {
-          riffSessionRef.current?.editorDeselectAll?.();
-          clearSelection();
-        }
-        if (allowEdit && (e.key === "Delete" || e.key === "Backspace")) {
-          if (selection.length > 0 && score) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleToolSelect("edit-delete");
-          }
-        }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "z") {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          if (e.shiftKey) riffSessionRef.current?.editorRedo();
-          else riffSessionRef.current?.editorUndo();
-          return;
-        }
-        if (
-          allowEdit &&
-          ((e.metaKey || e.ctrlKey) && keyLower === "y")
-        ) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          riffSessionRef.current?.editorRedo();
-          return;
-        }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "c") {
-          if (selection.length > 0 && score) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleToolSelect("edit-copy");
-          }
-        }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "x") {
-          if (selection.length > 0 && score) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleToolSelect("edit-cut");
-          }
-        }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "v") {
-          if (getClipboard().length > 0 && score) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleToolSelect("edit-paste");
-          }
-        }
-        if (allowEdit && (e.metaKey || e.ctrlKey) && keyLower === "a" && score) {
-          e.preventDefault();
-          e.stopPropagation();
-          const all = score.parts.flatMap((part) =>
-            part.measures.flatMap((measure, measureIndex) =>
-              measure.notes.map((note, noteIndex) => ({
-                partId: part.id,
-                measureIndex,
-                noteIndex,
-                noteId: note.id,
-              })),
-            ),
-          );
-          setSelection(all);
-          riffSessionRef.current?.editorSelectAll?.();
-        }
-      }
-
-      // 2g.3: MuseScore-style keyboard shortcuts (when not typing in a field/editor text)
-      if (typing) return;
-      if (e.key === "F9" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        setIsPaletteOpen((open) => !open);
-      }
-      if (!allowEdit) return;
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && keyLower === "r" && score) {
-        e.preventDefault();
-        setActiveTool(activeTool === "mode-repitch" ? "duration-quarter" : "mode-repitch");
-      }
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && keyLower === "n") {
-        e.preventDefault();
-        setActiveTool("duration-quarter");
-      }
-      const inputDurationMap: Record<string, "w" | "h" | "q" | "8" | "16" | "32"> = {
-        "duration-whole": "w",
-        "duration-half": "h",
-        "duration-quarter": "q",
-        "duration-eighth": "8",
-        "duration-16th": "16",
-        "duration-32nd": "32",
-      };
-      const inputDuration =
-        activeTool && inputDurationMap[activeTool]
-          ? inputDurationMap[activeTool]
-          : "q";
-      const bracketDec = e.key === "[" || e.code === "BracketLeft";
-      const bracketInc = e.key === "]" || e.code === "BracketRight";
-      if (bracketDec || bracketInc) {
-        e.preventDefault();
-        const currentIdx = DURATION_TOOL_ORDER.findIndex((tool) => tool === activeTool);
-        const startIdx = currentIdx >= 0 ? currentIdx : 3; // default quarter
-        const nextIdx = bracketDec
-          ? Math.max(0, startIdx - 1)
-          : Math.min(DURATION_TOOL_ORDER.length - 1, startIdx + 1);
-        setActiveTool(DURATION_TOOL_ORDER[nextIdx]);
-      }
-      const isDigitZero = e.key === "0" || e.code === "Numpad0";
-      if (isDigitZero && score) {
-        e.preventDefault();
-        if (selection.length > 0) {
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          const next = cloneScore(score);
-          for (const part of next.parts) {
-            for (const measure of part.measures) {
-              for (const note of measure.notes) {
-                if (!noteIds.has(note.id)) continue;
-                note.isRest = true;
-                note.pitch = "B4";
-              }
-            }
-          }
-          applyScore(next);
-          return;
-        }
-        const durationMap: Record<string, "w" | "h" | "q" | "8" | "16" | "32"> = {
-          "duration-whole": "w",
-          "duration-half": "h",
-          "duration-quarter": "q",
-          "duration-eighth": "8",
-          "duration-16th": "16",
-          "duration-32nd": "32",
-        };
-        const restDuration =
-          activeTool && durationMap[activeTool] ? durationMap[activeTool] : "q";
-        const target = resolveInsertionTarget();
-        const partId = target?.partId ?? score.parts[0]?.id;
-        const measureIndex = target?.measureIndex ?? 0;
-        const noteIndex = target?.noteIndex ?? 0;
-        if (partId) {
-          applyScore(
-            insertNote(score, partId, measureIndex, noteIndex, {
-              duration: restDuration,
-              pitch: "B4",
-              isRest: true,
-            }),
-          );
-          const nextBeat = (target?.beat ?? 0) + durationToBeats(restDuration);
-          setCursor({
-            partId,
-            measureIndex,
-            beat: nextBeat,
-            noteIndex: noteIndex + 1,
-          });
-        }
-      }
-      if (score && selection.length === 0) {
-        const key = e.key.toUpperCase();
-        if (["A", "B", "C", "D", "E", "F", "G"].includes(key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          const target = resolveInsertionTarget();
-          const partId = target?.partId ?? score.parts[0]?.id;
-          const measureIndex = target?.measureIndex ?? 0;
-          const noteIndex = target?.noteIndex ?? 0;
-          if (!partId) return;
-          // Noteflight/MuseScore parity: if the insertion target is a rest,
-          // repitch that rest in-place (same duration) rather than inserting
-          // a new note after it.
-          const part = score.parts.find((p) => p.id === partId);
-          const measure = part?.measures[measureIndex];
-          const restAtTarget =
-            measure && measure.notes[noteIndex]?.isRest
-              ? measure.notes[noteIndex]
-              : null;
-          if (restAtTarget) {
-            e.preventDefault();
-            const next = restsToNotes(score, new Set([restAtTarget.id]), key);
-            applyScore(next);
-            const nextBeat = (target?.beat ?? 0) + noteBeats(restAtTarget);
-            setCursor({
-              partId,
-              measureIndex,
-              beat: nextBeat,
-              noteIndex: noteIndex + 1,
-            });
-            return;
-          }
-          e.preventDefault();
-          const next = insertNote(score, partId, measureIndex, noteIndex, {
-            duration: inputDuration,
-            pitch: `${key}4`,
-          });
-          applyScore(next);
-          const nextBeat = (target?.beat ?? 0) + durationToBeats(inputDuration);
-          setCursor({
-            partId,
-            measureIndex,
-            beat: nextBeat,
-            noteIndex: noteIndex + 1,
-          });
-        }
-      }
-      // Chromatic ↑/↓ (⌘/Ctrl = octave): match toolbar +/- semitone. getTransposeTargetNoteIds
-      // flushes RS→Zustand first — transpose from store score, not React closure (can lag one tick).
-      if (score && (e.code === "ArrowUp" || e.code === "ArrowDown") && !e.altKey) {
-        const noteIds = riffSessionRef.current?.getTransposeTargetNoteIds?.() ?? new Set<string>();
-        if (noteIds.size > 0) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          const isOctave = e.metaKey || e.ctrlKey;
-          const up = e.code === "ArrowUp";
-          const delta = isOctave ? (up ? 12 : -12) : up ? 1 : -1;
-          const liveScore = useScoreStore.getState().score;
-          if (!liveScore) return;
-          applyScore(transposeNotes(liveScore, noteIds, delta));
-          return;
-        }
-      }
-      if (selection.length === 0 && score) {
-        if (e.code === "ArrowLeft") {
-          e.preventDefault();
-          moveCursorHorizontally(-1);
-          return;
-        }
-        if (e.code === "ArrowRight") {
-          e.preventDefault();
-          moveCursorHorizontally(1);
-          return;
-        }
-        if ((isNoteInputMode || isRepitchMode) && e.code === "ArrowUp") {
-          e.preventDefault();
-          moveCursorVertically(-1);
-          return;
-        }
-        if ((isNoteInputMode || isRepitchMode) && e.code === "ArrowDown") {
-          e.preventDefault();
-          moveCursorVertically(1);
-        }
-      }
-      if (selection.length > 0 && score) {
-        const key = e.key.toUpperCase();
-        let digit: string | null = null;
-        if (/^[1-9]$/.test(key)) digit = key;
-        else {
-          const row = /^Digit([1-9])$/.exec(e.code);
-          if (row) digit = row[1]!.toUpperCase();
-          else {
-            const pad = /^Numpad([1-9])$/.exec(e.code);
-            if (pad) digit = pad[1]!.toUpperCase();
-          }
-        }
-        if (digit) {
-          const durMap: Record<string, string> = {
-            "1": "duration-32nd",
-            "2": "duration-16th",
-            "3": "duration-eighth",
-            "4": "duration-quarter",
-            "5": "duration-half",
-            "6": "duration-whole",
-          };
-          const tool = durMap[digit];
-          if (tool) {
-            e.preventDefault();
-            handleToolSelect(tool);
-          }
-        } else if (["A", "B", "C", "D", "E", "F", "G"].includes(key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          e.preventDefault();
-          const noteIds =
-            riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-          applyScore(setPitchByLetter(score, noteIds, key));
-        } else if (e.key === "," || e.code === "Comma") {
-          e.preventDefault();
-          handleToolSelect("duration-tie");
-        } else if (e.key === "+" || e.code === "NumpadAdd") {
-          e.preventDefault();
-          handleToolSelect("pitch-accidental-sharp");
-        } else if (e.key === "-" || e.key === "\u2212" || e.code === "Minus" || e.code === "NumpadSubtract") {
-          e.preventDefault();
-          handleToolSelect("pitch-accidental-flat");
-        } else if (e.key === "=" || e.code === "NumpadEqual") {
-          e.preventDefault();
-          handleToolSelect("pitch-accidental-natural");
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-    // Hoisting caveat: `isNoteInputMode`, `moveCursorHorizontally`, and
-    // `moveCursorVertically` are declared after this effect (useCallback).
-    // They are referenced inside the keydown handler via closure; the listener
-    // fires after render so the closure sees the current values. Including
-    // them in deps would require reordering the whole component and offers no
-    // user-visible benefit — the handler only reads the latest state at call time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    clearSelection,
-    selection,
-    score,
-    handleToolSelect,
-    applyScore,
-    activeTool,
-    setActiveTool,
-    resolveInsertionTarget,
-    durationToBeats,
-    setCursor,
-    setSelection,
-    notationMode,
-    setIsPaletteOpen,
-  ]);
 
   React.useEffect(() => {
     setShowOnboarding(!isOnboardingComplete());
@@ -1868,6 +1546,36 @@ function TactileSandboxPageInner({
     },
     [cursor, partOrderForCursor, score, setCursor],
   );
+
+  // Latest handler state for window listener — ref + `[]` effect avoids React 19 / Compiler
+  // "dependency array changed size" when Fast Refresh or optimization reshapes hook deps.
+  sandboxKeyboardCtxRef.current = {
+    notationMode,
+    score,
+    selection,
+    activeTool,
+    noteEntryDuration: durationForInput,
+    getSession: () => riffSessionRef.current,
+    clearSelection,
+    setSelection,
+    setActiveTool,
+    setIsPaletteOpen,
+    handleToolSelect,
+    applyScore,
+    resolveInsertionTarget,
+    moveCursorHorizontally,
+    moveCursorVertically,
+    openHotkeyHelp,
+  };
+
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const ctx = sandboxKeyboardCtxRef.current;
+      if (ctx) handleSandboxScoreKeyDown(e, ctx);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
 
   // Zoom
   // Zoom removed — RiffScore provides its own scale controls

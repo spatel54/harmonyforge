@@ -2,7 +2,7 @@ export type SandboxHotkeyRow = { keys: string; description: string };
 
 export type SandboxHotkeySection = { title: string; rows: SandboxHotkeyRow[] };
 
-/** Keyboard shortcuts implemented by the sandbox page (see `onKeyDown` in sandbox/page.tsx). */
+/** Keyboard shortcuts implemented by `handleSandboxScoreKeyDown` in sandboxScoreKeyboard.ts (wired from sandbox/page.tsx). */
 export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
   {
     title: "Selection & score",
@@ -114,11 +114,12 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
       {
         keys: "↑ · ↓",
         description:
-          "Move selected notes by one semitone (layout-safe: uses Arrow key codes). RiffScore’s own arrow handler is bypassed so direction matches the label.",
+          "Keyboard: move selected notes one diatonic step along white keys (C-major letter names); stored pitches are naturals only (no #/b from this shortcut). Toolbar +2/−2 still moves by a whole step with key-signature-friendly spelling.",
       },
       {
         keys: "⌘/Ctrl + ↑ · ↓",
-        description: "Transpose selected notes by one octave up or down.",
+        description:
+          "Keyboard: octave up or down, then coerce spelling to naturals only. (Toolbar octave buttons use the same chromatic shift as +2/−2.)",
       },
       {
         keys: "1 – 6",

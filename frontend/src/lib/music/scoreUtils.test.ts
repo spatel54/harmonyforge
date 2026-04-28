@@ -17,13 +17,16 @@ import {
   replaceHarmonyMeasuresRange,
   spliceHarmonyMeasuresFromAddonScore,
   measureRangeForLocalizedHarmonyRegenerate,
+  naturalDiatonicStepNotes,
   restsToNotes,
   scoreHasMeasureOverflow,
   setNoteDynamics,
   setPitchByLetter,
+  spellMidiPreferMajorKeySignature,
   toggleNoteDots,
   toggleNoteRests,
   transposeNotes,
+  transposeNotesForceNaturalLetters,
 } from "./scoreUtils";
 import type { EditableScore } from "./scoreTypes";
 
@@ -78,8 +81,8 @@ describe("propagateMultiSelectPitchDelta", () => {
     next.parts[0]!.measures[0]!.notes[0]!.pitch = "D4";
     const out = propagateMultiSelectPitchDelta(prev, next, new Set(["n1", "n2"]));
     expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("D4");
-    // Same +2 semitone delta as n1 (C4→D4); matches `midiToPitch` octave mapping.
-    expect(out.parts[0]!.measures[0]!.notes[1]!.pitch).toBe("E5");
+    // Same +2 semitone delta as n1 (C4→D4): D4 + 2 → E4.
+    expect(out.parts[0]!.measures[0]!.notes[1]!.pitch).toBe("E4");
   });
 
   it("no-ops when fewer than two notes are selected", () => {
@@ -88,6 +91,119 @@ describe("propagateMultiSelectPitchDelta", () => {
     next.parts[0]!.measures[0]!.notes[0]!.pitch = "D5";
     const out = propagateMultiSelectPitchDelta(prev, next, new Set(["n1"]));
     expect(out).toEqual(next);
+  });
+});
+
+describe("spellMidiPreferMajorKeySignature", () => {
+  it("uses diatonic spelling in G major", () => {
+    expect(spellMidiPreferMajorKeySignature(67, 1)).toBe("G4");
+    expect(spellMidiPreferMajorKeySignature(69, 1)).toBe("A4");
+  });
+
+  it("prefers Bb in F major", () => {
+    expect(spellMidiPreferMajorKeySignature(58, -1)).toBe("Bb3");
+  });
+
+  it("falls back outside the scale", () => {
+    expect(spellMidiPreferMajorKeySignature(61, 0)).toBe("C#4");
+  });
+});
+
+describe("transposeNotes key-aware spelling", () => {
+  it("whole-step up uses key signature spelling", () => {
+    const score: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "p",
+          name: "M",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              keySignature: 1,
+              timeSignature: "4/4",
+              notes: [{ id: "n1", pitch: "G4", duration: "q" }],
+            },
+          ],
+        },
+      ],
+    };
+    const out = transposeNotes(score, new Set(["n1"]), 2);
+    expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("A4");
+  });
+});
+
+const NATURAL_PITCH = /^[A-G]\d+$/;
+
+describe("naturalDiatonicStepNotes (keyboard ↑↓)", () => {
+  it("steps up/down along letter names with naturals-only strings", () => {
+    const score = makeScore();
+    const up = naturalDiatonicStepNotes(score, new Set(["n1"]), 1);
+    expect(up.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("D5");
+    expect(up.parts[0]!.measures[0]!.notes[0]!.pitch).toMatch(NATURAL_PITCH);
+    const down = naturalDiatonicStepNotes(score, new Set(["n1"]), -1);
+    expect(down.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("B4");
+    expect(down.parts[0]!.measures[0]!.notes[0]!.pitch).toMatch(NATURAL_PITCH);
+  });
+
+  it("crosses E–F and B–C by one diatonic step", () => {
+    const s: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "p",
+          name: "M",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "E5", duration: "q" },
+                { id: "b", pitch: "B4", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const eUp = naturalDiatonicStepNotes(s, new Set(["a"]), 1);
+    expect(eUp.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("F5");
+    const bUp = naturalDiatonicStepNotes(s, new Set(["b"]), 1);
+    expect(bUp.parts[0]!.measures[0]!.notes[1]!.pitch).toBe("C5");
+  });
+
+  it("from a sharp, snaps to white key then steps (output natural)", () => {
+    const s: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "p",
+          name: "M",
+          clef: "treble",
+          measures: [
+            { id: "m1", timeSignature: "4/4", notes: [{ id: "x", pitch: "F#4", duration: "q" }] },
+          ],
+        },
+      ],
+    };
+    const out = naturalDiatonicStepNotes(s, new Set(["x"]), 1);
+    expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("G4");
+    expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toMatch(NATURAL_PITCH);
+  });
+});
+
+describe("transposeNotesForceNaturalLetters (⌘/Ctrl arrows)", () => {
+  it("octave shift uses natural spellings only", () => {
+    const score = makeScore();
+    const out = transposeNotesForceNaturalLetters(score, new Set(["n1", "n2"]), 12);
+    for (const id of ["n1", "n2"] as const) {
+      const n = out.parts[0]!.measures[0]!.notes.find((x) => x.id === id);
+      expect(n?.pitch).toMatch(NATURAL_PITCH);
+    }
+    expect(out.parts[0]!.measures[0]!.notes[0]!.pitch).toBe("C6");
+    expect(out.parts[0]!.measures[0]!.notes[1]!.pitch).toBe("D6");
   });
 });
 

@@ -51,7 +51,7 @@ const STEPS: StepDef[] = [
     step: 3,
     route: "/sandbox",
     title: "Edit notes directly",
-    body: "Click any note to select it. Drag to move pitch or position, or press ↑↓ to move by semitone (Shift+↑↓ for an octave). Use the palette above to apply articulations.",
+    body: "Click any note to select it. Drag to move pitch or position, or press ↑↓ to move by whole step (⌘/Ctrl+↑↓ for an octave). Use the palette above to apply articulations.",
     caretSide: "left",
     cardAnchor: "inside-right",
   },

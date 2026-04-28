@@ -13,11 +13,12 @@ import type {
 import { generateId } from "./scoreTypes";
 import type { ScoreCorrection } from "./suggestionTypes";
 
+/** Inverse of `pitchToMidi` — uses the same convention as `server/engine/types.ts` (e.g. MIDI 60 → C4). */
 function midiToPitch(midi: number): string {
-  const oct = Math.floor(midi / 12);
+  const octave = Math.floor(midi / 12) - 1;
   const pc = ((midi % 12) + 12) % 12;
   const steps = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  return `${steps[pc]}${oct}`;
+  return `${steps[pc]}${octave}`;
 }
 
 const STEP_SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -94,6 +95,100 @@ export function effectiveMeasureTimeSignature(score: EditableScore, measureIndex
     if (ts) return ts;
   }
   return "4/4";
+}
+
+/** Effective key signature (MusicXML fifths) for `measureIndex` — first part, cascade from bar 0. */
+export function effectiveMeasureKeySignature(score: EditableScore, measureIndex: number): number {
+  const ref = score.parts[0];
+  if (!ref || ref.measures.length === 0) return 0;
+  const idx = Math.max(0, Math.min(measureIndex, ref.measures.length - 1));
+  let last = 0;
+  for (let i = 0; i <= idx; i++) {
+    const k = ref.measures[i]?.keySignature;
+    if (k !== undefined) last = k;
+  }
+  return last;
+}
+
+/** Major-key root spelling by fifths (matches common key signatures; used for diatonic note names). */
+const MAJOR_ROOT_BY_FIFTHS: Record<number, string> = {
+  7: "C#",
+  6: "F#",
+  5: "B",
+  4: "E",
+  3: "A",
+  2: "D",
+  1: "G",
+  0: "C",
+  [-1]: "F",
+  [-2]: "Bb",
+  [-3]: "Eb",
+  [-4]: "Ab",
+  [-5]: "Db",
+  [-6]: "Gb",
+  [-7]: "Cb",
+};
+
+const MAJOR_SCALE_STEPS = [2, 2, 1, 2, 2, 2, 1] as const;
+const DIATONIC_LETTERS = "CDEFGAB";
+
+function getMajorScaleTemplates(fifths: number): { pc: number; base: string }[] | null {
+  const tonic = MAJOR_ROOT_BY_FIFTHS[fifths];
+  if (!tonic) return null;
+  let letterIdx = DIATONIC_LETTERS.indexOf(tonic[0]!);
+  if (letterIdx < 0) return null;
+  let midi = pitchToMidi(`${tonic}4`);
+  const out: { pc: number; base: string }[] = [];
+  for (let d = 0; d < 7; d++) {
+    if (d > 0) {
+      midi += MAJOR_SCALE_STEPS[d - 1]!;
+      letterIdx = (letterIdx + 1) % 7;
+    }
+    const letter = DIATONIC_LETTERS[letterIdx]!;
+    const targetPc = ((midi % 12) + 12) % 12;
+    const naturalPc = STEP_SEMITONES[letter] ?? 0;
+    let delta = targetPc - naturalPc;
+    if (delta > 6) delta -= 12;
+    if (delta < -6) delta += 12;
+    if (delta !== 0 && delta !== 1 && delta !== -1) return null;
+    const acc = delta === 1 ? "#" : delta === -1 ? "b" : "";
+    out.push({ pc: targetPc, base: `${letter}${acc}` });
+  }
+  return out;
+}
+
+/**
+ * Spell a MIDI note using the major scale of the key signature when possible
+ * (single #/b, letter names from the key — avoids raw chromatic names like C# in F major → prefer Db…
+ * actually F major scale uses Bb not A#; templates enforce diatonic spelling).
+ */
+export function spellMidiPreferMajorKeySignature(midi: number, keyFifths: number): string {
+  const templates = getMajorScaleTemplates(keyFifths);
+  const targetPc = ((midi % 12) + 12) % 12;
+  if (templates) {
+    const t = templates.find((x) => x.pc === targetPc);
+    if (t) {
+      for (let o = -1; o < 10; o++) {
+        if (pitchToMidi(`${t.base}${o}`) === midi) return `${t.base}${o}`;
+      }
+    }
+  }
+  return midiToPitch(midi);
+}
+
+/** Pitches of non-rest notes with ids in `noteIds` (score order). */
+export function collectPitchesForNoteIds(score: EditableScore, noteIds: Set<string>): string[] {
+  const out: string[] = [];
+  for (const part of score.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id) || note.isRest) continue;
+        const p = note.pitch?.trim();
+        if (p) out.push(p);
+      }
+    }
+  }
+  return out;
 }
 
 function maxMeasureCount(score: EditableScore): number {
@@ -785,6 +880,140 @@ export function propagateMultiSelectPitchDelta(
   return out;
 }
 
+/** Pitch classes that use only the letters C–G–D–E–F–A–B with no accidentals. */
+const WHITE_KEY_PC = new Set([0, 2, 4, 5, 7, 9, 11]);
+
+const NATURAL_PC_TO_LETTER_STEP: Record<number, string> = {
+  0: "C",
+  2: "D",
+  4: "E",
+  5: "F",
+  7: "G",
+  9: "A",
+  11: "B",
+};
+
+const DIATONIC_NATURAL_CYCLE = ["C", "D", "E", "F", "G", "A", "B"] as const;
+
+/** Snap MIDI to the nearest lower white-key pitch (for stripping sharps/flats). */
+export function snapMidiToWhiteKey(midi: number): number {
+  let m = Math.round(midi);
+  for (let guard = 0; guard < 4; guard++) {
+    const pc = ((m % 12) + 12) % 12;
+    if (WHITE_KEY_PC.has(pc)) return m;
+    m -= 1;
+  }
+  return Math.round(midi);
+}
+
+/** Pitch string using only `[A-G][0-9]` — same white keys as a piano natural staff. */
+export function pitchStringFromNaturalWhiteKeyMidi(midi: number): string {
+  const m = snapMidiToWhiteKey(midi);
+  const oct = Math.floor(m / 12) - 1;
+  const pc = ((m % 12) + 12) % 12;
+  const L = NATURAL_PC_TO_LETTER_STEP[pc];
+  if (!L) return midiToPitch(m);
+  return `${L}${oct}`;
+}
+
+/** One step along C-major letter names (E–F and B–C are half steps in MIDI). */
+export function naturalDiatonicStepMidi(midi: number, direction: 1 | -1): number {
+  const m0 = snapMidiToWhiteKey(midi);
+  const oct = Math.floor(m0 / 12) - 1;
+  const pc = ((m0 % 12) + 12) % 12;
+  const letter = NATURAL_PC_TO_LETTER_STEP[pc];
+  if (!letter) return m0 + direction * 2;
+  let li = DIATONIC_NATURAL_CYCLE.indexOf(letter as (typeof DIATONIC_NATURAL_CYCLE)[number]);
+  if (li < 0) li = 0;
+  li += direction;
+  let newOct = oct;
+  if (li > 6) {
+    li = 0;
+    newOct++;
+  }
+  if (li < 0) {
+    li = 6;
+    newOct--;
+  }
+  const newLetter = DIATONIC_NATURAL_CYCLE[li]!;
+  return pitchToMidi(`${newLetter}${newOct}`);
+}
+
+/**
+ * Sandbox keyboard ↑/↓ (no modifier): move by one diatonic step on white keys only;
+ * stored pitches are always letters A–G plus octave, never #/b.
+ */
+export function naturalDiatonicStepNotes(
+  score: EditableScore,
+  noteIds: Set<string>,
+  direction: 1 | -1,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      if (!measure) continue;
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni];
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) {
+          const octave = neighborOctaveForRepitch(part, mi, ni);
+          const defaultPitch = `B${octave}`;
+          const baseMidi = pitchToMidi(defaultPitch);
+          note.isRest = false;
+          const newMidi = naturalDiatonicStepMidi(baseMidi, direction);
+          note.pitch = pitchStringFromNaturalWhiteKeyMidi(newMidi);
+          delete note.articulations;
+          delete note.dynamics;
+          delete note.tie;
+          delete note.originalGeneratedPitch;
+          continue;
+        }
+        const newMidi = naturalDiatonicStepMidi(pitchToMidi(note.pitch), direction);
+        note.pitch = pitchStringFromNaturalWhiteKeyMidi(newMidi);
+      }
+    }
+  }
+  return next;
+}
+
+/**
+ * Chromatic transpose by semitones, then force spelling to natural white-key names only
+ * (⌘/Ctrl + arrows on sandbox — octave shift without #/b in the score).
+ */
+export function transposeNotesForceNaturalLetters(
+  score: EditableScore,
+  noteIds: Set<string>,
+  semitones: number,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      if (!measure) continue;
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni];
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) {
+          const octave = neighborOctaveForRepitch(part, mi, ni);
+          const defaultPitch = `B${octave}`;
+          note.isRest = false;
+          const rawMidi = pitchToMidi(defaultPitch) + semitones;
+          note.pitch = pitchStringFromNaturalWhiteKeyMidi(rawMidi);
+          delete note.articulations;
+          delete note.dynamics;
+          delete note.tie;
+          delete note.originalGeneratedPitch;
+          continue;
+        }
+        const rawMidi = pitchToMidi(note.pitch) + semitones;
+        note.pitch = pitchStringFromNaturalWhiteKeyMidi(rawMidi);
+      }
+    }
+  }
+  return next;
+}
+
 /**
  * Transpose notes by ID by semitones. Rests are converted to a pitched note at
  * their neighbor-derived default pitch first (so arrow-up on a selected rest
@@ -795,6 +1024,7 @@ export function transposeNotes(score: EditableScore, noteIds: Set<string>, semit
   for (const part of next.parts) {
     for (let mi = 0; mi < part.measures.length; mi++) {
       const measure = part.measures[mi];
+      const keyFifths = effectiveMeasureKeySignature(next, mi);
       for (let ni = 0; ni < measure.notes.length; ni++) {
         const note = measure.notes[ni];
         if (!noteIds.has(note.id)) continue;
@@ -802,15 +1032,16 @@ export function transposeNotes(score: EditableScore, noteIds: Set<string>, semit
           const octave = neighborOctaveForRepitch(part, mi, ni);
           const defaultPitch = `B${octave}`;
           note.isRest = false;
-          note.pitch = midiToPitch(pitchToMidi(defaultPitch) + semitones);
+          const rawMidi = pitchToMidi(defaultPitch) + semitones;
+          note.pitch = spellMidiPreferMajorKeySignature(rawMidi, keyFifths);
           delete note.articulations;
           delete note.dynamics;
           delete note.tie;
           delete note.originalGeneratedPitch;
           continue;
         }
-        const midi = pitchToMidi(note.pitch);
-        note.pitch = midiToPitch(midi + semitones);
+        const rawMidi = pitchToMidi(note.pitch) + semitones;
+        note.pitch = spellMidiPreferMajorKeySignature(rawMidi, keyFifths);
       }
     }
   }

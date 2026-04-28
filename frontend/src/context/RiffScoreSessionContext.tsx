@@ -16,7 +16,7 @@ export type RiffScoreSessionHandles = {
    */
   getPitchGroupNoteIds: () => Set<string>;
   /**
-   * Flush editor → Zustand, then resolve target note ids the same way as toolbar transpose (+/- semitone).
+   * Flush editor → Zustand, then resolve target note ids the same way as toolbar transpose (whole step / octave).
    * Used by sandbox arrow handling so chromatic transpose wins even when HF selection is briefly out of sync with RiffScore.
    */
   getTransposeTargetNoteIds: () => Set<string>;
