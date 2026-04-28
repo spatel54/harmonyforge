@@ -177,6 +177,7 @@ export const TheoryInspectorPanel = React.forwardRef<
         ? `Regenerate bars ${localizedRegenerateRange.startMeasure + 1}–${localizedRegenerateRange.endMeasure + 1}`
         : "Regenerate this bar";
     const tutorEnabled = useTheoryInspectorStore((s) => s.hasApiKey);
+    const openAiConfigHint = useTheoryInspectorStore((s) => s.openAiConfigHint);
     const showInspectorRationale = useTheoryInspectorStore((s) => s.showInspectorRationale);
     const setShowInspectorRationale = useTheoryInspectorStore(
       (s) => s.setShowInspectorRationale,
@@ -505,6 +506,20 @@ export const TheoryInspectorPanel = React.forwardRef<
             ))}
           </div>
 
+          {tutorEnabled && openAiConfigHint ? (
+            <div
+              className="shrink-0 mx-[12px] mt-[6px] mb-[-4px] rounded-md border px-3 py-2 font-body text-[12px] leading-snug"
+              style={{
+                borderColor: "var(--hf-detail)",
+                backgroundColor: "color-mix(in srgb, var(--hf-accent) 12%, transparent)",
+                color: "var(--hf-text-primary)",
+              }}
+              role="status"
+            >
+              {openAiConfigHint}
+            </div>
+          ) : null}
+
           <div
             ref={scrollRef}
             className="hf-scroll-smooth flex-1 min-h-0 overflow-y-auto flex flex-col gap-[8px] p-[16px]"
@@ -813,6 +828,12 @@ export const TheoryInspectorPanel = React.forwardRef<
                       >
                         Add OPENAI_API_KEY (e.g. in .env.local or Vercel project env) for an AI summary.
                         Everything above still works without it—facts and export stay the same.
+                        {openAiConfigHint ? (
+                          <>
+                            {" "}
+                            <span className="block mt-2 opacity-90">{openAiConfigHint}</span>
+                          </>
+                        ) : null}
                       </span>
                     )}
                   </div>

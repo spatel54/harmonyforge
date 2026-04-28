@@ -134,10 +134,11 @@ export const dynamic = "force-dynamic";
  * Health check — also tells the client whether an API key is configured.
  */
 export async function GET() {
-  const { apiKey, baseURL } = getServerOpenAIEnv();
+  const { apiKey, baseURL, configHint } = getServerOpenAIEnv();
   return NextResponse.json({
     status: "ok",
     hasApiKey: !!apiKey,
     hasCustomBaseUrl: !!baseURL,
+    configHint: configHint ?? null,
   });
 }

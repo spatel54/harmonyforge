@@ -894,8 +894,10 @@ export function useTheoryInspector() {
   useEffect(() => {
     fetch("/api/theory-inspector")
       .then((res) => res.json())
-      .then((data: { hasApiKey?: boolean }) => {
+      .then((data: { hasApiKey?: boolean; configHint?: string | null }) => {
         store.setHasApiKey(data.hasApiKey ?? false);
+        const h = data.configHint?.trim();
+        store.setOpenAiConfigHint(h || null);
       })
       .catch(() => {
         store.setHasApiKey(false);

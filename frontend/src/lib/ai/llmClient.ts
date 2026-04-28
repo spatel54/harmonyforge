@@ -38,18 +38,55 @@ export function resolveOpenAIBaseURL(): string | undefined {
   return normalizeOpenAIBaseURL(chosen);
 }
 
+/**
+ * True if the value looks like an OpenAI *model* id, not a secret key.
+ * When this is stored in `OPENAI_API_KEY`, OpenAI returns 401 and echoes the bad "key" (e.g. `gpt-4o-mini`).
+ */
+export function looksLikeOpenAIModelId(value: string): boolean {
+  const t = value.trim().toLowerCase();
+  if (!t) return false;
+  if (t.startsWith("gpt-")) return true;
+  if (/^o[0-9]/.test(t)) return true;
+  if (t.startsWith("chatgpt-")) return true;
+  if (t.startsWith("ft:")) return true;
+  return false;
+}
+
+/** Typical OpenAI dashboard secret (`sk-…` or `sk-proj-…`). */
+export function looksLikeOpenAISecretKey(value: string): boolean {
+  const t = value.trim();
+  return t.startsWith("sk-") && t.length >= 20;
+}
+
 /** Server-only: API key, model, and OpenAI-compatible base URL from the same env as `createModel`. */
 export function getServerOpenAIEnv(): {
   apiKey: string | undefined;
   model: string;
   baseURL: string | undefined;
+  /** Shown in the inspector when env is missing or looks swapped; safe to expose (no secrets). */
+  configHint?: string;
 } {
-  const apiKey = process.env.OPENAI_API_KEY?.trim() || undefined;
-  const rawModel = process.env.OPENAI_MODEL?.trim();
+  const keyRaw = process.env.OPENAI_API_KEY?.trim() ?? "";
+  const modelRaw = process.env.OPENAI_MODEL?.trim() ?? "";
+
+  let apiKey: string | undefined = keyRaw || undefined;
   /** Default: lowest standard input $/MTok on OpenAI’s pricing table (`gpt-5-nano`); override via `OPENAI_MODEL`. */
-  const model = rawModel || "gpt-5-nano";
+  let model = modelRaw || "gpt-5-nano";
+  let configHint: string | undefined;
+
+  if (looksLikeOpenAIModelId(keyRaw) && looksLikeOpenAISecretKey(modelRaw)) {
+    apiKey = modelRaw;
+    model = keyRaw;
+    configHint =
+      "Recovered from a common mistake: your model name was in OPENAI_API_KEY and your secret key was in OPENAI_MODEL. In Vercel, put the sk-… value in OPENAI_API_KEY and the model (e.g. gpt-4o-mini) only in OPENAI_MODEL, then redeploy.";
+  } else if (looksLikeOpenAIModelId(keyRaw)) {
+    apiKey = undefined;
+    configHint =
+      "OPENAI_API_KEY looks like a model name (not a secret). Put your sk-… API key in OPENAI_API_KEY and keep the model name in OPENAI_MODEL only. OpenAI’s 401 message echoes the bad “key” — that is why you see gpt-4o-mini there.";
+  }
+
   const baseURL = resolveOpenAIBaseURL();
-  return { apiKey, model, baseURL };
+  return { apiKey, model, baseURL, configHint };
 }
 
 function createModel(apiKey: string, model: string): ChatOpenAI {

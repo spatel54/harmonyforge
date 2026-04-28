@@ -112,6 +112,10 @@ export interface TheoryInspectorState {
   hasApiKey: boolean;
   setHasApiKey: (v: boolean) => void;
 
+  /** From GET /api/theory-inspector when OPENAI_* looks misconfigured (e.g. model in API key slot). */
+  openAiConfigHint: string | null;
+  setOpenAiConfigHint: (v: string | null) => void;
+
   /** User-stated musical goal for the current session (Iter1 §3). Empty = not set. */
   musicalGoal: string;
   setMusicalGoal: (goal: string) => void;
@@ -201,6 +205,9 @@ export const useTheoryInspectorStore = create<TheoryInspectorState>(
 
     hasApiKey: false,
     setHasApiKey: (hasApiKey) => set({ hasApiKey }),
+
+    openAiConfigHint: null,
+    setOpenAiConfigHint: (openAiConfigHint) => set({ openAiConfigHint }),
 
     musicalGoal: "",
     setMusicalGoal: (musicalGoal) => set({ musicalGoal }),
