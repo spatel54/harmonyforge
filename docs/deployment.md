@@ -38,6 +38,8 @@ Both paths produce the same UX; the only functional difference is PDF OMR.
 | `NEXT_PUBLIC_GENERATE_TIMEOUT_MS` | Browser | Client abort on `/api/generate-from-file` (default 180000). |
 | `NEXT_PUBLIC_HF_*` | Browser | M5 study toggles — see [plan.md §M5](plan.md). |
 
+If Theory Inspector returns **401** and the error text names a **model** (e.g. `gpt-4o-mini`) instead of `sk-…`, you almost certainly put the **model id in `OPENAI_API_KEY`** and the **secret in `OPENAI_MODEL`**. Swap them in the Vercel dashboard, attach vars to **Preview** as well as **Production** if you use preview URLs, and **redeploy**. The app’s **`getServerOpenAIEnv()`** can auto-recover when one side looks like **`sk-…`** and the other like **`gpt-…`**, but fixing env names is the durable fix—see **[progress.md — 2026-04-27 naturals / LLM / audit](progress.md#wl-sandbox-naturals-llm-audit-2026-04-27)**.
+
 6. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }`.
 7. **Smoke test** the upload → generate → sandbox flow with MusicXML (fastest) and MXL.
 

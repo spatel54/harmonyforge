@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27) — **keyboard ↑/↓** = **diatonic white-key steps** + **natural-only** stored pitches; **⌘/Ctrl+↑/↓** = octave then **natural letters**; **Salamander** pitch preview matches RiffScore clicks; **`getServerOpenAIEnv`** **swaps** mistaken **`OPENAI_API_KEY` ↔ `OPENAI_MODEL`** + **`configHint`** in Theory Inspector; **SATB audit** chat line = short **red vs blue** explanation — **open:** manual QA (arrows, preview, **Octave ↓**); confirm **Vercel** env on **Preview** + redeploy
 - [Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27) — **flush-aware transpose** (**`useScoreStore.getState().score`** after RS flush); **toolbar ↔ palette parity** via **`onToolbarAction` → `handleToolSelect`** (returns **`true`**, no double **`applyOnSelection`**); chromatic **↑/↓** + pitch toolbar **`getTransposeTargetNoteIds`**; score-only print; **Advanced** Document hidden; **`make verify`** **281** tests — **open:** manual QA; **watch:** toolbar **`Octave ↓`** after unified path (Iteration 7 residual — re-verify in browser)
 - [Work log — Iteration 7 follow-up (2026-04-25 PM)](#wl-iteration-7-followup-2026-04-25-pm) — playground click-burst UI, concise Harmony setup copy merge, Team footer new-tab behavior, preview scrollbar fix attempts, Theory Inspector explanation empty-state prompt, undo/redo reliability pass; **current failure: toolbar `Octave ↓` still intermittently fails for some users**
 - [Work log — Iteration 7 (2026-04-25)](#wl-iteration-7-2026-04-25) — **user-study follow-up**: **interaction** (unified **↑/↓** + **⌘/Ctrl+↑/↓** pitch in `sandbox/page.tsx`); **playback** timbre map + **Piano / By part** preview; **Theory Inspector** proactive alternatives + phrasing-guarded stylist; **Ensemble** “your rhythm vs harmony engine” copy; **engine** melody-duration audit
@@ -47,6 +48,45 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="last-updated-2026-04-27-inspector-sandbox"></a>
+
+### Last updated (2026-04-27 — naturals keyboard, LLM env, audit copy)
+
+- **Narrative (end goal · approach · steps · failures):** **[Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27)** — keyboard vs toolbar transpose semantics; Salamander preview; OpenAI env swap + UI hints; concise SATB audit system message.
+- **Tests:** Vitest includes **`llmClient.test.ts`**; full gate **`make test`** was **296** passing after this tranche (repo state when logged).
+
+<a id="wl-sandbox-naturals-llm-audit-2026-04-27"></a>
+
+#### Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)
+
+- **End goal**
+  - **Sandbox keyboard (selection):** Moving notes with **↑ / ↓** follows **white-key / C-major letter steps** only — stored pitches stay **natural letter + octave** (**no `#` / `b`** from these shortcuts). **⌘/Ctrl + ↑ / ↓** shifts by **octave** (chromatic ±12 MIDI) then **coerces spelling** to the same natural-only convention so the score does not gain accidentals from the shortcut alone.
+  - **Toolbar** (**+2 / −2**, octave): Keeps **chromatic whole-step** behavior with **key-signature-friendly spelling** via existing **`transposeNotes`** / **`scheduleTransposeSelectedNotes`** (unchanged product path).
+  - **Preview sound:** Short transpose audition uses the **same Salamander piano** as RiffScore note clicks (**`Tone.Sampler`**, Tone.js demo **`baseUrl`**) — not a generic synth — so ear matches click-to-hear.
+  - **Production LLM:** Theory Inspector should not **401** when Vercel has **`OPENAI_API_KEY`** and **`OPENAI_MODEL`** **swapped** (model string sent as API key — OpenAI error text literally names **`gpt-4o-mini`**). Recover automatically when possible and surface a **non-secret** hint in-panel.
+  - **SATB audit chat:** Replace dense **HER / chord moments / flag counts** with a **very short** line explaining **red vs blue** highlights on the score.
+
+- **Approach**
+  - **Score layer:** Add **`naturalDiatonicStepNotes`**, **`transposeNotesForceNaturalLetters`**, helpers **`snapMidiToWhiteKey`**, **`pitchStringFromNaturalWhiteKeyMidi`**, **`naturalDiatonicStepMidi`** in **`frontend/src/lib/music/scoreUtils.ts`** (with tests in **`scoreUtils.test.ts`**). Fix **`midiToPitch`** octave mapping where needed so MIDI ↔ pitch round-trips match **`pitchToMidi`**.
+  - **Sandbox wiring:** **`scheduleNaturalDiatonicStep`** / **`scheduleTransposeNaturalLetters`** in **`sandboxScoreTranspose.ts`**; **`handleSandboxScoreKeyDown`** in **`sandboxScoreKeyboard.ts`** calls those for arrows (not **`scheduleTransposeSelectedNotes`**). **`sandboxPitchPreview.ts`** — lazy singleton **`Tone.Sampler`** + **`Tone.loaded()`**, shared destination volume.
+  - **LLM:** **`getServerOpenAIEnv()`** in **`llmClient.ts`** — if **`OPENAI_API_KEY`** looks like a **model id** and **`OPENAI_MODEL`** looks like **`sk-…`**, **swap**; if key looks like a model and no secret in model slot, **clear** key and set **`configHint`**. **`GET /api/theory-inspector`** returns **`configHint`**; **`useTheoryInspectorStore`** + **`TheoryInspectorPanel`** show it. **`frontend/.env.example`** warns not to put the model name in **`OPENAI_API_KEY`**.
+  - **Audit UX:** **`runAudit`** in **`useTheoryInspector.ts`** — single plain sentence for violations; short **clean pass** line when **`result.valid`**.
+
+- **Steps done so far**
+  1. Implemented naturals-only keyboard transpose pipeline (modules above) + **hotkey help** copy distinguishing keyboard vs toolbar.
+  2. **`previewSandboxPitches`** → Salamander **`urls`** aligned with **`patches/riffscore+…`** remote sample map.
+  3. **`llmClient`** env normalization + **`llmClient.test.ts`**; route **GET** JSON extended; inspector store/panel **hint** banner when **`tutorEnabled && configHint`** (recovery message).
+  4. Replaced verbose **SATB audit** system chat content with red/blue explanation (and brief valid pass message).
+
+- **Current failure / open work**
+  - **Manual QA (not closed in automation):** Keyboard **↑/↓** with multi-select across odd flush timing; **audio** first load after **`Tone.loaded()`** on slow networks; **toolbar `Octave ↓`** — still listed as **Iteration 7 residual** until another **in-browser** pass after **`handleToolbarAction`** work ([§ Sandbox reliability 2026-04-27](#wl-sandbox-reliability-2026-04-27)).
+  - **Vercel / env:** Users must **redeploy** after changing env vars; **Preview** deployments need vars attached to **Preview** (not only Production). Code **recovers** swapped **`OPENAI_*`** but **correct naming** in the dashboard is still the durable fix.
+  - **Optional doc follow-up:** Add a short **`deployment.md`** callout linking **`configHint`** behavior (deferred unless product asks).
+
+- **Learnings**
+  - OpenAI’s **401** body echoes the **invalid credential string** — if it equals **`gpt-4o-mini`**, the **secret and model env vars are reversed** or the key slot holds a model id.
+  - **RiffScore flush** + **Zustand** timing also applies to **transpose schedulers** — keep **flush → rAF → applyScore** pattern for selection consistency.
 
 <a id="last-updated-2026-04-27"></a>
 
@@ -1857,6 +1897,8 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
+**2026-04-27 session (naturals keyboard · LLM env · audit UX):** End goal, approach, completed steps, and **open failures** are summarized in **[Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy](#wl-sandbox-naturals-llm-audit-2026-04-27)** — especially **manual QA** on **toolbar `Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)) and **Vercel Preview** env + **redeploy** after **`OPENAI_*`** changes.
+
 **Narrative for the 2026-04 refinement pass:** [Holistic refinement program](#holistic-refinement-2026-04) (end goal, approach, completed steps, **current failure**).
 
 **Primary editor:** Sandbox notation is **RiffScore**-driven with Zustand-backed `EditableScore` sync — not the older VexFlow-first story (see **Consolidated status (2026-04)** above for truth).
@@ -1866,7 +1908,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 **Active work / blockers:**
 1. **PDF → MusicXML (unresolved OMR)** — Stabilize **oemer** (venv Python 3.11/3.12, checkpoints, `OEMER_BIN`) or choose an alternate path; see **Multi-format intake & PDF → Document preview**, **`requirements.txt`**, and optional reference image **`backend/docker/oemer-omr.Dockerfile`**. Preview/generate wiring exists; **melody extraction from arbitrary PDF** does not yet meet “it just works.”
 2. **RiffScore sample URLs** — **Mitigated (2026-04-06):** `patch-package` points the built-in piano sampler at **Tone.js Salamander** (`https://tonejs.github.io/audio/salamander/`) instead of missing `/audio/piano/*.mp3`.
-3. **OpenAI in dev** — ensure `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) live in `frontend/.env.local` and restart `make dev`; verify `GET /api/theory-inspector` → `hasApiKey: true`.
+3. **OpenAI in dev / deploy** — **`OPENAI_API_KEY`** = **`sk-…`** secret only; **`OPENAI_MODEL`** = model id (e.g. **`gpt-4o-mini`**). If **swapped**, OpenAI **401** echoes the model name as the “key”; app **`getServerOpenAIEnv()`** can **recover** when one env looks like **`sk-…`** and the other like **`gpt-…`**. **`GET /api/theory-inspector`** returns **`hasApiKey`**, **`configHint`** (optional). Local: **`frontend/.env.local`** + **`make dev`**. Production: **[deployment.md](deployment.md)** — **Preview** vs **Production** env, **redeploy** after edits. See **[Work log — naturals / LLM / audit](#wl-sandbox-naturals-llm-audit-2026-04-27)**.
 4. **Turbopack / monorepo env** — **`frontend/next.config.ts`** loads env via `loadEnvConfig(appDir)` so `.env.local` applies without `turbopack.root` (which broke Tailwind `@import`). Residual lockfile warnings are acceptable until Next documents a single-root strategy that preserves CSS resolution.
 5. **Tutor follow-up quality** — **Live-score evidence refresh on chat send** implemented (2026-04-06): `sendMessage` rebuilds measure/part FACT lines and note-level blocks from the flushed Zustand score before `POST /api/theory-inspector`. **`make lint-frontend`** exits 0 with a few `react-hooks/exhaustive-deps` warnings; use **`make verify-strict`** for verify + lint.
 6. **Idea actions (`<<<IDEA_ACTIONS>>>`)** — **Longest matching part name** in `summary` disambiguates substring collisions (e.g. Violin vs Violin II); duplicate identical names still return null. Still watch: **off-beat suggestions** and **model omitting** `NOTE_IDS`.

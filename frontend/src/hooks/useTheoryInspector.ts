@@ -1166,30 +1166,17 @@ export function useTheoryInspector() {
           store.addMessage({
             id: msgId("sys"),
             type: "system",
-            content: `All ${result.totalSlots} voice-leading slots pass validation. No violations detected.`,
+            content: "No flags on this pass—the harmony voice-leading check came back clean.",
             timestamp: timestamp(),
           });
           return;
         }
 
-        const violations = result.violations;
-        const keys = Object.keys(violations) as (keyof ValidationViolations)[];
-        const parts: string[] = [];
-        for (const key of keys) {
-          const count = violations[key];
-          if (count > 0) {
-            parts.push(`${getViolationLabel(key as ViolationKey)} (${count})`);
-          }
-        }
-        const summary = `SATB audit · ${result.totalSlots} chord moments · ${(result.her * 100).toFixed(1)}% with any flagged rule`;
-        const detail =
-          parts.length > 0
-            ? `Flags: ${parts.join(" · ")}. Highlights are on the score — chat here for detail or fixes.`
-            : "No grouped rule flags.";
         store.addMessage({
           id: msgId("sys"),
           type: "system",
-          content: `${summary}\n${detail}`,
+          content:
+            "Red on the score = stronger voice-leading flag; blue = lighter heads-up—chat here if you want help.",
           timestamp: timestamp(),
         });
 
