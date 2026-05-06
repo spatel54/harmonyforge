@@ -49,6 +49,12 @@
 
 ---
 
+## Visual demo
+
+Screen recording of the product flow (upload → configure → sandbox + Theory Inspector): **[HarmonyForge_Video_Demo.mov](HarmonyForge_Video_Demo.mov)** (repo root). On GitHub, open the file from the file tree to play in-browser where supported.
+
+---
+
 ## Quick start
 
 ```bash
@@ -91,6 +97,8 @@ CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs test + lint + bu
 | [docs/deployment.md](docs/deployment.md) | Vercel + Docker |
 | [docs/design/](docs/design/) | UI tokens & page overrides |
 | [docs/Taxonomy.md](docs/Taxonomy.md) | Theory vocabulary |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes (release-style digest) |
+| [docs/ITERATION_COVERAGE.md](docs/ITERATION_COVERAGE.md) | Course iteration rubric → code/docs status |
 
 ---
 
