@@ -40,7 +40,7 @@ import {
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML } from "@/lib/music/musicxmlParser";
-import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
+import { scoreToMusicXML, scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import { scoreToMidiBuffer } from "@/lib/music/scoreToMidi";
 import { scoreToWavBuffer } from "@/lib/music/scoreToWav";
@@ -49,6 +49,7 @@ import { zipSync, strToU8 } from "fflate";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ExportPrintRoot } from "@/components/organisms/ExportPrintRoot";
+import type { PrintableScoreHandle } from "@/components/score/PrintableScore";
 import { SandboxPalettePanel } from "@/components/organisms/SandboxPalettePanel";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
 import { ConfigurationBackFAB } from "@/components/atoms/ConfigurationBackFAB";
@@ -178,6 +179,7 @@ function TactileSandboxPageInner({
   const workspaceBaselineXml = useUploadStore((s) => s.workspaceBaselineXml);
   const resetWorkspaceToBaseline = useUploadStore((s) => s.resetWorkspaceToBaseline);
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
+  const sourceFileName = useUploadStore((s) => s.sourceFileName);
   const coachmarkTourActive = useCoachmarkStore((s) => s.isActive);
   const { score, setScore, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
@@ -430,6 +432,7 @@ function TactileSandboxPageInner({
 
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
   const exportPreviewRef = React.useRef<HTMLDivElement | null>(null);
+  const printRootRef = React.useRef<PrintableScoreHandle>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const notationMode = "edit" as const;
   const [showExpressiveSovereigntyCallout, setShowExpressiveSovereigntyCallout] = React.useState(
@@ -719,21 +722,19 @@ function TactileSandboxPageInner({
    */
   const printScoreOnly = React.useCallback(() => {
     if (typeof window === "undefined") return;
-    // Flush any pending RiffScore edits so the print root renders the latest
-    // score — ExportPrintRoot subscribes to Zustand via <RiffScoreEditor>.
-    getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
+    const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
+    // Serialize immediately after flush so OSMD always receives the latest score,
+    // bypassing any React re-render latency on the ExportPrintRoot xml prop.
+    const freshXml = live
+      ? scoreToPartwiseMusicXML(live, useUploadStore.getState().sourceFileName)
+      : undefined;
     document.body.classList.add("hf-printing-score");
     const cleanup = () => {
       document.body.classList.remove("hf-printing-score");
       window.removeEventListener("afterprint", cleanup);
     };
     window.addEventListener("afterprint", cleanup);
-    // Defer to next microtask so the body class applies before the dialog.
-    window.setTimeout(() => {
-      window.print();
-      // Fallback for environments that don't dispatch `afterprint` (Safari).
-      window.setTimeout(cleanup, 1000);
-    }, 50);
+    void printRootRef.current?.printWhenReady(freshXml).finally(cleanup);
   }, []);
 
   const setExportModalOpenForTour = React.useCallback(
@@ -2267,7 +2268,12 @@ function TactileSandboxPageInner({
       )}
 
       {/* Hidden print root — only visible when body.hf-printing-score is active. */}
-      <ExportPrintRoot score={scoreForCanvas} />
+      <ExportPrintRoot
+          ref={printRootRef}
+          xml={scoreForCanvas ? scoreToPartwiseMusicXML(scoreForCanvas, sourceFileName) : null}
+          filename={sourceFileName}
+          bpm={scoreForCanvas?.bpm ?? null}
+        />
 
       <OnboardingOverlay open={sandboxIntroOpen} onClose={() => setSandboxIntroOpen(false)} />
       <SandboxHotkeysDialog isOpen={hotkeysDialogOpen} onClose={() => setHotkeysDialogOpen(false)} />

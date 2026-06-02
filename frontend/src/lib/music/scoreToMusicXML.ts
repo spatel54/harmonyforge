@@ -2,7 +2,7 @@
  * Serialize EditableScore to MusicXML (minimal timewise format).
  */
 
-import type { EditableScore } from "./scoreTypes";
+import type { EditableScore, Note } from "./scoreTypes";
 import { riffQuantsForMeasure } from "./playbackScrub";
 
 function measureGlobalQuantStart(score: EditableScore, measureIndex: number): number {
@@ -48,7 +48,7 @@ function pitchFromStr(pitch: string): { step: string; alter: number; octave: num
   return { step, alter, octave };
 }
 
-/** Duration type to MusicXML duration (divisions) and type */
+/** Duration type to MusicXML duration (divisions) and type — used by scoreToMusicXML (DIVISIONS=4). */
 const DUR_MAP: Record<string, { divs: number; type: string }> = {
   w: { divs: 16, type: "whole" },
   h: { divs: 8, type: "half" },
@@ -57,6 +57,331 @@ const DUR_MAP: Record<string, { divs: number; type: string }> = {
   "16": { divs: 1, type: "16th" },
   "32": { divs: 1, type: "32nd" },
 };
+
+function clefAttrs(clef: string): { sign: string; line: number } {
+  if (clef === "bass") return { sign: "F", line: 4 };
+  if (clef === "alto") return { sign: "C", line: 3 };
+  if (clef === "tenor") return { sign: "C", line: 4 };
+  return { sign: "G", line: 2 };
+}
+
+// ── partwise serialization helpers ───────────────────────────────────────────
+
+/**
+ * DIVISIONS=8 lets us represent every duration down to 32nd notes as integers.
+ * w=32  h=16  q=8  8th=4  16th=2  32nd=1
+ */
+const PW_DIVS: Record<string, number> = {
+  w: 32, h: 16, q: 8, "8": 4, "16": 2, "32": 1,
+};
+const PW_TYPES: Record<string, string> = {
+  w: "whole", h: "half", q: "quarter", "8": "eighth", "16": "16th", "32": "32nd",
+};
+
+function pwNoteDivs(note: Note): number {
+  const base = PW_DIVS[note.duration] ?? 8;
+  if (!note.dots) return base;
+  if (note.dots === 1) return Math.round(base * 1.5);
+  if (note.dots >= 2) return Math.round(base * 1.75);
+  return base;
+}
+
+/**
+ * Build the <notations> element string for a note.
+ * Covers: tied, slur, fermata, articulations, ornaments.
+ */
+function buildNotations(note: Note): string {
+  const items: string[] = [];
+
+  // Tied (notation counterpart to <tie> note attribute)
+  if (note.tie === "stop" || note.tie === "continue") items.push('<tied type="stop"/>');
+  if (note.tie === "start" || note.tie === "continue") items.push('<tied type="start"/>');
+
+  // Slur from lineStart / lineEnd (set via line tools)
+  if (note.lineStart === "slur") items.push('<slur type="start" number="1"/>');
+  if (note.lineEnd === "slur") items.push('<slur type="stop" number="1"/>');
+
+  // Slur from articulations array (set via artic-slur palette button)
+  if (note.articulations?.includes("slur")) items.push('<slur type="start" number="2"/>');
+
+  // Fermata lives directly in <notations>, not in <articulations>
+  if (note.articulations?.includes("fermata")) items.push("<fermata/>");
+
+  // Articulations block
+  const articXmlTag: Record<string, string> = {
+    "a.": "staccato",
+    "a-": "tenuto",
+    "a>": "accent",
+    "a^": "strong-accent",
+    staccatissimo: "staccatissimo",
+    "breath-mark": "breath-mark",
+    caesura: "caesura",
+  };
+  const artics = (note.articulations ?? []).filter(
+    (a) => a !== "fermata" && a !== "slur" && articXmlTag[a],
+  );
+  if (artics.length > 0) {
+    items.push(
+      `<articulations>${artics.map((a) => `<${articXmlTag[a]}/>`).join("")}</articulations>`,
+    );
+  }
+
+  // Ornaments block
+  const ornamentXmlTag: Record<string, string> = {
+    trill: "trill-mark",
+    mordent: "mordent",
+    "inverted-mordent": "inverted-mordent",
+    turn: "turn",
+    "inverted-turn": "inverted-turn",
+    shake: "shake",
+  };
+  if (note.ornament && ornamentXmlTag[note.ornament]) {
+    items.push(`<ornaments><${ornamentXmlTag[note.ornament]}/></ornaments>`);
+  }
+
+  if (items.length === 0) return "";
+  return `\n        <notations>${items.map((el) => `\n          ${el}`).join("")}\n        </notations>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Serialize EditableScore to MusicXML partwise format with full notation fidelity.
+ * OSMD requires partwise; use this for printing/PDF export.
+ * Pass `title` to override the work title shown by OSMD.
+ */
+export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | null): string {
+  const DIVISIONS = 8;
+
+  const partList = score.parts
+    .map(
+      (p, i) =>
+        `  <score-part id="P${i + 1}">\n    <part-name>${esc(p.name)}</part-name>\n  </score-part>`,
+    )
+    .join("\n");
+
+  const parts = score.parts.map((p, pIdx) => {
+    const { sign, line } = clefAttrs(p.clef ?? "treble");
+
+    const measures = p.measures.map((measure, mIdx) => {
+      const lines: string[] = [];
+      const isFirst = mIdx === 0;
+
+      // Attributes block
+      if (isFirst) {
+        const ts = measure.timeSignature ?? "4/4";
+        const [beats, beatType] = ts.split("/");
+        const fifths = measure.keySignature ?? 0;
+        lines.push(`      <attributes>
+        <divisions>${DIVISIONS}</divisions>
+        <key><fifths>${fifths}</fifths></key>
+        <time>
+          <beats>${beats ?? 4}</beats>
+          <beat-type>${beatType ?? 4}</beat-type>
+        </time>
+        <clef>
+          <sign>${sign}</sign>
+          <line>${line}</line>
+        </clef>
+      </attributes>`);
+      } else if (measure.timeSignature !== undefined || measure.keySignature !== undefined) {
+        const tsChange = measure.timeSignature
+          ? (() => {
+              const [b, bt] = measure.timeSignature.split("/");
+              return `        <time>\n          <beats>${b}</beats>\n          <beat-type>${bt}</beat-type>\n        </time>`;
+            })()
+          : "";
+        const ksChange =
+          measure.keySignature !== undefined
+            ? `        <key><fifths>${measure.keySignature}</fifths></key>`
+            : "";
+        if (tsChange || ksChange) {
+          lines.push(
+            `      <attributes>\n${[ksChange, tsChange].filter(Boolean).join("\n")}\n      </attributes>`,
+          );
+        }
+      }
+
+      // Tempo text direction
+      if (measure.tempoText) {
+        lines.push(`      <direction placement="above">
+        <direction-type>
+          <words>${esc(measure.tempoText)}</words>
+        </direction-type>
+      </direction>`);
+      }
+
+      // Rehearsal mark
+      if (measure.rehearsalMark) {
+        lines.push(`      <direction placement="above">
+        <direction-type>
+          <rehearsal>${esc(measure.rehearsalMark)}</rehearsal>
+        </direction-type>
+      </direction>`);
+      }
+
+      // Repeat / navigation marks
+      if (measure.repeatMark) {
+        const repeatSymbol: Record<string, string> = { segno: "<segno/>", coda: "<coda/>" };
+        const repeatWord: Record<string, string> = { dc: "D.C.", ds: "D.S.", fine: "Fine" };
+        const sym = repeatSymbol[measure.repeatMark];
+        const word = repeatWord[measure.repeatMark];
+        const inner = sym ?? (word ? `<words>${word}</words>` : null);
+        if (inner) {
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          ${inner}
+        </direction-type>
+      </direction>`);
+        }
+      }
+
+      // Notes
+      const noteEls = measure.notes.length > 0 ? measure.notes : [];
+      for (const note of noteEls) {
+        // Pre-note directions: hairpin / octave-shift start
+        if (note.lineStart === "cresc-hairpin") {
+          lines.push(`      <direction placement="below">
+        <direction-type><wedge type="crescendo" number="1"/></direction-type>
+      </direction>`);
+        } else if (note.lineStart === "decresc-hairpin") {
+          lines.push(`      <direction placement="below">
+        <direction-type><wedge type="diminuendo" number="1"/></direction-type>
+      </direction>`);
+        } else if (note.lineStart === "8va") {
+          lines.push(`      <direction placement="above">
+        <direction-type><octave-shift type="up" size="8" number="1"/></direction-type>
+      </direction>`);
+        } else if (note.lineStart === "8vb") {
+          lines.push(`      <direction placement="below">
+        <direction-type><octave-shift type="down" size="8" number="1"/></direction-type>
+      </direction>`);
+        }
+
+        // Dynamics direction (standard dynamic marks only; hairpin is handled via lineStart)
+        if (note.dynamics && note.dynamics !== "crescendo" && note.dynamics !== "decrescendo") {
+          const dynTag: Record<string, string> = {
+            p: "<p/>", pp: "<pp/>", ppp: "<ppp/>",
+            f: "<f/>", ff: "<ff/>", fff: "<fff/>",
+            mp: "<mp/>", mf: "<mf/>", sfz: "<sfz/>", fp: "<fp/>",
+          };
+          const dynEl = dynTag[note.dynamics];
+          if (dynEl) {
+            lines.push(`      <direction placement="below">
+        <direction-type><dynamics>${dynEl}</dynamics></direction-type>
+      </direction>`);
+          }
+        }
+
+        // Chord symbol (harmony element precedes the note)
+        if (note.chordSymbol) {
+          lines.push(naiveHarmonyXml(note.chordSymbol));
+        }
+
+        // Note element — MusicXML DTD order: pitch/rest, duration, tie*, type, dot*, notations*, lyric*
+        const divs = pwNoteDivs(note);
+        const noteType = PW_TYPES[note.duration] ?? "quarter";
+        const dotsEl = note.dots
+          ? "\n" + Array(note.dots).fill("        <dot/>").join("\n")
+          : "";
+
+        const tieAttrs: string[] = [];
+        if (note.tie === "stop" || note.tie === "continue") tieAttrs.push('<tie type="stop"/>');
+        if (note.tie === "start" || note.tie === "continue") tieAttrs.push('<tie type="start"/>');
+        const tieAttrStr = tieAttrs.length > 0
+          ? "\n        " + tieAttrs.join("\n        ")
+          : "";
+
+        const notationsStr = buildNotations(note);
+        const lyricStr =
+          note.lyric && !note.isRest
+            ? `\n        <lyric number="1"><syllabic>single</syllabic><text>${esc(note.lyric)}</text></lyric>`
+            : "";
+
+        if (note.isRest) {
+          lines.push(`      <note>
+        <rest/>
+        <duration>${divs}</duration>${tieAttrStr}
+        <type>${noteType}</type>${dotsEl}${notationsStr}${lyricStr}
+      </note>`);
+        } else {
+          const { step, alter, octave } = pitchFromStr(note.pitch);
+          const alterEl = alter !== 0 ? `\n          <alter>${alter}</alter>` : "";
+          lines.push(`      <note>
+        <pitch>
+          <step>${step}</step>${alterEl}
+          <octave>${octave}</octave>
+        </pitch>
+        <duration>${divs}</duration>${tieAttrStr}
+        <type>${noteType}</type>${dotsEl}${notationsStr}${lyricStr}
+      </note>`);
+        }
+
+        // Post-note directions: hairpin / octave-shift stop
+        if (note.lineEnd === "cresc-hairpin" || note.lineEnd === "decresc-hairpin") {
+          lines.push(`      <direction placement="below">
+        <direction-type><wedge type="stop" number="1"/></direction-type>
+      </direction>`);
+        } else if (note.lineEnd === "8va" || note.lineEnd === "8vb") {
+          lines.push(`      <direction placement="above">
+        <direction-type><octave-shift type="stop" size="8" number="1"/></direction-type>
+      </direction>`);
+        }
+      }
+
+      // Empty measure fallback
+      if (measure.notes.length === 0) {
+        lines.push(`      <note>
+        <rest/>
+        <duration>${DIVISIONS}</duration>
+        <type>quarter</type>
+      </note>`);
+      }
+
+      // Barline
+      if (measure.barline && measure.barline !== "normal") {
+        const barStyleMap: Record<string, string> = {
+          double: "light-light",
+          final: "light-heavy",
+          "start-repeat": "heavy-light",
+          "end-repeat": "light-heavy",
+          dashed: "dashed",
+          tick: "tick",
+        };
+        const barStyle = barStyleMap[measure.barline];
+        if (barStyle) {
+          const repeatEl =
+            measure.barline === "start-repeat"
+              ? '\n        <repeat direction="forward"/>'
+              : measure.barline === "end-repeat"
+              ? '\n        <repeat direction="backward"/>'
+              : "";
+          lines.push(`      <barline location="right">
+        <bar-style>${barStyle}</bar-style>${repeatEl}
+      </barline>`);
+        }
+      }
+
+      return `    <measure number="${mIdx + 1}">\n${lines.join("\n")}\n    </measure>`;
+    });
+
+    return `  <part id="P${pIdx + 1}">\n${measures.join("\n")}\n  </part>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise
+  PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN"
+  "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.0">
+  <work>
+    <work-title>${esc(title ?? "HarmonyForge")}</work-title>
+  </work>
+  <part-list>
+${partList}
+  </part-list>
+${parts.join("\n")}
+</score-partwise>`;
+}
 
 export function scoreToMusicXML(score: EditableScore): string {
   const partList = score.parts
