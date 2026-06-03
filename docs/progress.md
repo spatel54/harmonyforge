@@ -6,6 +6,8 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Duration change: rest split + neighbor absorption (2026-06-03)](#wl-duration-change-rests-2026-06-03) — **`setNoteDurations`** shorten/lengthen; **`setNoteDurationOnSelection`**; RS **`setDuration`** intercept; **`[` / `]`** on selection — **`make test` 312**
+- [Work log — Delete → rest placeholders + beat-accurate playback scrub (2026-06-03)](#wl-rest-delete-beat-scrub-2026-06-03) — **`deleteSelectionAsRests`** central path; block RiffScore **`DeleteEventCommand`** (capture keys + undo intercept); scrub releases at **measure + quant** with drag label + measure band — **`make test` 307**
 - [Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03) — **RiffScore alto/tenor layout patch restored** in **`patches/riffscore+1.0.0-alpha.9.patch`** (`getOffsetForPitch` / `getPitchForOffset`); sandbox viola noteheads should match **OSMD PDF/Print**; **`origin`** → **`spatel54/harmonyforge`** — **open:** manual viola/tenor QA after **`rm -rf .next`**
 - [Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03) — **Audiveris-only** PDF → MusicXML; **OSMD** print/PDF; **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed); honest Playground progress bar; **`make test` 304** — **open:** PDF OMR quality QA on real scans; **RiffScore measure-gutter selection** after Audiveris import (fixed **`Target event not found`**, re-verify in browser)
 - [Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27) — **`hfNoteToRsEvent`** splits **letter+octave** vs **`accidental`** for RiffScore; sandbox **sharp/flat** path **flush → live score → Salamander preview**; Inspector **Stylist options** **`details`** + chat seed **`Try other harmony ideas`** → **`requestSuggestion`**; Explanation tab **lay copy** — **open:** manual QA (dense scores, multi-select, touch); **program watch:** toolbar **`Octave ↓`** ([Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm))
@@ -51,6 +53,61 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-duration-change-rests-2026-06-03"></a>
+
+## Work log — Duration change: rest split + neighbor absorption (2026-06-03)
+
+### End goal
+
+MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten** fills the original rhythmic slot with the new note plus **uniform rests** (half → quarter → quarter note + quarter rest); **lengthen** **absorbs** forward then backward rests/pitched neighbors; all entry points (palette **1–6**, **`[` / `]`** with selection, RiffScore toolbar **`setDuration`**) run the same HarmonyForge path so the canvas never shows timeline holes or silent overflow.
+
+### Shipped
+
+| Area | Files |
+|------|--------|
+| Lengthen / shorten | [`scoreUtils.ts`](../frontend/src/lib/music/scoreUtils.ts) — `consumeUnitsFromSlice`, `lengthenNoteInMeasure`, `setNoteDurations` |
+| Central apply | [`setNoteDurationOnSelection.ts`](../frontend/src/lib/sandbox/setNoteDurationOnSelection.ts) — flush + `applySetNoteDurations`, `scheduleSetNoteDurations`, `applySetNoteDurationsFromRs` |
+| Sandbox | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts) |
+| RS intercept | [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — **`setDuration`**: `api.undo()` then HF duration apply |
+| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts) — `describe("setNoteDurations")` |
+
+### Verification
+
+- `make test` → **312** Vitest (frontend).
+- Manual: 4/4 half → **4** → quarter + quarter rest; half → **3** → eighth + 3 eighth rests; eighth + 3 eighth rests → **4** → quarter + 2 eighth rests; RiffScore toolbar duration matches palette; **`[` / `]`** with selection changes note duration (no selection → active tool only).
+- **Fix (same day):** RS **`setDuration`** intercept now **snapshots note ids before `undo()`**; duration edits use **`getDurationTargetNoteIds`** (excludes stale multi-select pitch group) so lengthening one beamed eighth (e.g. **G**) can absorb the preceding **B** eighth into a quarter.
+
+<a id="wl-rest-delete-beat-scrub-2026-06-03"></a>
+
+## Work log — Delete → rest placeholders + beat-accurate playback scrub (2026-06-03)
+
+### End goal
+
+1. **Delete never leaves a blank beat** in `/sandbox` — selected notes become **same-duration rests** (MuseScore/Noteflight), not RiffScore timeline holes.
+2. **Playback scrub** starts at the **beat** where the user releases the orange playhead, not only at measure start.
+3. **Playback through rests (2026-06-03 follow-up):** RiffScore patch — start offset from **measure + quant** (not first note); timeline includes **rest** segments so pickup/anacrusis silence plays before the first pitch and the orange playhead advances through rests.
+4. **Metronome clicks (2026-06-03):** [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — quarter-note clicks on Tone.Transport at score **BPM** (accented downbeats per time signature); wired via riffscore patch + `installPlaybackMetronomeBridge()` in `RiffScoreEditor`.
+
+### Root cause (delete)
+
+- HarmonyForge **`deleteNotesAsRests`** was wired for **`useScoreStore.deleteSelection`**, but **Delete/Backspace** only ran when **Zustand `selection` was non-empty**; RiffScore’s native **`DeleteEventCommand`** still **spliced events** when HF selection was empty or delete bypassed capture.
+- **`edit-delete`** did not **flush** or use **`getTransposeTargetNoteIds()`** before deleting.
+
+### Shipped
+
+| Area | Files |
+|------|--------|
+| Central delete | [`frontend/src/lib/sandbox/deleteSelectionAsRests.ts`](../frontend/src/lib/sandbox/deleteSelectionAsRests.ts) — `scheduleDeleteSelectionAsRests`, `applyDeleteSelectionAsRests`, `hasDeletableEditorSelection` |
+| Sandbox wiring | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts) — capture-phase Delete with **`stopPropagation`** |
+| RS intercept | [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — on **`deleteSelected`**: **`api.undo()`** then HF rest delete |
+| Beat scrub | [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx), [`playbackScrub.ts`](../frontend/src/lib/music/playbackScrub.ts) — `contentXForMeasureQuant`, drag pill, triangle cap, measure band, auto-scroll while playing |
+| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts), [`playbackScrub.test.ts`](../frontend/src/lib/music/playbackScrub.test.ts) |
+
+### Verification
+
+- `make test` → **307** Vitest (frontend).
+- Manual: delete middle note in 4/4 → **rest placeholder**, no empty spacing; drag playhead to beat 2 → Play → audio starts mid-bar.
 
 <a id="wl-viola-sandbox-export-parity-2026-06-03"></a>
 

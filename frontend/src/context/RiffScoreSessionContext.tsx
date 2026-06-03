@@ -20,6 +20,11 @@ export type RiffScoreSessionHandles = {
    * Used by sandbox arrow handling so chromatic transpose wins even when HF selection is briefly out of sync with RiffScore.
    */
   getTransposeTargetNoteIds: () => Set<string>;
+  /**
+   * Current editor selection only (no retained multi-select pitch group). Use for duration edits so
+   * lengthening one beamed note does not also retarget siblings from an earlier multi-select.
+   */
+  getDurationTargetNoteIds: () => Set<string>;
 };
 
 export const RiffScoreSessionContext = createContext<RiffScoreSessionHandles | null>(null);

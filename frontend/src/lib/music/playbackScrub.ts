@@ -96,6 +96,33 @@ function measureQuantInSpan(
   return { measureIndex, quant };
 }
 
+/** Map RiffScore measure + quant back to horizontal content X for the scrub overlay. */
+export function contentXForMeasureQuant(
+  measureIndex: number,
+  quant: number,
+  spans: MeasurePlaybackSpan[],
+  score: EditableScore,
+): number {
+  const span = spans.find((s) => s.measureIndex === measureIndex);
+  if (!span) return clampContentX(0, spans);
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const t = maxQ <= 0 ? 0 : Math.min(1, Math.max(0, quant / maxQ));
+  const width = Math.max(span.endX - span.startX, 1);
+  return clampContentX(span.startX + t * width, spans);
+}
+
+/** Human-readable beat index within a measure (1-based quarter beats for 4/4). */
+export function quantToBeatLabel(
+  quant: number,
+  score: EditableScore,
+  measureIndex: number,
+): string {
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const quantsPerQuarter = Math.max(1, Math.floor(maxQ / 4));
+  const beat = Math.min(4, Math.floor(quant / quantsPerQuarter) + 1);
+  return `Bar ${measureIndex + 1} · beat ${beat}`;
+}
+
 export function contentXToMeasureQuant(
   contentX: number,
   spans: MeasurePlaybackSpan[],

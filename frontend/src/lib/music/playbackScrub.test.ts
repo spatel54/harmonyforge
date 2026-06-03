@@ -3,8 +3,10 @@ import type { EditableScore, NotePosition } from "./scoreTypes";
 import {
   buildMeasurePlaybackSpans,
   clampContentX,
+  contentXForMeasureQuant,
   contentXToMeasureQuant,
   contentXToNearestMeasureStart,
+  quantToBeatLabel,
   riffQuantsForMeasure,
 } from "./playbackScrub";
 
@@ -111,5 +113,24 @@ describe("clampContentX", () => {
     const spans = buildMeasurePlaybackSpans([pos(0, 50)], 1, 200);
     expect(clampContentX(-100, spans)).toBe(spans[0]!.startX);
     expect(clampContentX(9999, spans)).toBe(spans[0]!.endX);
+  });
+});
+
+describe("contentXForMeasureQuant", () => {
+  it("round-trips mid-measure quant with contentXToMeasureQuant", () => {
+    const spans = buildMeasurePlaybackSpans([pos(0, 80), pos(0, 200)], 1, 400);
+    const mid = (spans[0]!.startX + spans[0]!.endX) / 2;
+    const { measureIndex, quant } = contentXToMeasureQuant(mid, spans, minimalScore);
+    const x = contentXForMeasureQuant(measureIndex, quant, spans, minimalScore);
+    const back = contentXToMeasureQuant(x, spans, minimalScore);
+    expect(back.measureIndex).toBe(measureIndex);
+    expect(back.quant).toBe(quant);
+  });
+});
+
+describe("quantToBeatLabel", () => {
+  it("formats bar and beat for 4/4", () => {
+    expect(quantToBeatLabel(0, minimalScore, 0)).toBe("Bar 1 · beat 1");
+    expect(quantToBeatLabel(16, minimalScore, 0)).toBe("Bar 1 · beat 2");
   });
 });

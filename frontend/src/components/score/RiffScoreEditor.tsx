@@ -79,6 +79,16 @@ import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
+import { applyDeleteSelectionAsRests } from "@/lib/sandbox/deleteSelectionAsRests";
+import {
+  applySetNoteDurationsFromRs,
+  scheduleSetNoteDurations,
+} from "@/lib/sandbox/setNoteDurationOnSelection";
+import {
+  hfDurationFromRiffToolbarClick,
+  isRiffScoreDurationToolbarButton,
+} from "@/lib/sandbox/riffscoreDurationToolbar";
+import { installPlaybackMetronomeBridge } from "@/lib/music/playbackMetronome";
 import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
 /** Map an instrument name to a recognisable Lucide icon by family. */
@@ -457,9 +467,7 @@ export function RiffScoreEditor({
     api.selectAll("staff");
   };
 
-  const getActiveNoteIds = (): Set<string> => {
-    const fromGroup = getPitchGroupNoteIdsRef.current();
-    if (fromGroup.size > 0) return fromGroup;
+  const resolveEditorNoteIds = (): Set<string> => {
     const api = apiRef.current;
     const liveScore = useScoreStore.getState().score ?? score;
     if (api && liveScore) {
@@ -487,6 +495,15 @@ export function RiffScoreEditor({
     return selectedNoteIds;
   };
 
+  const resolveEditorNoteIdsRef = useRef(resolveEditorNoteIds);
+  resolveEditorNoteIdsRef.current = resolveEditorNoteIds;
+
+  const getActiveNoteIds = (): Set<string> => {
+    const fromGroup = getPitchGroupNoteIdsRef.current();
+    if (fromGroup.size > 0) return fromGroup;
+    return resolveEditorNoteIdsRef.current();
+  };
+
   const getActiveNoteIdsRef = useRef(getActiveNoteIds);
   getActiveNoteIdsRef.current = getActiveNoteIds;
 
@@ -494,6 +511,20 @@ export function RiffScoreEditor({
     flushToZustandRef.current();
     return getActiveNoteIdsRef.current();
   }, []);
+
+  const getTransposeTargetNoteIdsRef = useRef(getTransposeTargetNoteIds);
+  getTransposeTargetNoteIdsRef.current = getTransposeTargetNoteIds;
+
+  const getDurationTargetNoteIds = useCallback((): Set<string> => {
+    flushToZustandRef.current();
+    return resolveEditorNoteIdsRef.current();
+  }, []);
+
+  const getDurationTargetNoteIdsRef = useRef(getDurationTargetNoteIds);
+  getDurationTargetNoteIdsRef.current = getDurationTargetNoteIds;
+
+  const interceptRsDeleteRef = useRef(false);
+  const interceptRsDurationRef = useRef(false);
 
   const applyOnSelection = (transform: (current: EditableScore, noteIds: Set<string>) => EditableScore) => {
     if (!score) return;
@@ -1020,6 +1051,10 @@ export function RiffScoreEditor({
   }, [instanceId]);
 
   useEffect(() => {
+    installPlaybackMetronomeBridge();
+  }, []);
+
+  useEffect(() => {
     if (!isReady || !onSessionReady) return;
     const session: RiffScoreSessionHandles = {
       flushToZustand,
@@ -1037,9 +1072,118 @@ export function RiffScoreEditor({
       },
       getPitchGroupNoteIds,
       getTransposeTargetNoteIds,
+      getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
     };
     onSessionReady(session);
   }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, getTransposeTargetNoteIds, runEditorHistoryOp]);
+
+  /**
+   * RiffScore disables duration toolbar buttons when `canModifyEventDuration` fails
+   * (full measure). Capture clicks and run HF lengthen/shorten with neighbor absorption.
+   */
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !isReady || presentation || !enableScoreEditing) return;
+
+    const makeSessionFromRefs = (): RiffScoreSessionHandles => ({
+      flushToZustand: () => flushToZustandRef.current(),
+      editorUndo: () => runEditorHistoryOp("undo"),
+      editorRedo: () => runEditorHistoryOp("redo"),
+      editorSelectAll: () => apiRef.current?.selectAll("score"),
+      editorDeselectAll: () => apiRef.current?.deselectAll(),
+      getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
+      getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
+      getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
+    });
+
+    const onCaptureClick = (e: MouseEvent) => {
+      if (!isRiffScoreDurationToolbarButton(e.target)) return;
+      const dur = hfDurationFromRiffToolbarClick(e.target);
+      if (!dur) return;
+
+      const ids = resolveEditorNoteIdsRef.current();
+      if (ids.size === 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      scheduleSetNoteDurations(makeSessionFromRefs(), dur, ids);
+    };
+
+    root.addEventListener("mousedown", onCaptureClick, true);
+    return () => root.removeEventListener("mousedown", onCaptureClick, true);
+  }, [isReady, presentation, enableScoreEditing, runEditorHistoryOp]);
+
+  /** RiffScore in-place edits; undo then HF rest substitution / duration split. */
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !isReady || presentation || !enableScoreEditing) return;
+
+    const makeSession = (): RiffScoreSessionHandles => ({
+      flushToZustand: () => flushToZustandRef.current(),
+      editorUndo: () => runEditorHistoryOp("undo"),
+      editorRedo: () => runEditorHistoryOp("redo"),
+      editorSelectAll: () => api.selectAll("score"),
+      editorDeselectAll: () => api.deselectAll(),
+      getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
+      getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
+      getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
+    });
+
+    const unsub = api.on(
+      "operation",
+      (r: { method?: string; ok?: boolean; details?: { duration?: string; dotted?: boolean } }) => {
+        if (r.ok === false) return;
+
+        if (r.method === "deleteSelected" && !interceptRsDeleteRef.current) {
+          interceptRsDeleteRef.current = true;
+          requestAnimationFrame(() => {
+            try {
+              api.undo();
+              applyDeleteSelectionAsRests(makeSession(), selectedNoteIds);
+            } finally {
+              interceptRsDeleteRef.current = false;
+            }
+          });
+          return;
+        }
+
+        if (r.method === "setDuration" && !interceptRsDurationRef.current) {
+          const rsDuration = r.details?.duration;
+          if (!rsDuration) return;
+          let capturedIds = resolveEditorNoteIdsRef.current();
+          if (capturedIds.size === 0) capturedIds = new Set(selectedNoteIds);
+          if (capturedIds.size === 0) return;
+          const idsSnapshot = new Set(capturedIds);
+          interceptRsDurationRef.current = true;
+          const rsDotted = Boolean(r.details?.dotted);
+          requestAnimationFrame(() => {
+            try {
+              api.undo();
+              flushToZustandRef.current();
+              applySetNoteDurationsFromRs(
+                makeSession(),
+                rsDuration,
+                rsDotted,
+                idsSnapshot,
+              );
+            } finally {
+              interceptRsDurationRef.current = false;
+            }
+          });
+        }
+      },
+    );
+
+    return unsub;
+  }, [
+    isReady,
+    presentation,
+    enableScoreEditing,
+    runEditorHistoryOp,
+    selectedNoteIds,
+  ]);
 
   useEffect(() => {
     if (!isReady || !onEditorApiReady) return;

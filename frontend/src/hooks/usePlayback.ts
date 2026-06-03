@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import {
+  clearPlaybackMetronome,
+  schedulePlaybackMetronome,
+} from "@/lib/music/playbackMetronome";
+import {
   scoreToScheduledNotes,
   scheduledNotesToSeconds,
 } from "@/lib/music/playbackUtils";
@@ -132,6 +136,7 @@ export function usePlayback({
     partRef.current = null;
     synthRef.current?.dispose();
     synthRef.current = null;
+    void import("tone").then((Tone) => clearPlaybackMetronome(Tone));
   }, []);
 
   const stop = useCallback(async () => {
@@ -146,6 +151,7 @@ export function usePlayback({
       endTimeoutRef.current = null;
     }
     const Tone = await import("tone");
+    clearPlaybackMetronome(Tone);
     try {
       Tone.getTransport().cancel(0);
       Tone.getTransport().stop();
@@ -238,8 +244,18 @@ export function usePlayback({
         ? Math.max(...timed.map((e) => e.time + e.duration))
         : 0;
 
+      const effectiveBpm = score.bpm ?? bpm;
+      const timeSignature = score.parts[0]?.measures[0]?.timeSignature;
+
       part.start(0);
       Tone.getTransport().seconds = 0;
+      Tone.getTransport.bpm.value = effectiveBpm;
+      schedulePlaybackMetronome(Tone, {
+        bpm: effectiveBpm,
+        startTimeOffset: 0,
+        totalEnd: totalDuration,
+        timeSignature,
+      });
       try {
         Tone.getTransport().start();
       } catch (err) {

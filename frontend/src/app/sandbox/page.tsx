@@ -10,7 +10,6 @@ import { useScoreStore, getClipboard, setClipboard, pasteNotes, type NoteSelecti
 import {
   cloneScore,
   extractNotes,
-  setNoteDurations,
   toggleNoteDots,
   toggleNoteRests,
   addArticulation,
@@ -95,6 +94,11 @@ import {
 } from "@/context/RiffScoreSessionContext";
 import { handleSandboxScoreKeyDown, type SandboxScoreKeyboardCtx } from "@/lib/sandbox/sandboxScoreKeyboard";
 import { scheduleTransposeSelectedNotes } from "@/lib/sandbox/sandboxScoreTranspose";
+import { scheduleDeleteSelectionAsRests } from "@/lib/sandbox/deleteSelectionAsRests";
+import {
+  hasDurationEditableSelection,
+  scheduleSetNoteDurations,
+} from "@/lib/sandbox/setNoteDurationOnSelection";
 import { previewSandboxPitches } from "@/lib/sandbox/sandboxPitchPreview";
 
 const ENGINE_URL = "";
@@ -180,7 +184,7 @@ function TactileSandboxPageInner({
   const restoreFromStorage = useUploadStore((s) => s.restoreFromStorage);
   const sourceFileName = useUploadStore((s) => s.sourceFileName);
   const coachmarkTourActive = useCoachmarkStore((s) => s.isActive);
-  const { score, setScore, deleteSelection, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
+  const { score, setScore, applyScore, visibleParts, togglePartVisibility } = useScoreStore();
   const { activeTool, setActiveTool, clearSelection, selection, setSelection, toggleNoteSelection } = useToolStore();
   const {
     messages: inspectorMessages,
@@ -956,10 +960,13 @@ function TactileSandboxPageInner({
         "edit-redo": () => riffSessionRef.current?.editorRedo(),
         "edit-cut": () => {
           if (!score || selection.length === 0) return;
-          const noteIds = selection.map((s) => s.noteId);
-          setClipboard(extractNotes(score, new Set(noteIds)));
-          deleteSelection(noteIds);
-          clearSelection();
+          const noteIds = new Set(selection.map((s) => s.noteId));
+          setClipboard(extractNotes(score, noteIds));
+          scheduleDeleteSelectionAsRests(
+            riffSessionRef.current,
+            noteIds,
+            clearSelection,
+          );
         },
         "edit-copy": () => {
           if (!score || selection.length === 0) return;
@@ -976,9 +983,19 @@ function TactileSandboxPageInner({
           applyScore(next);
         },
         "edit-delete": () => {
-          if (!score || selection.length === 0) return;
-          deleteSelection(selection.map((s) => s.noteId));
-          clearSelection();
+          if (!score) return;
+          const fallback = new Set(selection.map((s) => s.noteId));
+          if (
+            fallback.size === 0 &&
+            !riffSessionRef.current?.getTransposeTargetNoteIds().size
+          ) {
+            return;
+          }
+          scheduleDeleteSelectionAsRests(
+            riffSessionRef.current,
+            fallback,
+            clearSelection,
+          );
         },
         "insert-rest": () => {
           if (!score) return;
@@ -1021,16 +1038,17 @@ function TactileSandboxPageInner({
       };
       if (editHandlers[toolId]) {
         editHandlers[toolId]();
-      } else if (durationMap[toolId] && selection.length > 0) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        const next = setNoteDurations(live, noteIds, durationMap[toolId]);
-        applyScore(next);
       } else if (durationMap[toolId]) {
-        setActiveTool(toolId);
+        const durationFallback = new Set(selection.map((s) => s.noteId));
+        if (hasDurationEditableSelection(riffSessionRef.current, durationFallback)) {
+          scheduleSetNoteDurations(
+            riffSessionRef.current,
+            durationMap[toolId],
+            durationFallback,
+          );
+        } else {
+          setActiveTool(toolId);
+        }
       } else if (toolId === "duration-rest-toggle" && selection.length > 0) {
         riffSessionRef.current?.flushToZustand?.();
         const live = useScoreStore.getState().score;
@@ -1322,7 +1340,7 @@ function TactileSandboxPageInner({
         setActiveTool(toolId);
       }
     },
-    [score, selection, deleteSelection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly, downloadLiveXml]
+    [score, selection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly, downloadLiveXml]
   );
 
   const handleToolbarAction = React.useCallback(

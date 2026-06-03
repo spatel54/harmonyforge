@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   cloneScore,
   convertRestToPitch,
+  deleteNotes,
   deleteNotesAsRests,
   enforceMeasureBeatCaps,
   extractMelodyOnlyScore,
@@ -20,6 +21,7 @@ import {
   naturalDiatonicStepNotes,
   restsToNotes,
   scoreHasMeasureOverflow,
+  setNoteDurations,
   setNoteDynamics,
   setPitchByLetter,
   spellMidiPreferMajorKeySignature,
@@ -347,6 +349,275 @@ describe("deleteNotesAsRests", () => {
     expect(notes.length).toBeGreaterThanOrEqual(4);
     expect(notes[0]!.isRest).toBe(true);
     expect(notes[0]!.duration).toBe("q");
+  });
+
+  it("deleteNotesAsRests preserves event count unlike RiffScore event removal", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "h" },
+                { id: "b", pitch: "D5", duration: "q" },
+                { id: "c", pitch: "E5", duration: "8" },
+                { id: "d", pitch: "F5", duration: "8" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const spliced = deleteNotes(score, new Set(["b"]));
+    expect(spliced.parts[0]!.measures[0]!.notes).toHaveLength(3);
+    const asRests = deleteNotesAsRests(score, new Set(["b"]));
+    const notes = asRests.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(4);
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[1]!.duration).toBe("q");
+    const total = notes.reduce((s, n) => s + noteBeats(n), 0);
+    expect(total).toBeCloseTo(4, 5);
+  });
+});
+
+function measureBeats(score: EditableScore, mIdx = 0): number {
+  const notes = score.parts[0]!.measures[mIdx]!.notes;
+  return notes.reduce((s, n) => s + noteBeats(n), 0);
+}
+
+describe("setNoteDurations", () => {
+  it("shortens half to quarter note plus quarter rest", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "h" },
+                { id: "b", pitch: "D5", duration: "q" },
+                { id: "c", pitch: "E5", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["a"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(4);
+    expect(notes[0]!.duration).toBe("q");
+    expect(notes[0]!.isRest).toBeFalsy();
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[1]!.duration).toBe("q");
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("shortens half to eighth plus three eighth rests", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "h" },
+                { id: "b", pitch: "D5", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["a"]), "8");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(5);
+    expect(notes[0]!.duration).toBe("8");
+    expect(notes[0]!.isRest).toBeFalsy();
+    expect(notes.slice(1, 4).every((n) => n.isRest && n.duration === "8")).toBe(true);
+    expect(notes[4]!.duration).toBe("h");
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("lengthens eighth to quarter by consuming one following eighth rest", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "8" },
+                { id: "r1", pitch: "B4", duration: "8", isRest: true },
+                { id: "r2", pitch: "B4", duration: "8", isRest: true },
+                { id: "r3", pitch: "B4", duration: "8", isRest: true },
+                { id: "tail", pitch: "G5", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["a"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[0]!.duration).toBe("q");
+    expect(notes[0]!.isRest).toBeFalsy();
+    expect(notes).toHaveLength(4);
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[1]!.duration).toBe("8");
+    expect(notes[2]!.isRest).toBe(true);
+    expect(notes[2]!.duration).toBe("8");
+    expect(notes[3]!.duration).toBe("h");
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("lengthens beamed eighth G to quarter by absorbing preceding eighth (after dotted half rest)", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "rest", pitch: "B4", duration: "h", dots: 1, isRest: true },
+                { id: "beam-a", pitch: "A4", duration: "8" },
+                { id: "beam-g", pitch: "G4", duration: "8" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["beam-g"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(2);
+    expect(notes[0]!.isRest).toBe(true);
+    expect(notes[1]!.duration).toBe("q");
+    expect(notes[1]!.pitch).toBe("G4");
+    expect(notes.find((n) => n.id === "beam-a")).toBeUndefined();
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("lengthens beamed eighth G to quarter by absorbing preceding eighth B", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "half", pitch: "B4", duration: "h", dots: 1 },
+                { id: "beam-b", pitch: "B4", duration: "8" },
+                { id: "beam-g", pitch: "G4", duration: "8" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["beam-g"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(2);
+    expect(notes[0]!.duration).toBe("h");
+    expect(notes[0]!.dots).toBe(1);
+    expect(notes[1]!.id).toBe("beam-g");
+    expect(notes[1]!.duration).toBe("q");
+    expect(notes[1]!.pitch).toBe("G4");
+    expect(notes.find((n) => n.id === "beam-b")).toBeUndefined();
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("lengthens eighth to quarter when only one eighth rest follows", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "8" },
+                { id: "r1", pitch: "B4", duration: "8", isRest: true },
+                { id: "b", pitch: "D5", duration: "q" },
+                { id: "c", pitch: "E5", duration: "q" },
+                { id: "tail", pitch: "G5", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["a"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes[0]!.duration).toBe("q");
+    expect(notes[0]!.isRest).toBeFalsy();
+    expect(notes.filter((n) => n.isRest && n.id === "r1")).toHaveLength(0);
+    expect(measureBeats(next)).toBeCloseTo(4, 5);
+  });
+
+  it("updates multiple measures when several notes are selected", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "p1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "a", pitch: "C5", duration: "h" },
+                { id: "b", pitch: "D5", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+      divisions: 4,
+    };
+    const next = setNoteDurations(score, new Set(["a", "b"]), "q");
+    const notes = next.parts[0]!.measures[0]!.notes;
+    expect(notes).toHaveLength(4);
+    expect(notes[0]!.duration).toBe("q");
+    expect(notes[2]!.duration).toBe("q");
+    expect(notes[1]!.isRest).toBe(true);
+    expect(notes[3]!.isRest).toBe(true);
   });
 });
 

@@ -20,3 +20,5 @@ export function setPendingRiffScorePlayFrom(
 export function clearPendingRiffScorePlayFrom(): void {
   (globalThis as G).__HF_RIFFSCORE_PLAY_FROM = null;
 }
+
+export { installPlaybackMetronomeBridge } from "./playbackMetronome";

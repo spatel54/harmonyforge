@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
 import { RiffScoreEditor } from "../score/RiffScoreEditor";
 import { extractMusicXMLMetadata, parseMusicXML } from "@/lib/music/musicxmlParser";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export interface ScorePreviewPaneProps {
   /** Raw MusicXML — when provided, renders preview via RiffScoreEditor */
@@ -13,6 +14,8 @@ export interface ScorePreviewPaneProps {
 }
 
 export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScorePreviewPaneProps) {
+  const showNoteNameLabels = useScoreDisplayStore((s) => s.showNoteNameLabels);
+
   const meta = React.useMemo(() => {
     if (!musicXML) return null;
     return extractMusicXMLMetadata(musicXML);
@@ -47,6 +50,8 @@ export function ScorePreviewPane({ musicXML, previewRootRef, className }: ScoreP
               score={score}
               className="w-full min-h-full"
               presentation
+              showNoteNameLabels={showNoteNameLabels}
+              allowNoteNameLabelsInPresentation={showNoteNameLabels}
             />
           </div>
         ) : (
