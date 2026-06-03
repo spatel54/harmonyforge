@@ -46,10 +46,51 @@ index 1ca537c..ee2d0eb 100644
      scale?: number;
      label?: string;
 diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
-index ef82e00..b3a91ca 100644
+index ef82e00..c7e5082 100644
 --- a/node_modules/riffscore/dist/index.js
 +++ b/node_modules/riffscore/dist/index.js
-@@ -3426,7 +3426,7 @@ var initTone = async (onState) => {
+@@ -1165,12 +1165,25 @@ var CLEF_REFERENCE = {
+ var getOffsetForPitch = (pitch, clef = "treble") => {
+   if (!pitch) return 0;
+   const normalizedPitch = getStaffPitch(pitch);
++  const ref = CLEF_REFERENCE[clef] || CLEF_REFERENCE.treble;
++  const match = normalizedPitch.match(/^([A-G])(\d+)$/);
++  if (clef === "alto" || clef === "tenor") {
++    if (!match) return 0;
++    const [, letter, octStr] = match;
++    const octave = parseInt(octStr, 10);
++    const refMatch = ref.pitch.match(/^([A-G])(\d+)$/);
++    if (!refMatch) return ref.offset;
++    const [, refLetter, refOctStr] = refMatch;
++    const refOctave = parseInt(refOctStr, 10);
++    const letterIdx = STAFF_LETTERS.indexOf(letter);
++    const refLetterIdx = STAFF_LETTERS.indexOf(refLetter);
++    const stepsFromRef = (octave - refOctave) * 7 + (letterIdx - refLetterIdx);
++    return ref.offset - stepsFromRef * 6;
++  }
+   const mapping = getPitchToOffset(clef);
+   if (mapping[normalizedPitch] !== void 0) {
+     return mapping[normalizedPitch];
+   }
+-  const ref = CLEF_REFERENCE[clef] || CLEF_REFERENCE.treble;
+-  const match = normalizedPitch.match(/^([A-G])(\d+)$/);
+   if (!match) return 0;
+   const [, letter, octStr] = match;
+   const octave = parseInt(octStr, 10);
+@@ -1184,6 +1197,12 @@ var getOffsetForPitch = (pitch, clef = "treble") => {
+   return ref.offset - stepsFromRef * 6;
+ };
+ var getPitchForOffset = (offset, clef = "treble") => {
++  if (clef === "alto" || clef === "tenor") {
++    const ref = CLEF_REFERENCE[clef];
++    if (!ref) return "C4";
++    const stepsFromRef = Math.round((ref.offset - offset) / 6);
++    return movePitchVisual(ref.pitch, stepsFromRef);
++  }
+   const mapping = getYToPitch(clef);
+   return mapping[offset];
+ };
+@@ -3426,7 +3445,7 @@ var initTone = async (onState) => {
  var loadPianoSampler = (Tone) => {
    if (sampler) return;
    updateState({ instrumentState: "loading-samples" });
@@ -58,7 +99,7 @@ index ef82e00..b3a91ca 100644
    sampler = new Tone.Sampler({
      urls: {
        A0: "A0.mp3",
-@@ -3692,6 +3692,16 @@ var usePlayback = (score, bpm) => {
+@@ -3692,6 +3711,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -75,7 +116,7 @@ index ef82e00..b3a91ca 100644
    const exitPlaybackMode = React2.useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3700,6 +3710,10 @@ var usePlayback = (score, bpm) => {
+@@ -3700,6 +3729,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -86,7 +127,7 @@ index ef82e00..b3a91ca 100644
    }, []);
    const pausePlayback = React2.useCallback(() => {
      stopTonePlayback();
-@@ -3708,6 +3722,7 @@ var usePlayback = (score, bpm) => {
+@@ -3708,6 +3741,7 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = React2.useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -94,7 +135,7 @@ index ef82e00..b3a91ca 100644
        await ensureInit();
        stopTonePlayback();
        setLastPlayStart({ measureIndex: startMeasureIndex, quant: startQuant });
-@@ -3738,10 +3753,12 @@ var usePlayback = (score, bpm) => {
+@@ -3738,10 +3772,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -107,7 +148,7 @@ index ef82e00..b3a91ca 100644
              }
            );
          });
-@@ -3754,9 +3771,23 @@ var usePlayback = (score, bpm) => {
+@@ -3754,9 +3790,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -134,7 +175,7 @@ index ef82e00..b3a91ca 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -8740,13 +8771,36 @@ var useInteraction = ({
+@@ -8740,13 +8790,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -172,7 +213,7 @@ index ef82e00..b3a91ca 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8765,7 +8819,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8765,7 +8838,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -184,7 +225,7 @@ index ef82e00..b3a91ca 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -18041,7 +18098,8 @@ var Toolbar = React2.forwardRef(
+@@ -18041,7 +18117,8 @@ var Toolbar = React2.forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -194,7 +235,7 @@ index ef82e00..b3a91ca 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18190,6 +18248,26 @@ var Toolbar = React2.forwardRef(
+@@ -18190,6 +18267,26 @@ var Toolbar = React2.forwardRef(
                  }
                )
              ] }),
@@ -221,7 +262,7 @@ index ef82e00..b3a91ca 100644
              /* @__PURE__ */ jsxRuntime.jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsxRuntime.jsx(
                ToolbarButton_default,
-@@ -23943,7 +24021,8 @@ var ScoreEditorContent = ({
+@@ -23943,7 +24040,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -231,7 +272,7 @@ index ef82e00..b3a91ca 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24159,7 +24238,8 @@ var ScoreEditorContent = ({
+@@ -24159,7 +24257,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -241,7 +282,7 @@ index ef82e00..b3a91ca 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsxRuntime.jsx(Portal_default, { children: /* @__PURE__ */ jsxRuntime.jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24272,7 +24352,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24272,7 +24371,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,
@@ -252,10 +293,51 @@ index ef82e00..b3a91ca 100644
          ) }) })
        ]
 diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
-index fc71835..49fd66c 100644
+index fc71835..a9eff4a 100644
 --- a/node_modules/riffscore/dist/index.mjs
 +++ b/node_modules/riffscore/dist/index.mjs
-@@ -3686,6 +3686,16 @@ var usePlayback = (score, bpm) => {
+@@ -1159,12 +1159,25 @@ var CLEF_REFERENCE = {
+ var getOffsetForPitch = (pitch, clef = "treble") => {
+   if (!pitch) return 0;
+   const normalizedPitch = getStaffPitch(pitch);
++  const ref = CLEF_REFERENCE[clef] || CLEF_REFERENCE.treble;
++  const match = normalizedPitch.match(/^([A-G])(\d+)$/);
++  if (clef === "alto" || clef === "tenor") {
++    if (!match) return 0;
++    const [, letter, octStr] = match;
++    const octave = parseInt(octStr, 10);
++    const refMatch = ref.pitch.match(/^([A-G])(\d+)$/);
++    if (!refMatch) return ref.offset;
++    const [, refLetter, refOctStr] = refMatch;
++    const refOctave = parseInt(refOctStr, 10);
++    const letterIdx = STAFF_LETTERS.indexOf(letter);
++    const refLetterIdx = STAFF_LETTERS.indexOf(refLetter);
++    const stepsFromRef = (octave - refOctave) * 7 + (letterIdx - refLetterIdx);
++    return ref.offset - stepsFromRef * 6;
++  }
+   const mapping = getPitchToOffset(clef);
+   if (mapping[normalizedPitch] !== void 0) {
+     return mapping[normalizedPitch];
+   }
+-  const ref = CLEF_REFERENCE[clef] || CLEF_REFERENCE.treble;
+-  const match = normalizedPitch.match(/^([A-G])(\d+)$/);
+   if (!match) return 0;
+   const [, letter, octStr] = match;
+   const octave = parseInt(octStr, 10);
+@@ -1178,6 +1191,12 @@ var getOffsetForPitch = (pitch, clef = "treble") => {
+   return ref.offset - stepsFromRef * 6;
+ };
+ var getPitchForOffset = (offset, clef = "treble") => {
++  if (clef === "alto" || clef === "tenor") {
++    const ref = CLEF_REFERENCE[clef];
++    if (!ref) return "C4";
++    const stepsFromRef = Math.round((ref.offset - offset) / 6);
++    return movePitchVisual(ref.pitch, stepsFromRef);
++  }
+   const mapping = getYToPitch(clef);
+   return mapping[offset];
+ };
+@@ -3686,6 +3705,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -272,7 +354,7 @@ index fc71835..49fd66c 100644
    const exitPlaybackMode = useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3694,6 +3704,10 @@ var usePlayback = (score, bpm) => {
+@@ -3694,6 +3723,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -283,7 +365,7 @@ index fc71835..49fd66c 100644
    }, []);
    const pausePlayback = useCallback(() => {
      stopTonePlayback();
-@@ -3702,6 +3716,7 @@ var usePlayback = (score, bpm) => {
+@@ -3702,6 +3735,7 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -291,7 +373,7 @@ index fc71835..49fd66c 100644
        await ensureInit();
        stopTonePlayback();
        setLastPlayStart({ measureIndex: startMeasureIndex, quant: startQuant });
-@@ -3732,10 +3747,12 @@ var usePlayback = (score, bpm) => {
+@@ -3732,10 +3766,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -304,7 +386,7 @@ index fc71835..49fd66c 100644
              }
            );
          });
-@@ -3748,9 +3765,23 @@ var usePlayback = (score, bpm) => {
+@@ -3748,9 +3784,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -331,7 +413,7 @@ index fc71835..49fd66c 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -8734,13 +8765,36 @@ var useInteraction = ({
+@@ -8734,13 +8784,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -369,7 +451,7 @@ index fc71835..49fd66c 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8759,7 +8813,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8759,7 +8832,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -381,7 +463,7 @@ index fc71835..49fd66c 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -18035,7 +18092,8 @@ var Toolbar = forwardRef(
+@@ -18035,7 +18111,8 @@ var Toolbar = forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -391,7 +473,7 @@ index fc71835..49fd66c 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18184,6 +18242,26 @@ var Toolbar = forwardRef(
+@@ -18184,6 +18261,26 @@ var Toolbar = forwardRef(
                  }
                )
              ] }),
@@ -418,7 +500,7 @@ index fc71835..49fd66c 100644
              /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsx(
                ToolbarButton_default,
-@@ -23937,7 +24015,8 @@ var ScoreEditorContent = ({
+@@ -23937,7 +24034,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -428,7 +510,7 @@ index fc71835..49fd66c 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24153,7 +24232,8 @@ var ScoreEditorContent = ({
+@@ -24153,7 +24251,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -438,7 +520,7 @@ index fc71835..49fd66c 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24266,7 +24346,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24266,7 +24365,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,

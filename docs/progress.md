@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03) — **RiffScore alto/tenor layout patch restored** in **`patches/riffscore+1.0.0-alpha.9.patch`** (`getOffsetForPitch` / `getPitchForOffset`); sandbox viola noteheads should match **OSMD PDF/Print**; **`origin`** → **`spatel54/harmonyforge`** — **open:** manual viola/tenor QA after **`rm -rf .next`**
 - [Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03) — **Audiveris-only** PDF → MusicXML; **OSMD** print/PDF; **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed); honest Playground progress bar; **`make test` 304** — **open:** PDF OMR quality QA on real scans; **RiffScore measure-gutter selection** after Audiveris import (fixed **`Target event not found`**, re-verify in browser)
 - [Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27) — **`hfNoteToRsEvent`** splits **letter+octave** vs **`accidental`** for RiffScore; sandbox **sharp/flat** path **flush → live score → Salamander preview**; Inspector **Stylist options** **`details`** + chat seed **`Try other harmony ideas`** → **`requestSuggestion`**; Explanation tab **lay copy** — **open:** manual QA (dense scores, multi-select, touch); **program watch:** toolbar **`Octave ↓`** ([Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm))
 - [Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27) — **keyboard ↑/↓** = **diatonic white-key steps** + **natural-only** stored pitches; **⌘/Ctrl+↑/↓** = octave then **natural letters**; **Salamander** pitch preview matches RiffScore clicks; **`getServerOpenAIEnv`** **swaps** mistaken **`OPENAI_API_KEY` ↔ `OPENAI_MODEL`** + **`configHint`** in Theory Inspector; **SATB audit** chat line = short **red vs blue** explanation — **open:** manual QA (arrows, preview, **Octave ↓**); confirm **Vercel** env on **Preview** + redeploy
@@ -50,6 +51,54 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-viola-sandbox-export-parity-2026-06-03"></a>
+
+## Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)
+
+### End goal
+
+1. **Sandbox canvas parity:** For **alto** and **tenor C-clef** staves (notably generated **Viola**), **RiffScore** in `/sandbox` must show the **same written pitches and vertical placement** as **PDF/Print export** (OSMD via **`scoreToPartwiseMusicXML`**). Users should not see **E/G** on the wrong lines in the editor while the print preview shows **C4 on the middle line** and **E4 on line 4** (MusicXML alto clef).
+2. **Contributor push path:** Collaborators with write access must **`git push`** to **[`spatel54/harmonyforge`](https://github.com/spatel54/harmonyforge)** without remote or auth misconfiguration.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **Symptom** | Reported mismatch: sandbox **Viola** staff showed wrong noteheads/learner labels; **Export → PDF/Print** (OSMD) showed correct engraving for the same score. |
+| **Dual render paths** | **Sandbox + Export modal preview** → **RiffScore** (`editableScoreToRsScore`, clef on each staff). **PDF/Print** → flush → **`scoreToPartwiseMusicXML`** → **OpenSheetMusicDisplay** (clef-aware MusicXML). HF Zustand / MusicXML pitches were already correct; defect was **RiffScore vertical layout** on C-clefs. |
+| **Root cause** | **`getOffsetForPitch`** in upstream **`riffscore@1.0.0-alpha.9`** hits the **treble `PITCH_TO_OFFSET`** table for common pitches (**C4**, **E4**, **G4**, …) even when **`clef === "alto"`** or **`"tenor"`**, so noteheads use **treble Y geometry** under an **alto C-clef** symbol. **`getPitchForOffset`** always inverts via **`Y_TO_PITCH`** (treble map) for non-bass clefs. |
+| **Doc vs patch drift** | **[Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)** and **`plan.md`** already described the fix, but **`frontend/patches/riffscore+1.0.0-alpha.9.patch`** (June 2026) contained **toolbar / playback / Salamander** hunks only — **not** the alto/tenor layout change. Treat “documented” ≠ “patched” until **`grep getOffsetForPitch`** in the patch file. |
+| **Fix** | Patch **`node_modules/riffscore/dist/index.js`** and **`index.mjs`**: for **`alto`** / **`tenor`**, **`getOffsetForPitch`** always uses the **`CLEF_REFERENCE`** diatonic formula (skip treble lookup); **`getPitchForOffset`** inverts with **`movePitchVisual(ref.pitch, stepsFromRef)`**. Regenerate patch via **`npx patch-package riffscore`**. After pull: **`cd frontend && rm -rf .next && npm install`**. |
+| **Git remote** | **`origin`** must be **`https://github.com/spatel54/harmonyforge.git`**. A stray **`dvjgenis/harmonyforge`** remote yields **Repository not found**; **403** means the GitHub user lacks **collaborator write** on **`spatel54/harmonyforge`** (invite + accept, then re-auth as the invited account). |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| **Git push triage** | **`git remote -v`** showed **`origin`** briefly pointed at non-existent **`dvjgenis/harmonyforge`**; restored **`spatel54/harmonyforge`**; **`git push`** succeeded (**`main`**, commit *pdf input and export*). |
+| **Reproduce report** | User screenshots: sandbox **Viola** eighths labeled/placed as **E** / **G**; OSMD PDF preview **C4** (middle line) + **E4** (line 4) — classic **treble-offset-on-alto-staff** symptom. |
+| **Code audit** | Confirmed **`hfClefToRs`** maps **`part.clef === "alto"`** → RiffScore **`alto`** staff; **`scoreToPartwiseMusicXML`** emits **`<clef><sign>C</sign><line>3</line></clef>`** for viola. Bug isolated to RiffScore **`positioning.ts`** bundle in **`dist/*.js`**. |
+| **Patch applied** | Alto/tenor branches added to **`getOffsetForPitch`** and **`getPitchForOffset`** in **`index.js`** + **`index.mjs`**. |
+| **`patch-package`** | **`frontend/patches/riffscore+1.0.0-alpha.9.patch`** regenerated (layout hunks now present alongside existing Salamander / toolbar / playback changes). |
+| **Tests** | **`make test`** → **304** Vitest passing (no new failures). |
+
+### Verification
+
+- **`make test`** — **304** passing.
+- **Manual (required):** Generate or load a score with **Viola** (alto clef) + compare **Sandbox** vs **Export → PDF/Print**; learner labels above noteheads should match OSMD (e.g. **C4** on middle line, **E4** on line 4). Restart dev after patch: **`cd frontend && rm -rf .next && make dev`**.
+
+### Current failure / open work
+
+- **Browser QA not closed:** Spot-check **viola**, **tenor C-clef**, and **multi-staff** ensembles (Melody + Viola + Cello) after clearing **`.next`** — confirm noteheads **and** learner letter labels align with OSMD export.
+- **Export modal left pane:** Still **RiffScore `presentation`** ([`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx)); should match sandbox once patch is loaded — **PDF/Print** was the reference “correct” surface before this fix.
+- **Unchanged program gaps:** PDF **OMR recognition quality**; **RiffScore measure-gutter** after Audiveris import; toolbar **`Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)); **Vercel** PDF = raster-only (no Java OMR).
+
+### Learnings (2026-06-03 PM)
+
+- **Sandbox ≠ PDF is a diagnostic:** When OSMD export looks right but RiffScore canvas wrong, suspect **editor layout** (clef-specific offsets), not the SATB engine or **`scoreToMusicXML`** serialization.
+- **Patch-package regression:** Re-run **`grep getOffsetForPitch`** (or **`alto`**) on **`frontend/patches/riffscore+*.patch`** after any RiffScore patch refresh — the April 2026 narrative assumed layout hunks that were never committed.
+- **Git remotes:** **`Repository not found`** on push usually means wrong **`origin` URL**; **403** means wrong GitHub account or missing collaborator invite on the upstream org/user repo.
 
 <a id="wl-export-audiveris-2026-06-03"></a>
 
@@ -125,6 +174,12 @@ Same tranche, after initial ship. Goal: make PDF intake and OSMD export **produc
 - API timeout: **`POST /api/to-preview-musicxml`** **`maxDuration=900`** (matches **`DEFAULT_AUDIVERIS_MS`**).
 
 <a id="last-updated-2026-06-03-audiveris-export"></a>
+
+### Last updated (2026-06-03 PM — viola sandbox vs export parity)
+
+- **Narrative (end goal · approach · steps · open work):** **[Work log — Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)** — restored **RiffScore alto/tenor `getOffsetForPitch` / `getPitchForOffset`** in **`patches/riffscore+1.0.0-alpha.9.patch`**; **`origin`** → **`spatel54/harmonyforge`**.
+- **Tests:** **`make test`** → **304** Vitest passing.
+- **Current failure:** **Manual browser QA** on viola/tenor staves after **`rm -rf .next`**; broader gaps unchanged (**PDF OMR quality**, measure-gutter re-verify, **`Octave ↓`**).
 
 ### Last updated (2026-06-03 — OSMD export + Audiveris PDF intake)
 
@@ -457,19 +512,21 @@ Shipped from **[Iteration6.txt](Iteration6.txt)** / study feedback: **pedal bass
 | **Export modal** | Paper background **`#F8F3EA`**, **`presentation` → LIGHT**, PNG uses same paper (not system dark). |
 | **Multi-select** | **`mapRiffSelectedNotesToHFSelections`**, **`onEditorSelectionChange`**, **`editorSelectAll` / `editorDeselectAll`**, ⌘A / Esc parity. |
 | **Viola / alto clef (adapter)** | **`riffscoreAdapter.ts`** — **`hfClefToRs`** staff-clef interpretation; **`riffscoreAdapter.test.ts`** — *maps viola alto C-clef to RiffScore alto staff*. |
-| **Viola / alto & tenor (RiffScore layout)** | **`patches/riffscore+1.0.0-alpha.9.patch`** — **`getOffsetForPitch`** / **`getPitchForOffset`** in **`dist/index.js`** and **`dist/index.mjs`** so **alto/tenor** staves use **C-clef geometry**, not the treble offset table. |
+| **Viola / alto & tenor (RiffScore layout)** | **`patches/riffscore+1.0.0-alpha.9.patch`** — **`getOffsetForPitch`** / **`getPitchForOffset`** in **`dist/index.js`** and **`dist/index.mjs`** so **alto/tenor** staves use **C-clef geometry**, not the treble offset table. **Regression (2026-06-03):** patch had **lost** these hunks (toolbar-only patch); **re-shipped** same day — see **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**. |
 | **CJS / ESM parity + `pendingClefChange`** | Same patch — **`Toolbar`** accepts **`toolbarPlugins = []`** and renders plugin row; **`ScoreEditorContent`** / **`RiffScoreInner`** pass **`config.ui.toolbarPlugins`** on **`index.js`** as well as **`index.mjs`**; **`ScoreProvider`** uses **`SetSingleStaffCommand`** when collapsing grand staff (no dialog state). |
 
 ### Current failure / what we are working on now
 
+- **Recently addressed (2026-06-03 PM):**
+  - **Sandbox viola ≠ OSMD PDF** — **MusicXML + HF + OSMD** were correct; **RiffScore** used **treble Y-offsets** on **alto/tenor** staves because the **layout hunks were missing** from the live **`patch-package`** file (documented in April, not applied until June). **Fixed** — see **[Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)**.
 - **Recently addressed (2026-04-23 late):**
-  - **“Wrong notes” on generated viola** — **MusicXML + HF** were already correct; **RiffScore** placed pitches using **treble Y-offsets** on **alto/tenor** staves. **Fixed** in **`patches/riffscore+1.0.0-alpha.9.patch`** (see **Approach §7** above).
+  - **“Wrong notes” on generated viola** — same root cause; **first fix narrative** in **Approach §7** above (patch content must be verified after every RiffScore refresh).
   - **`ReferenceError: pendingClefChange is not defined`** (stack often pointed at **`RiffScoreEditor`** / dynamic **`RiffScore`** mount) — caused by **removed** React state while a **stale Turbopack chunk** or **CJS `index.js`** path did not match the patched **`index.mjs`**. **Mitigation:** **`toolbarPlugins`** parity on **`dist/index.js`**, full **`patch-package`** regenerate, and **`cd frontend && rm -rf .next && npm install`** after pulling.
 - **Still open — validation and edge cases (non-blocking):**
   - **Dense notation & chords** — rest hit order, ghost pitch vs RiffScore’s own preview, chord-heavy layouts.
   - **Theory Inspector overlay** — **`noteInspectionEnabled`** disables the ghost by design; confirm **native RiffScore selection** vs **HF overlay** do not **drift** during multi-select or inspector-driven focus.
   - **Touch / tablet** — **no hover**; rest → note still relies on **select + A–G** (and related paths); optional future **long-press** or explicit control if study feedback requires it.
-  - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch.
+  - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch (**re-opened 2026-06-03** — patch hunks restored; needs browser pass after **`rm -rf .next`**).
 - **Lint (carryover from 2026-04-22):** **`@next/next/no-img-element`**, unused **`_e`** in **`RiffScoreEditor`** **`handleKeyDown`** — warnings only unless CI is tightened.
 
 ---
@@ -2016,6 +2073,8 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
+**2026-06-03 PM session (viola sandbox vs export · git remote):** End goal, approach, completed steps, and **open work** — **[Work log — Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)**. **Shipped:** RiffScore **`getOffsetForPitch` / `getPitchForOffset`** alto/tenor fix restored in **`patches/riffscore+1.0.0-alpha.9.patch`**; **`origin`** corrected to **`spatel54/harmonyforge`**. **Open:** **Manual QA** — viola/tenor noteheads and learner labels vs OSMD PDF after **`cd frontend && rm -rf .next && make dev`**.
+
 **2026-06-03 session (OSMD export · Audiveris PDF intake · polish):** End goal, approach, completed steps, and **open work** — **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)**. **Shipped:** Audiveris-only OMR, OSMD print/PDF, Java 25 auto-detection, honest Playground loader, MusicXML beaming/metronome, **`scripts/audiveris/`** ( **`approach_source_audiveris/`** deleted). **Open:** PDF **recognition quality** on real scans; **re-verify** measure-gutter selection after PDF import (**`Target event not found`** fix in **`RiffScoreEditor`**).
 
 **2026-04-27 session (naturals keyboard · LLM env · audit UX):** End goal, approach, completed steps, and **open failures** are summarized in **[Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy](#wl-sandbox-naturals-llm-audit-2026-04-27)** — especially **manual QA** on **toolbar `Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)) and **Vercel Preview** env + **redeploy** after **`OPENAI_*`** changes.
@@ -2557,11 +2616,12 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-**Immediate (2026-06 — see [Audiveris work log](#wl-export-audiveris-2026-06-03)):**
-1. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
-2. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
-3. **OSMD export QA** — Export → PDF/Print: beamed eighths, tempo placement, no blank preview page.
-4. **Vercel vs Docker** — Confirm PDF on Vercel shows raster + actionable 501; self-hosted Docker path runs full Audiveris pipeline — **[deployment.md](deployment.md)**.
+**Immediate (2026-06 — see [Audiveris work log](#wl-export-audiveris-2026-06-03) + [Viola parity work log](#wl-viola-sandbox-export-parity-2026-06-03)):**
+1. **Viola / alto–tenor sandbox QA** — After **`rm -rf .next`**, generate or load **Melody + Viola + Cello** (or similar); confirm **Sandbox** noteheads and learner labels match **Export → PDF/Print** (OSMD). See **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**.
+2. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
+3. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
+4. **OSMD export QA** — Export → PDF/Print: beamed eighths, tempo placement, no blank preview page.
+5. **Vercel vs Docker** — Confirm PDF on Vercel shows raster + actionable 501; self-hosted Docker path runs full Audiveris pipeline — **[deployment.md](deployment.md)**.
 
 **Still relevant (2026-04 backlog):**
 1. ~~**PDF→MusicXML (oemer)**~~ — **Superseded by Audiveris (2026-06-03)** — see **`scripts/audiveris/`** and **[work log](#wl-export-audiveris-2026-06-03)**.
