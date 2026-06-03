@@ -1029,11 +1029,22 @@ a.hf-pressable:active {
   pointer-events: none;
   z-index: -1;
 }
+
+/* On-screen layout pass while OSMD renders, before print preview opens. */
+.hf-print-root--rendering {
+  left: 0 !important;
+  visibility: hidden;
+}
 .hf-print-root__score {
   width: 100%;
   background: white;
   color: black;
   padding: 12px;
+}
+
+.hf-print-root__score svg {
+  max-width: 100%;
+  height: auto;
 }
 
 @media print {
@@ -1068,12 +1079,8 @@ a.hf-pressable:active {
   }
 
   /* New print pipeline — only the ExportPrintRoot renders. */
-  body.hf-printing-score > * {
+  body.hf-printing-score > *:not(.hf-print-root) {
     display: none !important;
-  }
-  body.hf-printing-score .hf-print-root,
-  body.hf-printing-score .hf-print-root * {
-    display: revert !important;
   }
   body.hf-printing-score .hf-print-root {
     display: block !important;
@@ -1082,7 +1089,13 @@ a.hf-pressable:active {
     top: auto !important;
     width: 100% !important;
     max-width: none !important;
+    visibility: visible !important;
     pointer-events: auto !important;
     z-index: auto !important;
+  }
+  body.hf-printing-score .hf-print-root svg {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
   }
 }

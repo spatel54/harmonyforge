@@ -128,7 +128,7 @@ describe("fileIntake helpers", () => {
 describe("intakeFileToParsedScore", () => {
   beforeEach(() => {
     mockedSpawn.mockReset();
-    delete process.env.PDFALTO_BIN;
+    delete process.env.AUDIVERIS_BIN;
   });
 
   it("parses MXL buffer mislabeled as .xml via ZIP sniff", () => {
@@ -218,21 +218,31 @@ describe("intakeFileToParsedScore", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("runs pdfalto then pdftoppm when PDF and tools fail → 501 with setup hints", () => {
-    mockedSpawn.mockReturnValue({
-      status: 1,
-      stderr: "",
-      stdout: "",
-      error: undefined,
-    } as ReturnType<typeof spawnSync>);
+  it("runs Audiveris when PDF and tools fail → 501 with setup hints", () => {
+    mockedSpawn.mockImplementation((cmd: string) => {
+      if (typeof cmd === "string" && (cmd === "java" || cmd.endsWith("/java"))) {
+        return {
+          status: 0,
+          stderr: 'openjdk version "25.0.1" 2025-10-21',
+          stdout: "",
+          error: undefined,
+        };
+      }
+      return {
+        status: 1,
+        stderr: "",
+        stdout: "",
+        error: undefined,
+      };
+    });
     const r = intakeFileToParsedScore(Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"), "score.pdf", {
       allowPdfOm: true,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.failure.status).toBe(501);
-      expect(r.failure.error).toMatch(/pdfalto/i);
-      expect(r.failure.error).toMatch(/oemer/i);
+      expect(r.failure.error).toMatch(/audiveris/i);
+      expect(r.failure.error).toMatch(/make audiveris-setup/i);
     }
     expect(mockedSpawn.mock.calls.length).toBeGreaterThanOrEqual(1);
   });

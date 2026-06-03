@@ -48,8 +48,7 @@ import { toPng } from "html-to-image";
 import { zipSync, strToU8 } from "fflate";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
-import { ExportPrintRoot } from "@/components/organisms/ExportPrintRoot";
-import type { PrintableScoreHandle } from "@/components/score/PrintableScore";
+import { ExportPrintRoot, type PrintableScoreHandle } from "@/components/organisms/ExportPrintRoot";
 import { SandboxPalettePanel } from "@/components/organisms/SandboxPalettePanel";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
 import { ConfigurationBackFAB } from "@/components/atoms/ConfigurationBackFAB";
@@ -720,7 +719,7 @@ function TactileSandboxPageInner({
    * clears the class. This guarantees the PDF/print output matches the
    * ExportModal's PNG preview (score only, no toolbar / palette / chrome).
    */
-  const printScoreOnly = React.useCallback(() => {
+  const printScoreOnly = React.useCallback(async () => {
     if (typeof window === "undefined") return;
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     // Serialize immediately after flush so OSMD always receives the latest score,
@@ -728,13 +727,30 @@ function TactileSandboxPageInner({
     const freshXml = live
       ? scoreToPartwiseMusicXML(live, useUploadStore.getState().sourceFileName)
       : undefined;
+    if (!freshXml?.trim()) {
+      window.alert("No score to print.");
+      return;
+    }
+    if (!printRootRef.current) {
+      window.alert("Print preview is not ready. Try again in a moment.");
+      return;
+    }
     document.body.classList.add("hf-printing-score");
     const cleanup = () => {
       document.body.classList.remove("hf-printing-score");
       window.removeEventListener("afterprint", cleanup);
+      window.clearTimeout(fallbackTimer);
     };
     window.addEventListener("afterprint", cleanup);
-    void printRootRef.current?.printWhenReady(freshXml).finally(cleanup);
+    // Some browsers never fire afterprint when the dialog is dismissed without printing.
+    const fallbackTimer = window.setTimeout(cleanup, 60_000);
+    try {
+      await printRootRef.current.printWhenReady(freshXml);
+    } catch (error) {
+      cleanup();
+      console.error("[printScoreOnly]", error);
+      window.alert("Print failed. Check the console for details.");
+    }
   }, []);
 
   const setExportModalOpenForTour = React.useCallback(
@@ -2272,7 +2288,6 @@ function TactileSandboxPageInner({
           ref={printRootRef}
           xml={scoreForCanvas ? scoreToPartwiseMusicXML(scoreForCanvas, sourceFileName) : null}
           filename={sourceFileName}
-          bpm={scoreForCanvas?.bpm ?? null}
         />
 
       <OnboardingOverlay open={sandboxIntroOpen} onClose={() => setSandboxIntroOpen(false)} />

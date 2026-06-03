@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { readFormFile, readFormFiles, runToPreviewMusicXML } from "@/server/engine/runtime";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 900;
 export const dynamic = "force-dynamic";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;

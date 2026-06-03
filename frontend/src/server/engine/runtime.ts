@@ -13,7 +13,6 @@ import { sliceParsedScoreToMeasureRange } from "./measureRangeSlice";
 import { validateSATBSequence, validateSATBSequenceWithTrace } from "./validateSATB";
 import {
   intakeFileToParsedScore,
-  intakeImagePagesToParsedScore,
   type IntakeResult,
 } from "./parsers/fileIntake";
 import type {
@@ -163,29 +162,15 @@ export function mapIntakeFailure(result: Extract<IntakeResult, { ok: false }>): 
 }
 
 /**
- * Resolve a ParsedScore from either:
- *  - A single uploaded file (MusicXML / MXL / MIDI / PDF → OMR)
- *  - Pre-rasterized PDF page images (`pages`) which skip pdftoppm and feed oemer directly.
- *
- * When both are present, pre-rasterized pages take priority (they're already page-accurate).
+ * Resolve a ParsedScore from an uploaded file.
+ * Pre-rasterized PDF page images (`pages`) are ignored — Audiveris runs on the original PDF buffer.
  */
 export function resolveParsedScore(
   file: EngineReadFile,
-  pageImages: Buffer[],
+  _pageImages: Buffer[],
   allowPdfOm: boolean,
 ): { ok: true; parsed: ParsedScore } | EngineError {
-  if (pageImages.length > 0) {
-    if (!allowPdfOm) {
-      return {
-        ok: false,
-        status: 501,
-        error: "Image OMR is not supported on this route.",
-      };
-    }
-    const intake = intakeImagePagesToParsedScore(pageImages);
-    if (!intake.ok) return mapIntakeFailure(intake);
-    return { ok: true, parsed: intake.parsed };
-  }
+  void _pageImages;
   const intake = intakeFileToParsedScore(file.buffer, file.originalname, { allowPdfOm });
   if (!intake.ok) return mapIntakeFailure(intake);
   return { ok: true, parsed: intake.parsed };

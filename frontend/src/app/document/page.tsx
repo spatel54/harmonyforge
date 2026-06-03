@@ -108,7 +108,7 @@ export default function DocumentPage() {
   }, [rhythmDensity, bassRhythmMode]);
 
   // Client-side PDF rasterization — always renders a visible first page, even
-  // when the server OMR pipeline is degraded (Vercel without pdfalto/oemer).
+  // when the server lacks Audiveris (Vercel). Melody XML comes from Playground intake or a PDF-only re-fetch.
   const pdfPreview = useClientPdfPreview(file);
   const pdfPreviewCaption = pdfPreview.isRendering
     ? "Rendering PDF…"
@@ -184,9 +184,9 @@ export default function DocumentPage() {
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
     const isPdf = ext === "pdf" || file.type === "application/pdf";
     if (isPdf) {
-      // PDF preview: wait until pdfjs has rasterized pages, then ask the
-      // server to run OMR on them and return parseable MusicXML for the panel.
-      if (pdfPreview.isRendering) {
+      // Melody preview: Playground should have stored previewMusicXML via Audiveris.
+      // If missing (direct nav), re-run intake on the PDF file only (not raster pages).
+      if (pdfPreview.isRendering && !storePreviewXml) {
         setPreviewScore(null);
         setPreviewMeta({
           title: file.name.replace(/\.[^/.]+$/, ""),
@@ -194,26 +194,20 @@ export default function DocumentPage() {
         });
         return;
       }
-      if (pdfPreview.pages.length === 0) {
-        setPreviewScore(null);
-        setPreviewMeta({
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          meta: pdfPreview.error ?? "Waiting for PDF rasterization…",
-        });
-        return;
-      }
 
       let cancelled = false;
       void (async () => {
+        if (storePreviewXml && storePreviewXml.trim().length > 0) {
+          applyXml(storePreviewXml);
+          return;
+        }
         try {
+          setPreviewMeta({
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            meta: "Recognizing score from PDF…",
+          });
           const fd = new FormData();
           fd.append("file", file);
-          for (const page of pdfPreview.pages) {
-            fd.append(
-              "pages",
-              new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
-            );
-          }
           const res = await fetch(`/api/to-preview-musicxml`, {
             method: "POST",
             body: fd,
@@ -229,6 +223,7 @@ export default function DocumentPage() {
           const xml = await res.text();
           if (cancelled) return;
           setPreviewMusicXML(xml);
+          applyXml(xml);
         } catch (e) {
           if (cancelled) return;
           setPreviewScore(null);
@@ -237,7 +232,7 @@ export default function DocumentPage() {
             meta:
               e instanceof Error && e.message
                 ? e.message
-                : "Could not parse PDF — OMR may be unavailable on this server.",
+                : "Could not parse PDF — Audiveris may be unavailable on this server.",
           });
         }
       })();
@@ -369,20 +364,6 @@ export default function DocumentPage() {
             )
           : file;
       formData.append("file", normalizedSource);
-      // Attach browser-rasterized PDF pages (when any) so servers without
-      // `pdftoppm` can still run oemer directly — and multi-page PDFs get a
-      // continuous melody via mergeParsedScores on the engine.
-      if (
-        pdfPreview.pages.length > 0 &&
-        (!storePreviewXml || storePreviewXml.trim().length === 0)
-      ) {
-        for (const page of pdfPreview.pages) {
-          formData.append(
-            "pages",
-            new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
-          );
-        }
-      }
       const configPayload: Record<string, unknown> = {
         mood: config.mood,
         genre: "classical",

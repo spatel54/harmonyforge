@@ -1,0 +1,8 @@
+.DS_Store
+vendor/audiveris/
+.work/
+tessdata/*.traineddata
+output/*
+!output/.gitkeep
+input/*
+!input/.gitkeep

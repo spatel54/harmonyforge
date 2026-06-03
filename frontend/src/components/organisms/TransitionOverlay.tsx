@@ -2,12 +2,12 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { intakeProgressWhileWaiting } from "@/lib/ui/intakeOverlayProgress";
 
 export type TransitionVariant = "parsing" | "generating" | "melody_only";
 
 /**
- * Minimum time to keep the overlay visible (matches the 0→100% counter in this component).
- * Call sites should `await awaitMinElapsedSince(t0, TRANSITION_MIN_VISIBLE_MS[variant])` before hiding.
+ * Minimum overlay visibility after work completes (polish before route change).
  */
 export const TRANSITION_MIN_VISIBLE_MS: Record<TransitionVariant, number> = {
   parsing: 2000,
@@ -19,13 +19,18 @@ export interface TransitionOverlayProps {
   variant: TransitionVariant;
   /** Controls visibility — fade in immediately, fade out on false */
   visible: boolean;
+  /** Set when server-side intake / generation has finished. Until then, bar stays below 100%. */
+  workComplete?: boolean;
+  /** PDF/image OMR can take several minutes — slower asymptotic progress + wait copy */
+  slowIntake?: boolean;
   className?: string;
 }
 
-const LABELS: Record<TransitionVariant, { headline: string; sub: string }> = {
+const LABELS: Record<TransitionVariant, { headline: string; sub: string; slowSub?: string }> = {
   parsing: {
     headline: "Reading your file",
     sub: "Turning notation into an editable score…",
+    slowSub: "Recognizing notation from your PDF — this can take several minutes…",
   },
   generating: {
     headline: "Generating harmonies",
@@ -37,7 +42,11 @@ const LABELS: Record<TransitionVariant, { headline: string; sub: string }> = {
   },
 };
 
-function usePercentageCounter(visible: boolean, duration: number): number {
+function useTimedProgressCap(
+  visible: boolean,
+  duration: number,
+  cap: number,
+): number {
   const [pct, setPct] = React.useState(0);
   React.useEffect(() => {
     if (!visible) {
@@ -49,12 +58,36 @@ function usePercentageCounter(visible: boolean, duration: number): number {
     let current = 0;
     const id = setInterval(() => {
       current += 1;
-      setPct(Math.min(current * (100 / steps), 100));
+      setPct(Math.min(current * (cap / steps), cap));
       if (current >= steps) clearInterval(id);
     }, intervalMs);
     return () => clearInterval(id);
-  }, [visible, duration]);
+  }, [visible, duration, cap]);
   return Math.round(pct);
+}
+
+function useIntakeProgress(
+  visible: boolean,
+  workComplete: boolean,
+  slowIntake: boolean,
+): number {
+  const [pct, setPct] = React.useState(0);
+  React.useEffect(() => {
+    if (!visible) {
+      setPct(0);
+      return;
+    }
+    const t0 = Date.now();
+    const id = window.setInterval(() => {
+      if (workComplete) {
+        setPct(100);
+        return;
+      }
+      setPct(intakeProgressWhileWaiting(Date.now() - t0, slowIntake));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [visible, workComplete, slowIntake]);
+  return pct;
 }
 
 const BOOK_CSS = `
@@ -242,20 +275,27 @@ function MusicNoteLoader() {
 export function TransitionOverlay({
   variant,
   visible,
+  workComplete = false,
+  slowIntake = false,
   className,
 }: TransitionOverlayProps) {
-  const { headline, sub } = LABELS[variant];
+  const labels = LABELS[variant];
   const duration = TRANSITION_MIN_VISIBLE_MS[variant];
-  const rawPct = usePercentageCounter(visible, duration);
   const showBook = variant === "parsing";
-  /** Avoid implying “done” while network / engine still runs (bar caps at 90% for note variants). */
-  const displayPct = showBook ? rawPct : Math.min(rawPct, 90);
-  const showLongWaitHint = !showBook && rawPct >= 90 && visible;
+  const timedPct = useTimedProgressCap(visible, duration, 90);
+  const intakePct = useIntakeProgress(visible, workComplete, slowIntake);
+  const displayPct = showBook ? intakePct : workComplete ? 100 : timedPct;
+  const showLongWaitHint =
+    visible && !workComplete && (slowIntake ? displayPct >= 55 : displayPct >= 85);
+  const sub =
+    showBook && slowIntake && !workComplete && labels.slowSub
+      ? labels.slowSub
+      : labels.sub;
 
   return (
     <div
       aria-live="assertive"
-      aria-label={headline}
+      aria-label={labels.headline}
       className={cn(
         "fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-[32px]",
         "transition-opacity duration-500",
@@ -282,7 +322,6 @@ export function TransitionOverlay({
         {displayPct}%
       </p>
 
-      {/* Deterministic bar — same signal as the percentage counter */}
       <div
         className="w-[min(280px,85vw)] h-[6px] rounded-full overflow-hidden"
         style={{ backgroundColor: "var(--hf-detail)", opacity: 0.35 }}
@@ -302,7 +341,7 @@ export function TransitionOverlay({
           className="font-serif text-[24px]"
           style={{ color: "var(--hf-text-primary)" }}
         >
-          {headline}
+          {labels.headline}
         </p>
         <p
           className="font-mono text-[12px] opacity-60"
@@ -315,7 +354,9 @@ export function TransitionOverlay({
             className="font-mono text-[11px] opacity-50 max-w-[min(320px,90vw)] text-center mt-1"
             style={{ color: "var(--hf-text-primary)" }}
           >
-            Still working—large scores can take a while.
+            {slowIntake
+              ? "Still recognizing your score — scanned PDFs often take a few minutes."
+              : "Still working—large scores can take a while."}
           </p>
         ) : null}
       </div>

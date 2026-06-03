@@ -2,27 +2,27 @@ import { describe, expect, it } from "vitest";
 import { enrichIntakePreviewError, INTAKE_TROUBLESHOOTING_PATH } from "./intakeErrorHints";
 
 describe("enrichIntakePreviewError", () => {
-  it("appends PDF and doc hint for pdf extension", () => {
+  it("appends Audiveris hint for pdf extension", () => {
     const out = enrichIntakePreviewError("OMR failed", "pdf");
     expect(out).toContain("OMR failed");
-    expect(out).toContain("pdfalto");
+    expect(out).toContain("Audiveris");
     expect(out).toContain(INTAKE_TROUBLESHOOTING_PATH);
   });
 
-  it("classifies oemer checkpoint errors distinctly", () => {
+  it("classifies missing MusicXML output distinctly", () => {
     const out = enrichIntakePreviewError(
-      "oemer: failed to download checkpoint",
+      "audiveris: no MusicXML (.xml/.mxl) produced in output directory",
       "pdf",
     );
-    expect(out).toContain("OEMER_CHECKPOINT_DIR");
+    expect(out).toContain("no readable MusicXML");
   });
 
   it("classifies empty-score errors distinctly", () => {
     const out = enrichIntakePreviewError(
-      "oemer: no .musicxml/.xml files in output (OMR may have failed silently)",
+      "audiveris: no .omr book produced after import",
       "pdf",
     );
-    expect(out).toContain("no musical staves");
+    expect(out).toContain("no readable MusicXML");
   });
 
   it("appends engine hint for mxl and txt", () => {

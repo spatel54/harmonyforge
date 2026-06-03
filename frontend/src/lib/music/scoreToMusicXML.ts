@@ -3,6 +3,7 @@
  */
 
 import type { EditableScore, Note } from "./scoreTypes";
+import { noteBeats } from "./scoreUtils";
 import { riffQuantsForMeasure } from "./playbackScrub";
 
 function measureGlobalQuantStart(score: EditableScore, measureIndex: number): number {
@@ -84,6 +85,95 @@ function pwNoteDivs(note: Note): number {
   if (note.dots === 1) return Math.round(base * 1.5);
   if (note.dots >= 2) return Math.round(base * 1.75);
   return base;
+}
+
+type BeamTag = { number: number; value: "begin" | "continue" | "end" };
+
+const BEAM_LEVEL_BY_DURATION: Record<string, number> = {
+  "8": 1,
+  "16": 2,
+  "32": 3,
+};
+
+function maxBeamLevel(note: Note): number {
+  if (note.isRest) return 0;
+  return BEAM_LEVEL_BY_DURATION[note.duration] ?? 0;
+}
+
+/** Beat length in quarter-note units for primary beam grouping. */
+function beamBeatLength(timeSignature: string): number {
+  const m = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
+  const beats = Number.parseInt(m?.[1] ?? "4", 10);
+  const beatType = Number.parseInt(m?.[2] ?? "4", 10);
+  if (!Number.isFinite(beats) || !Number.isFinite(beatType) || beatType <= 0) return 1;
+  // Compound meters (6/8, 9/8, 12/8): beam by dotted-quarter beat.
+  if (beatType === 8 && beats % 3 === 0) return 1.5;
+  return 4 / beatType;
+}
+
+function formatBeamXml(tags: BeamTag[] | undefined): string {
+  if (!tags?.length) return "";
+  return `\n        ${tags.map((b) => `<beam number="${b.number}">${b.value}</beam>`).join("\n        ")}`;
+}
+
+/**
+ * Assign MusicXML `<beam>` tags for consecutive beamable notes, splitting groups
+ * at beat boundaries so OSMD renders standard beaming instead of flagged singles.
+ */
+function computeMeasureBeams(notes: Note[], timeSignature: string): Map<number, BeamTag[]> {
+  const result = new Map<number, BeamTag[]>();
+  const beatLen = beamBeatLength(timeSignature);
+
+  interface NoteBeamInfo {
+    index: number;
+    startBeat: number;
+    maxLevel: number;
+  }
+
+  let beatCursor = 0;
+  const infos: NoteBeamInfo[] = notes.map((note, index) => {
+    const info = { index, startBeat: beatCursor, maxLevel: maxBeamLevel(note) };
+    beatCursor += noteBeats(note);
+    return info;
+  });
+
+  const beatGroup = (startBeat: number) => Math.floor(startBeat / beatLen + 1e-9);
+
+  for (let level = 1; level <= 3; level++) {
+    let i = 0;
+    while (i < infos.length) {
+      while (i < infos.length && infos[i]!.maxLevel < level) i++;
+      if (i >= infos.length) break;
+
+      const runStart = i;
+      let runEnd = i;
+      while (runEnd + 1 < infos.length && infos[runEnd + 1]!.maxLevel >= level) {
+        runEnd++;
+      }
+
+      let j = runStart;
+      while (j <= runEnd) {
+        const groupBeat = beatGroup(infos[j]!.startBeat);
+        let k = j;
+        while (k <= runEnd && beatGroup(infos[k]!.startBeat) === groupBeat) k++;
+
+        const group = infos.slice(j, k);
+        if (group.length > 1) {
+          group.forEach((entry, pos) => {
+            const value: BeamTag["value"] =
+              pos === 0 ? "begin" : pos === group.length - 1 ? "end" : "continue";
+            const tags = result.get(entry.index) ?? [];
+            tags.push({ number: level, value });
+            result.set(entry.index, tags);
+          });
+        }
+        j = k;
+      }
+      i = runEnd + 1;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -202,8 +292,27 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         }
       }
 
-      // Tempo text direction
-      if (measure.tempoText) {
+      // Tempo — first part / first measure only (standard engraving placement).
+      if (pIdx === 0 && isFirst) {
+        if (measure.tempoText) {
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          <words>${esc(measure.tempoText)}</words>
+        </direction-type>
+      </direction>`);
+        } else if (score.bpm != null && score.bpm > 0) {
+          const bpm = Math.round(score.bpm);
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          <metronome>
+            <beat-unit>quarter</beat-unit>
+            <per-minute>${bpm}</per-minute>
+          </metronome>
+        </direction-type>
+        <sound tempo="${bpm}"/>
+      </direction>`);
+        }
+      } else if (measure.tempoText) {
         lines.push(`      <direction placement="above">
         <direction-type>
           <words>${esc(measure.tempoText)}</words>
@@ -238,7 +347,11 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
 
       // Notes
       const noteEls = measure.notes.length > 0 ? measure.notes : [];
-      for (const note of noteEls) {
+      const measureBeams = computeMeasureBeams(
+        noteEls,
+        measure.timeSignature ?? "4/4",
+      );
+      noteEls.forEach((note, noteIdx) => {
         // Pre-note directions: hairpin / octave-shift start
         if (note.lineStart === "cresc-hairpin") {
           lines.push(`      <direction placement="below">
@@ -293,6 +406,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           : "";
 
         const notationsStr = buildNotations(note);
+        const beamStr = formatBeamXml(measureBeams.get(noteIdx));
         const lyricStr =
           note.lyric && !note.isRest
             ? `\n        <lyric number="1"><syllabic>single</syllabic><text>${esc(note.lyric)}</text></lyric>`
@@ -302,7 +416,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           lines.push(`      <note>
         <rest/>
         <duration>${divs}</duration>${tieAttrStr}
-        <type>${noteType}</type>${dotsEl}${notationsStr}${lyricStr}
+        <type>${noteType}</type>${dotsEl}${beamStr}${notationsStr}${lyricStr}
       </note>`);
         } else {
           const { step, alter, octave } = pitchFromStr(note.pitch);
@@ -313,7 +427,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           <octave>${octave}</octave>
         </pitch>
         <duration>${divs}</duration>${tieAttrStr}
-        <type>${noteType}</type>${dotsEl}${notationsStr}${lyricStr}
+        <type>${noteType}</type>${dotsEl}${beamStr}${notationsStr}${lyricStr}
       </note>`);
         }
 
@@ -327,7 +441,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         <direction-type><octave-shift type="stop" size="8" number="1"/></direction-type>
       </direction>`);
         }
-      }
+      });
 
       // Empty measure fallback
       if (measure.notes.length === 0) {

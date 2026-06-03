@@ -1,21 +1,19 @@
 "use client";
 
 /**
- * Client-side PDF rasterization for the HarmonyForge intake pipeline.
+ * Client-side PDF rasterization for the HarmonyForge Document preview.
  *
  * Why client-side?
- * - Browsers can run `pdfjs-dist` without native tooling, so uploading a PDF always
- *   yields a visible preview page on Document.
- * - When the server lacks Poppler (`pdftoppm`) — e.g. Vercel serverless — the route
- *   handler can still run `oemer` on the pre-rasterized PNGs sent from here.
- * - Multi-page PDFs are supported: each page becomes its own PNG; the engine merges
- *   parsed scores when > 1 page is provided.
+ * - Browsers run `pdfjs-dist` without native tooling, so PDF uploads always show a
+ *   visible raster thumbnail on Document (including Vercel where Audiveris is absent).
+ * - Melody MusicXML comes from Audiveris on the original PDF via `/api/to-preview-musicxml`,
+ *   not from these PNGs.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface ClientPdfPage {
-  /** 1-based page number to match oemer’s naming. */
+  /** 1-based page number (display order). */
   index: number;
   /** PNG blob of the page at the requested scale. */
   png: Blob;

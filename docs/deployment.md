@@ -12,10 +12,10 @@ Pair this with **[progress.md](progress.md)** (current status) and **[plan.md](p
 
 | Target | What it gets you | Trade-off |
 |--------|------------------|-----------|
-| **Vercel (serverless)** | Zero-config Next.js hosting, instant previews, free tier. Client rasterizes PDFs so the Document preview still works everywhere. | **PDF OMR is not available** on Vercel (no pdfalto/Poppler/oemer). Uploads that need OMR fail with a clear 501 message. MusicXML/MXL/MIDI work fully. |
-| **Self-hosted Docker** | Full PDF → MusicXML pipeline (pdfalto + Poppler + oemer baked into one image). Multi-page PDFs. | You run a container host (Render / Fly / Railway / DigitalOcean App Platform / your own VM). Larger image. |
+| **Vercel (serverless)** | Zero-config Next.js hosting, instant previews, free tier. Client rasterizes PDFs so the Document preview still shows a thumbnail everywhere. | **PDF → MusicXML is not available** on Vercel (no Java/Audiveris). Uploads that need OMR fail with a clear 501 message. MusicXML/MXL/MIDI work fully. |
+| **Self-hosted Docker** | Full PDF → MusicXML pipeline (**Audiveris** baked into one image). | You run a container host (Render / Fly / Railway / DigitalOcean App Platform / your own VM). Larger image (Java 25 + Audiveris build). |
 
-Both paths produce the same UX; the only functional difference is PDF OMR.
+Both paths produce the same UX for symbolic files; PDF melody intake requires Audiveris (Docker or local **`make audiveris-setup`**).
 
 ---
 
@@ -43,7 +43,7 @@ If Theory Inspector returns **401** and the error text names a **model** (e.g. `
 6. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }`.
 7. **Smoke test** the upload → generate → sandbox flow with MusicXML (fastest) and MXL.
 
-**PDF on Vercel:** the browser client-rasterizes PDFs via `pdfjs-dist` so you always see a preview on `/document`. Running OMR (oemer) requires binaries that Vercel's serverless runtime does not ship — if you need PDF → MusicXML, use Path B.
+**PDF on Vercel:** the browser client-rasterizes PDFs via `pdfjs-dist` so you always see a thumbnail on `/document`. Running **Audiveris** requires Java on the server — if you need PDF → MusicXML, use Path B or local **`make audiveris-setup`**.
 
 > Never put secrets in `NEXT_PUBLIC_*` variables — they're in the client bundle.
 
@@ -51,14 +51,14 @@ If Theory Inspector returns **401** and the error text names a **model** (e.g. `
 
 ## Path B — Self-hosted Docker (full PDF support)
 
-This image bundles Node + Next.js + pdfalto + Poppler + Python/oemer in one container.
+This image bundles Node + Next.js + **Audiveris** (Java 25) in one container.
 
 ```bash
-make docker-build     # multi-stage build (adds Poppler + venv with oemer)
-make docker-run       # serves on http://localhost:3000, caches oemer checkpoints to a volume
+make docker-build     # multi-stage build (Audiveris + Next.js)
+make docker-run       # serves on http://localhost:3000
 ```
 
-Or use `docker compose up --build` at the repo root. The compose file creates a named volume `oemer-checkpoints` so first-boot ONNX download only happens once per host.
+Or use `docker compose up --build` at the repo root.
 
 ### Host-side checklist
 
@@ -66,8 +66,7 @@ Or use `docker compose up --build` at the repo root. The compose file creates a 
 |-------------|-------|
 | Docker / compose | Any modern runtime (Docker Desktop, OrbStack, Colima, …). |
 | Inbound port 3000 | Map to whatever public port your host expects. |
-| Writable volume `/var/oemer` | Persists oemer checkpoints (~60 MB). Skipping this re-downloads them every deploy. |
-| Outbound HTTPS (first boot) | oemer pulls checkpoints on first run; `preflight-omr` script caches them. |
+| Build time | First **`docker build`** compiles Audiveris from source (several minutes). |
 
 ### Environment variables (same names as Vercel)
 
@@ -75,12 +74,24 @@ See the [`.env.example`](../.env.example) at the repo root. Pass them with `dock
 
 | Variable | Purpose |
 |----------|---------|
-| `OEMER_CHECKPOINT_DIR` | Writable path for oemer weights (default `/var/oemer`). |
-| `PDFALTO_BIN` / `POPPLER_PDFTOPPM` / `OEMER_BIN` | Override tool paths if you bring-your-own binaries. |
+| `AUDIVERIS_BIN` | Path to Audiveris CLI (default `/app/audiveris/bin/Audiveris` in Docker). |
+| `TESSDATA_PREFIX` | Tesseract English data (default `/app/tessdata` in Docker). |
+| `JAVA_HOME` | JRE for Audiveris (set in Docker image). |
+
+### Local development (without Docker)
+
+```bash
+make install           # Node deps
+make audiveris-setup   # Java 25+, clone/build Audiveris under scripts/audiveris/vendor/, tessdata
+make audiveris-convert # PDFs in scripts/audiveris/input/ → MusicXML in output/
+make dev
+```
+
+Upload a PDF on Playground after setup completes.
 
 ### Recommended hosts
 
-- **Render / Railway / Fly.io / DigitalOcean App Platform** — all accept the repo's root `Dockerfile` directly. Mount a persistent volume for `/var/oemer`.
+- **Render / Railway / Fly.io / DigitalOcean App Platform** — all accept the repo's root `Dockerfile` directly.
 - **Your own VM + Compose** — `docker compose up -d` behind a reverse proxy.
 
 ---
@@ -92,10 +103,11 @@ See the [`.env.example`](../.env.example) at the repo root. Pass them with `dock
 2. Build / deploy
 3. GET /api/health → expect { status: "ok" }
 4. Upload a MusicXML sample → /document shows preview → Generate → Sandbox
-5. (Docker only) Upload a PDF → /document shows client-rendered preview → Generate → Sandbox
+5. (Docker or local Audiveris) Upload a PDF → /document shows raster + melody preview → Generate → Sandbox
+6. Sandbox → Export → PDF → print preview shows OSMD engraving (no app chrome)
 ```
 
-If step 5 on Docker fails with a 501, run `make preflight-omr` in the container to prime the checkpoint cache.
+If step 5 fails with a 501, confirm **`AUDIVERIS_BIN`** is on PATH or run **`make audiveris-setup`** locally.
 
 ---
 

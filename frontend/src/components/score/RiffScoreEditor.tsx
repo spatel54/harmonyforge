@@ -23,13 +23,13 @@ function selectEventsInMeasureOnStaff(
   api: MusicEditorAPI,
   measureIndex: number,
   staffIndex: number,
-  eventCount: number,
 ) {
+  const rsMeasure = api.getScore().staves[staffIndex]?.measures[measureIndex];
+  const eventCount = rsMeasure?.events?.length ?? 0;
+
   api.deselectAll();
-  if (eventCount <= 0) {
-    api.select(measureIndex + 1, staffIndex, 0);
-    return;
-  }
+  if (eventCount <= 0) return;
+
   api.select(measureIndex + 1, staffIndex, 0);
   for (let e = 1; e < eventCount; e++) {
     api.addToSelection(measureIndex + 1, staffIndex, e);
@@ -1351,7 +1351,8 @@ export function RiffScoreEditor({
     if (!api || !onError) return;
 
     const unsub = api.on("error", (result: unknown) => {
-      const r = result as { message?: string };
+      const r = result as { message?: string; code?: string };
+      if (r.code === "EVENT_NOT_FOUND") return;
       onError(new Error(r.message ?? "RiffScore error"));
     });
 
@@ -1388,10 +1389,8 @@ export function RiffScoreEditor({
             e.preventDefault();
             e.stopPropagation();
             const api = apiRef.current;
-            const nEvents =
-              score.parts[staffIndex]?.measures[hit.measureIndex]?.notes.length ?? 0;
             if (api) {
-              selectEventsInMeasureOnStaff(api, hit.measureIndex, staffIndex, nEvents);
+              selectEventsInMeasureOnStaff(api, hit.measureIndex, staffIndex);
             }
             onInspectorSelectMeasureRef.current?.(hit.measureIndex, hit.partId);
             return;

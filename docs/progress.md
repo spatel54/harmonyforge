@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03) — **Audiveris-only** PDF → MusicXML; **OSMD** print/PDF; **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed); honest Playground progress bar; **`make test` 304** — **open:** PDF OMR quality QA on real scans; **RiffScore measure-gutter selection** after Audiveris import (fixed **`Target event not found`**, re-verify in browser)
 - [Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27) — **`hfNoteToRsEvent`** splits **letter+octave** vs **`accidental`** for RiffScore; sandbox **sharp/flat** path **flush → live score → Salamander preview**; Inspector **Stylist options** **`details`** + chat seed **`Try other harmony ideas`** → **`requestSuggestion`**; Explanation tab **lay copy** — **open:** manual QA (dense scores, multi-select, touch); **program watch:** toolbar **`Octave ↓`** ([Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm))
 - [Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27) — **keyboard ↑/↓** = **diatonic white-key steps** + **natural-only** stored pitches; **⌘/Ctrl+↑/↓** = octave then **natural letters**; **Salamander** pitch preview matches RiffScore clicks; **`getServerOpenAIEnv`** **swaps** mistaken **`OPENAI_API_KEY` ↔ `OPENAI_MODEL`** + **`configHint`** in Theory Inspector; **SATB audit** chat line = short **red vs blue** explanation — **open:** manual QA (arrows, preview, **Octave ↓**); confirm **Vercel** env on **Preview** + redeploy
 - [Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27) — **flush-aware transpose** (**`useScoreStore.getState().score`** after RS flush); **toolbar ↔ palette parity** via **`onToolbarAction` → `handleToolSelect`** (returns **`true`**, no double **`applyOnSelection`**); chromatic **↑/↓** + pitch toolbar **`getTransposeTargetNoteIds`**; score-only print; **Advanced** Document hidden; **`make verify`** **281** tests — **open:** manual QA; **watch:** toolbar **`Octave ↓`** after unified path (Iteration 7 residual — re-verify in browser)
@@ -49,6 +50,87 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-export-audiveris-2026-06-03"></a>
+
+## Work log — OSMD export + Audiveris PDF intake (2026-06-03)
+
+### End goal
+
+1. **PDF → MusicXML** on Playground, Document, and Generate must use **Audiveris** (same batch workflow as [`scripts/audiveris/convert.sh`](../scripts/audiveris/convert.sh)), replacing **pdfalto + oemer**.
+2. **Sandbox PDF/Print export** must render **engraved notation** via **OpenSheetMusicDisplay**, not RiffScore chrome, with a seamless Export modal → print dialog flow.
+3. Uploaded PDFs should behave like native MusicXML in **Configure** and **Sandbox** once intake succeeds.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **OMR** | New [`audiverisPipeline.ts`](../frontend/src/server/engine/parsers/audiverisPipeline.ts): import PDF → `.omr` → export `.xml`/`.mxl` → `parseMusicXML` / `parseMXL`; multi-file merge via [`mergeParsedScores.ts`](../frontend/src/server/engine/parsers/mergeParsedScores.ts). |
+| **Intake routing** | [`resolveParsedScore`](../frontend/src/server/engine/runtime.ts) always parses the **uploaded file buffer**; client **`pages[]`** PNGs are **preview-only** (pdfjs). |
+| **Export** | [`ExportPrintRoot.tsx`](../frontend/src/components/organisms/ExportPrintRoot.tsx) `forwardRef` → [`PrintableScore.tsx`](../frontend/src/components/score/PrintableScore.tsx) + **`opensheetmusicdisplay`**; flush → **`scoreToPartwiseMusicXML`** → **`printWhenReady`**. |
+| **Ops** | **`scripts/audiveris/`** (`setup.sh`, `convert.sh`, `paths.sh`); **`make audiveris-setup`**, **`make audiveris-convert`**; Docker multi-stage **Java 25 + Audiveris**; removed **oemer/pdfalto/preflight-omr** and deleted **`approach_source_audiveris/`**. |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| Audiveris pipeline | `audiverisPipeline.ts` + rewired `fileIntake.ts` (pdfalto/oemer removed). |
+| Document / Generate | PDF posts **file only** to `/api/to-preview-musicxml` and `/api/generate-from-file`. |
+| OSMD export | `opensheetmusicdisplay` dep; `ExportPrintRoot` wraps `PrintableScore`; print CSS + tempo overlay. |
+| Docker / Makefile | Audiveris builder stage; `audiveris-setup` → `scripts/audiveris/setup.sh`; oemer volume removed from compose. |
+| Tests | **`make test` → 304** (was 298); `fileIntake.test.ts`, `intakeErrorHints.test.ts`, `scoreToMusicXML` (beams + metronome), `intakeOverlayProgress.test.ts`. |
+| Docs | `plan.md` §**1.9q**; `deployment.md`; this work log. |
+
+### Follow-up session (2026-06-03 — polish & hardening)
+
+Same tranche, after initial ship. Goal: make PDF intake and OSMD export **production-credible** and remove the reference folder once behavior matched [`scripts/audiveris/convert.sh`](../scripts/audiveris/convert.sh).
+
+| Step | Outcome |
+|------|---------|
+| **Blank PDF export** | Removed premature `hf-printing-score` cleanup in `printScoreOnly` `finally` (class dropped as soon as print dialog opened → blank preview). Portaled **`ExportPrintRoot`** to `document.body`; print CSS uses `> *:not(.hf-print-root)`. |
+| **Tempo overlap** | Dropped HTML tempo overlay; **`scoreToPartwiseMusicXML`** emits `<metronome>` (+ `<sound tempo>`) on measure 1 when `score.bpm` set. |
+| **Eighth-note engraving** | Added MusicXML `<beam>` generation in **`scoreToPartwiseMusicXML`** (beat-boundary groups) so OSMD renders standard beaming instead of flagged singles. |
+| **Java 25 on macOS** | **`audiverisPipeline.ts`** auto-detects Homebrew **`openjdk@25`** (`JAVA_HOME` + `PATH`); preflight before spawn; clearer **`intakeErrorHints`** when macOS `/usr/bin/java` stub runs. |
+| **Audiveris audit** | Pipeline aligned with reference: two-phase batch, DOCTYPE strip, prefer **`.mxl`** over phase-1 **`.xml`**, split timeout per phase; **`POST /api/to-preview-musicxml`** **`maxDuration`** **900s** (matches **`DEFAULT_AUDIVERIS_MS`**). |
+| **Tooling consolidation** | Moved scripts to **`scripts/audiveris/`**; **`setup.sh`** migrates legacy build from deleted **`approach_source_audiveris/`**; **`make audiveris-setup`** / **`make audiveris-convert`** updated. |
+| **Honest loading bar** | **`TransitionOverlay`**: PDF/image OMR uses asymptotic progress capped at **90%** until server returns; **`workComplete`** → **100%**; copy mentions multi-minute PDF recognition. Wired on **`/`** and **`/onboarding`**. |
+| **RiffScore measure select** | **`selectEventsInMeasureOnStaff`** reads event count from **`api.getScore()`** (not HF `measure.notes.length`); ignore benign **`EVENT_NOT_FOUND`** on error channel — fixes **`Target event not found`** after Audiveris import. |
+
+### Verification
+
+- `cd frontend && npm test` — **304** passing.
+- Manual: **`make audiveris-setup`** (Java 25+) → upload PDF on Playground (progress bar stays &lt; 100% until OMR finishes) → Document → Generate → Sandbox; Export → PDF shows OSMD engraving (beamed eighths, tempo above staff).
+
+### Current failure / open work
+
+- **PDF OMR quality (product):** Audiveris runs locally after Java setup, but **recognition accuracy** on real scans (e.g. **`月亮代表我的心`**) still needs human QA — wrong pitches, missing measures, or empty melody are OMR limits, not wiring bugs.
+- **Vercel** cannot run Java OMR — PDF uploads show **raster preview** + actionable **501** on MusicXML intake unless user self-hosts Docker.
+- **RiffScore post-import UX:** Measure-gutter **`Target event not found`** addressed in code; **re-verify in browser** after PDF → Sandbox (HF vs RS event count drift on dense/multi-voice scores).
+- **Earlier fixes (this tranche):** Blank print preview, tempo overlay on part names, unbeamed eighths, misleading 100% loader, missing Java on PATH — **shipped**.
+
+### Learnings (2026-06-03)
+
+- **Audiveris batch contract:** Phase 1 import must use **`useCompression=false`** on `.omr`; phase 2 export uses **`useCompression=true`** for `.mxl`. Prefer exported **`.mxl`** over phase-1 **`.xml`** (often incomplete).
+- **Java on macOS:** Homebrew **`openjdk@25`** is keg-only — pipeline must set **`JAVA_HOME`** / **`PATH`** before spawn; macOS **`/usr/bin/java`** stub yields misleading failures without preflight.
+- **Client `pages[]`:** PDF raster from **`pdfjs-dist`** is **preview-only**; OMR always runs on the **uploaded PDF buffer** server-side.
+- **OSMD print:** Tempo belongs in **MusicXML** (`<metronome>`), not HTML overlay — HTML sits in the wrong layer and overlaps part labels.
+- **HF ↔ RiffScore event count:** After OMR import, **`measure.notes.length`** in HF may not match RiffScore's live event list — measure-gutter selection must use **`api.getScore()`** event count.
+- **Slow OMR UX:** Asymptotic progress capped at **90%** until fetch completes; first PDF can take **several minutes** — copy should say so.
+
+### Dev environment
+
+- One-time: **`make audiveris-setup`** (Java 25+, builds Audiveris under **`scripts/audiveris/vendor/`**).
+- Dev server: **`make dev`** → http://localhost:3000.
+- QA convert: **`make audiveris-convert FILE=path/to/score.pdf`**.
+- API timeout: **`POST /api/to-preview-musicxml`** **`maxDuration=900`** (matches **`DEFAULT_AUDIVERIS_MS`**).
+
+<a id="last-updated-2026-06-03-audiveris-export"></a>
+
+### Last updated (2026-06-03 — OSMD export + Audiveris PDF intake)
+
+- **Narrative (end goal · approach · steps · open work):** **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)** — Audiveris-only PDF → MusicXML; OSMD print/PDF export; tooling consolidated under **`scripts/audiveris/`**; honest Playground loader; RiffScore measure-gutter fix after import.
+- **Tests:** **`make test`** → **304** Vitest passing (includes beams, metronome, intake overlay progress, **`fileIntake`**, **`intakeErrorHints`**).
+- **Current failure:** **PDF OMR recognition quality** on real scans (product gap, not wiring); **re-verify** measure-gutter selection in browser after PDF → Sandbox.
 
 <a id="last-updated-2026-04-27-accidentals-inspector"></a>
 
@@ -1878,9 +1960,9 @@ Raise **shipping quality** and **honest UX** without claiming a single sprint �
 - **Contributors** can run **`make verify`** (test + lint + build) and optionally **`make verify-strict`** (adds frontend ESLint); frontend lint is **green with warnings** rather than silently skipped.
 - **Theory Inspector** sends **up-to-date score FACT lines** when the user chats after editing; **idea actions** resolve ambiguous staff names more safely when the model omits exact `noteId`s.
 - **Backlog** (multi-clef / transposition / JSON deltas) stays **explicitly scoped** (ADR) rather than half-implemented.
-- **Backend** intake keeps **regression tests** (e.g. namespaced MusicXML, MXL sniff); **oemer** has a **documented reproducible path** (Docker reference + README).
+- **Backend** intake keeps **regression tests** (e.g. namespaced MusicXML, MXL sniff); **Audiveris** has a **documented reproducible path** (Docker + **`make audiveris-setup`** — see **[deployment.md](deployment.md)**).
 
-The open epic that **still defines “done” for file intake** is **[plan.md §1.9m](plan.md)** — production-reliable **PDF → MusicXML** (oemer/checkpoints/infra), not another frontend-only tweak.
+The open epic that **still defines “done” for file intake** is **[plan.md §1.9q](plan.md)** — production-credible **PDF → MusicXML** via **Audiveris** (accuracy QA on real scans), not another frontend-only tweak. *(§1.9m/oemer superseded 2026-06-03.)*
 
 ### Approach
 
@@ -1906,7 +1988,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 | **Theory Inspector** | `useTheoryInspector.ts`: **`sendMessage`** rebuilds measure/part FACTs and note evidence from flushed Zustand score; **`patchSelectedNoteInsight`** preserves AI fields; **`buildLiveNoteExplainInsight`** deduplicates explain vs send paths. |
 | **Idea actions** | `ideaActionResolve.ts`: longest matching part name in `summary`; **`ideaActionResolve.test.ts`** (Violin vs Violin II; duplicate-name null). |
 | **Engine** | `fileIntake.test.ts`: namespaced MusicXML `.musicxml` + ZIP sniff; **2026-04-07:** MIDI/`.txt`/`.mxml`/extensionless + `musicXmlMarkers.ts` + `midiParser` `createRequire`. |
-| **Ops / OMR** | `backend/docker/oemer-omr.Dockerfile`; README + deployment cross-links. |
+| **Ops / OMR** | **`scripts/audiveris/`** + root **`Dockerfile`** (Java 25 + Audiveris); superseded **`oemer-omr.Dockerfile`** — see **[deployment.md](deployment.md)** and **[Audiveris work log](#wl-export-audiveris-2026-06-03)**. |
 | **Symbolic intake (frontend)** | `needsEnginePreviewForExtension`, `isProbablyZipBytes`, `musicXmlMarkers`, `intakeErrorHints`; Document preview API for mislabeled ZIP; **`readMelodyXml`** prefers **`storePreviewXml`**. |
 | **Sandbox exports (2026-04-13)** | **`liveScoreExport.ts`**, **`scoreToMidi.ts`**, **`pitchMidi.ts`**, **`scoreToWav.ts`**, **`html-to-image`**, **`fflate`**; sandbox **`openExportModal`** + print CSS; Vitest **`scoreToMidi.test.ts`**. |
 
@@ -1914,7 +1996,9 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ### Current failure / what we are working on now
 
-**Primary engineering risk (unchanged):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
+> **Superseded (2026-06-03):** PDF OMR backend is now **Audiveris** (**[plan §1.9q](plan.md)**, **[work log](#wl-export-audiveris-2026-06-03)**). The **oemer/pdfalto** risks below are **historical** (April 2026). **Current primary gap:** OMR **recognition accuracy** on real PDF scans + manual QA of post-import Sandbox UX — see **[Current Focus](#current-focus)**.
+
+**Primary engineering risk (historical — April 2026):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
 
 **Build / TypeScript (resolved 2026-04-18):** **`riffscoreAdapter.ts`** uses a **narrow cast** on the `ui` config so **`toolbarPlugins`** (patch-package) satisfies `tsc`; **`make build`** / **`npm run build`** stay green. **Long-term:** module augmentation if upstream **`RiffScoreConfig`** exposes the field.
 
@@ -1932,6 +2016,8 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
+**2026-06-03 session (OSMD export · Audiveris PDF intake · polish):** End goal, approach, completed steps, and **open work** — **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)**. **Shipped:** Audiveris-only OMR, OSMD print/PDF, Java 25 auto-detection, honest Playground loader, MusicXML beaming/metronome, **`scripts/audiveris/`** ( **`approach_source_audiveris/`** deleted). **Open:** PDF **recognition quality** on real scans; **re-verify** measure-gutter selection after PDF import (**`Target event not found`** fix in **`RiffScoreEditor`**).
+
 **2026-04-27 session (naturals keyboard · LLM env · audit UX):** End goal, approach, completed steps, and **open failures** are summarized in **[Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy](#wl-sandbox-naturals-llm-audit-2026-04-27)** — especially **manual QA** on **toolbar `Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)) and **Vercel Preview** env + **redeploy** after **`OPENAI_*`** changes.
 
 **Narrative for the 2026-04 refinement pass:** [Holistic refinement program](#holistic-refinement-2026-04) (end goal, approach, completed steps, **current failure**).
@@ -1941,7 +2027,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 **Docs / ops (2026-04-07):** Onboarding and deploy guidance are now in-repo (README set + **[deployment.md](deployment.md)**). **Next operational step** for production is to **execute** that playbook (backend URL → Vercel env → `CORS_ORIGIN`), not more prose. If `node_modules/` was ever fully tracked, run **`git rm -r --cached node_modules`** once, then **`git add node_modules/README.md .gitignore`** and commit.
 
 **Active work / blockers:**
-1. **PDF → MusicXML (unresolved OMR)** — Stabilize **oemer** (venv Python 3.11/3.12, checkpoints, `OEMER_BIN`) or choose an alternate path; see **Multi-format intake & PDF → Document preview**, **`requirements.txt`**, and optional reference image **`backend/docker/oemer-omr.Dockerfile`**. Preview/generate wiring exists; **melody extraction from arbitrary PDF** does not yet meet “it just works.”
+1. **PDF → MusicXML (Audiveris OMR)** — **Wiring shipped (2026-06-03):** [`audiverisPipeline.ts`](../frontend/src/server/engine/parsers/audiverisPipeline.ts) + **`scripts/audiveris/`** + Docker Java 25 image. **Remaining gap:** OMR **accuracy** on arbitrary PDFs (quality of extracted melody/harmony), not server routing. Local: **`make audiveris-setup`** (Java 25+). Vercel: raster preview only — see **[deployment.md](deployment.md)** and **[work log](#wl-export-audiveris-2026-06-03)**. Supersedes **oemer/pdfalto** path.
 2. **RiffScore sample URLs** — **Mitigated (2026-04-06):** `patch-package` points the built-in piano sampler at **Tone.js Salamander** (`https://tonejs.github.io/audio/salamander/`) instead of missing `/audio/piano/*.mp3`.
 3. **OpenAI in dev / deploy** — **`OPENAI_API_KEY`** = **`sk-…`** secret only; **`OPENAI_MODEL`** = model id (e.g. **`gpt-4o-mini`**). If **swapped**, OpenAI **401** echoes the model name as the “key”; app **`getServerOpenAIEnv()`** can **recover** when one env looks like **`sk-…`** and the other like **`gpt-…`**. **`GET /api/theory-inspector`** returns **`hasApiKey`**, **`configHint`** (optional). Local: **`frontend/.env.local`** + **`make dev`**. Production: **[deployment.md](deployment.md)** — **Preview** vs **Production** env, **redeploy** after edits. See **[Work log — naturals / LLM / audit](#wl-sandbox-naturals-llm-audit-2026-04-27)**.
 4. **Turbopack / monorepo env** — **`frontend/next.config.ts`** loads env via `loadEnvConfig(appDir)` so `.env.local` applies without `turbopack.root` (which broke Tailwind `@import`). Residual lockfile warnings are acceptable until Next documents a single-root strategy that preserves CSS resolution.
@@ -2471,11 +2557,17 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-**Immediate (2026-04 — see Consolidated status):**
-1. **PDF→MusicXML (oemer)** — Pin **Python 3.11/3.12 venv**, `make install`, prefetch or manually install **oemer checkpoints**, set **`OEMER_BIN`**; or spike alternate OMR (**1.9m** in `@plan.md`).
-2. **RiffScore playback samples** — Serve or proxy `/audio/piano/*.mp3` (or disable built-in sampler UX) so piano playback is not 404/no-op.
+**Immediate (2026-06 — see [Audiveris work log](#wl-export-audiveris-2026-06-03)):**
+1. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
+2. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
+3. **OSMD export QA** — Export → PDF/Print: beamed eighths, tempo placement, no blank preview page.
+4. **Vercel vs Docker** — Confirm PDF on Vercel shows raster + actionable 501; self-hosted Docker path runs full Audiveris pipeline — **[deployment.md](deployment.md)**.
+
+**Still relevant (2026-04 backlog):**
+1. ~~**PDF→MusicXML (oemer)**~~ — **Superseded by Audiveris (2026-06-03)** — see **`scripts/audiveris/`** and **[work log](#wl-export-audiveris-2026-06-03)**.
+2. **RiffScore playback samples** — **Mitigated:** Salamander CDN via **`patch-package`**.
 3. **LLM in dev** — `OPENAI_API_KEY` in `frontend/.env.local`; restart `make dev`; confirm `GET /api/theory-inspector` → `hasApiKey: true`.
-4. **Turbopack / lockfiles** — Resolve multi-lockfile warning (e.g. `turbopack.root` or single-lockfile layout).
+4. **Toolbar `Octave ↓`** — Re-verify in browser ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)).
 
 **Deferred:** JSON-based score deltas for backend sync (Theory Inspector integration).
 
@@ -2508,10 +2600,19 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-04, refreshed 2026-04-20):**
+**Handover template (2026-06, refreshed 2026-06-03):**
+- **Canonical summary:** **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)** — end goal, approach, shipped steps, **current failure** (OMR quality QA + RiffScore re-verify).
+- **End goal:** (1) **PDF → MusicXML** via **Audiveris** on Playground/Document/Generate. (2) **Sandbox PDF/Print export** via **OSMD** (engraved notation, no app chrome). (3) Honest UX during multi-minute OMR. (4) Tooling under **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed).
+- **Approach:** **`audiverisPipeline.ts`** two-phase batch (import → `.omr` → export `.mxl`/`.xml`); client PDF raster = preview-only; **`ExportPrintRoot`** + **`PrintableScore`** + **`scoreToPartwiseMusicXML`** (beams, metronome); **`TransitionOverlay`** caps at 90% until server returns; Java 25 preflight + Homebrew **`JAVA_HOME`** auto-detect.
+- **Shipped this tranche:** Blank print fix, tempo in MusicXML, eighth-note beaming, Java 25 PATH, pipeline audit (prefer MXL, split timeout, 900s API), scripts migration, honest loader, RiffScore measure-gutter fix. **`make test`:** **304**.
+- **Current failure / open work:** (1) **PDF OMR recognition accuracy** on real scans — wiring works; quality needs human QA. (2) **Vercel** — no Java/Audiveris (raster + 501). (3) **Re-verify** measure-gutter selection after PDF import in browser.
+- **Key files:** `frontend/src/server/engine/parsers/audiverisPipeline.ts`, `fileIntake.ts`, `mergeParsedScores.ts`, `ExportPrintRoot.tsx`, `PrintableScore.tsx`, `scoreToMusicXML.ts`, `TransitionOverlay.tsx`, `intakeOverlayProgress.ts`, `RiffScoreEditor.tsx`, `scripts/audiveris/*`, root `Dockerfile`, `Makefile`.
+- **Run:** **`make audiveris-setup`** (once) → **`make dev`** → http://localhost:3000. Docker: **`make docker-build && make docker-run`**. QA: **`make audiveris-convert FILE=…`**.
+
+**Older handover (2026-04-20):**
 - **Canonical summary:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** — end goal, approach, shipped work (including repo hygiene), **current focus** (deploy / study / residual risks — not one blocking bug).
 - **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, **multi-format export from the live canvas**, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **Glass Box product framing:** harmony generation = deterministic engine; **Theory Inspector** = LLM explain/critique/suggest — see **`GlassBoxPedagogyCallout`** + [work log](#wl-glass-box-pedagogy-2026-04-19). **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
 - **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`flushToZustand`** before any export/copy/save/read of store score (**`getLiveScoreAfterFlush`**). **`patch-package`** on `riffscore` for `ui.toolbarPlugins` + playback scrub (`riffscoreAdapter` narrow `ui` cast for `tsc`). **Exports:** client MIDI/PNG/WAV/ZIP + server chord-chart + print CSS — see **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. Theory Inspector: deterministic engine + taxonomy context; optional OpenAI via `frontend/.env.local`. **Intake:** `frontend/src/server/engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity. **Recent study-driven pass:** [Iteration 1+2 refinement](#wl-study-refinement-2026-04-18).
-- **Current status / focus:** (1) **PDF OMR** — product path **shipped**; Vercel vs Docker trade-offs in **[plan §1.9m](plan.md)** and [deployment.md](deployment.md). (2) **`riffscoreAdapter` / `toolbarPlugins`:** narrow cast — watch upstream types. (3) Piano samples — see [public/audio/piano/README.md](../frontend/public/audio/piano/README.md). (4) LLM — optional `OPENAI_API_KEY`. (5) **Tutor** — residual model variance; mitigated by FACT blocks. (6) Lint — optional hook-warning cleanup. (7) Legacy paragraphs in this file may mention `:8000` / `backend/` — use **[Program narrative (2026-04-20)](#program-narrative-2026-04-20)**.
-- **Key files:** `frontend/src/server/engine/parsers/fileIntake.ts`, `frontend/src/server/engine/satbToMusicXML.ts`, `frontend/src/app/api/*/route.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `sandbox/page.tsx`, `liveScoreExport.ts`, `scoreToMidi.ts`, `scoreToWav.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, root `requirements.txt`, `frontend/package.json`.
-- **Run:** `make dev-clean && make dev` → http://localhost:3000 (single process). `make test-engine` for CLI. **`make docker-build`** / **`make install`** for full PDF OMR; **`make pdfalto`** when vendored pdfalto sources exist under `miscellaneous/pdfalto/`.
+- **Current status / focus:** (1) **PDF OMR** — **Audiveris path shipped (2026-06-03)** — see **[work log](#wl-export-audiveris-2026-06-03)** and **[plan §1.9q](plan.md)**. (2) **`riffscoreAdapter` / `toolbarPlugins`:** narrow cast — watch upstream types. (3) Piano samples — Salamander CDN via patch. (4) LLM — optional `OPENAI_API_KEY`. (5) **Tutor** — residual model variance; mitigated by FACT blocks. (6) Lint — optional hook-warning cleanup.
+- **Key files:** `frontend/src/server/engine/parsers/fileIntake.ts`, `audiverisPipeline.ts`, `frontend/src/server/engine/satbToMusicXML.ts`, `frontend/src/app/api/*/route.ts`, `ExportPrintRoot.tsx`, `PrintableScore.tsx`, `sandbox/page.tsx`, `RiffScoreEditor.tsx`, `scripts/audiveris/*`, root `Dockerfile`, `Makefile`.
+- **Run:** `make dev-clean && make dev` → http://localhost:3000. **`make audiveris-setup`** for local PDF OMR. **`make docker-build`** for self-hosted full stack.
