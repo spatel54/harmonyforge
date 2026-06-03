@@ -29,9 +29,8 @@ export function applySetNoteDurations(
   } else if (fallbackNoteIds && fallbackNoteIds.size > 0) {
     ids = new Set(fallbackNoteIds);
   } else if (session) {
+    session.flushToZustand();
     ids = session.getDurationTargetNoteIds();
-  } else {
-    session?.flushToZustand();
   }
   if (ids.size === 0) return false;
 

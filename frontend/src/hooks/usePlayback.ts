@@ -249,7 +249,7 @@ export function usePlayback({
 
       part.start(0);
       Tone.getTransport().seconds = 0;
-      Tone.getTransport.bpm.value = effectiveBpm;
+      Tone.getTransport().bpm.value = effectiveBpm;
       schedulePlaybackMetronome(Tone, {
         bpm: effectiveBpm,
         startTimeOffset: 0,

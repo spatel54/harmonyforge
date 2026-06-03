@@ -10,11 +10,10 @@ export function applyDeleteSelectionAsRests(
   session: RiffScoreSessionHandles | null | undefined,
   fallbackNoteIds?: ReadonlySet<string> | null,
 ): boolean {
+  session?.flushToZustand();
   let ids = new Set<string>();
   if (session) {
     ids = session.getTransposeTargetNoteIds();
-  } else {
-    session?.flushToZustand();
   }
   if (ids.size === 0 && fallbackNoteIds && fallbackNoteIds.size > 0) {
     ids = new Set(fallbackNoteIds);
