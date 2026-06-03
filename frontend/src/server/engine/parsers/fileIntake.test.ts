@@ -5,6 +5,7 @@
 import { vi, type Mock } from "vitest";
 import { spawnSync } from "node:child_process";
 import AdmZip from "adm-zip";
+import * as audiverisPipeline from "./audiverisPipeline";
 import {
   ACCEPTED_EXTENSIONS_MESSAGE,
   bufferToUtf8ScoreText,
@@ -219,6 +220,9 @@ describe("intakeFileToParsedScore", () => {
   });
 
   it("runs Audiveris when PDF and tools fail → 501 with setup hints", () => {
+    const resolveBinSpy = vi
+      .spyOn(audiverisPipeline, "resolveAudiverisBin")
+      .mockReturnValue("/fake/Audiveris");
     mockedSpawn.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && (cmd === "java" || cmd.endsWith("/java"))) {
         return {
@@ -235,15 +239,22 @@ describe("intakeFileToParsedScore", () => {
         error: undefined,
       };
     });
-    const r = intakeFileToParsedScore(Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"), "score.pdf", {
-      allowPdfOm: true,
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.failure.status).toBe(501);
-      expect(r.failure.error).toMatch(/audiveris/i);
-      expect(r.failure.error).toMatch(/make audiveris-setup/i);
+    try {
+      const r = intakeFileToParsedScore(
+        Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"),
+        "score.pdf",
+        { allowPdfOm: true },
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.failure.status).toBe(501);
+        expect(r.failure.error).toMatch(/audiveris/i);
+        expect(r.failure.error).toMatch(/make audiveris-setup/i);
+      }
+      // java -version preflight + at least one Audiveris batch invocation
+      expect(mockedSpawn.mock.calls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      resolveBinSpy.mockRestore();
     }
-    expect(mockedSpawn.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 });
