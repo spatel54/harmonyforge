@@ -2,10 +2,11 @@
  * Tests for unified file intake (ZIP sniff, extension routing, PDF pipeline wiring).
  */
 
-import { vi, type Mock } from "vitest";
-import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { vi } from "vitest";
 import AdmZip from "adm-zip";
-import * as audiverisPipeline from "./audiverisPipeline";
 import {
   ACCEPTED_EXTENSIONS_MESSAGE,
   bufferToUtf8ScoreText,
@@ -19,11 +20,11 @@ import {
   looksLikeMusicXml,
 } from "./fileIntake";
 
-vi.mock("node:child_process", () => ({
-  spawnSync: vi.fn(),
-}));
+const mockSpawnSync = vi.hoisted(() => vi.fn());
 
-const mockedSpawn = spawnSync as unknown as Mock;
+vi.mock("node:child_process", () => ({
+  spawnSync: mockSpawnSync,
+}));
 
 const MINIMAL_MUSICXML = `<?xml version="1.0"?>
 <score-partwise version="2.0">
@@ -128,7 +129,7 @@ describe("fileIntake helpers", () => {
 
 describe("intakeFileToParsedScore", () => {
   beforeEach(() => {
-    mockedSpawn.mockReset();
+    mockSpawnSync.mockReset();
     delete process.env.AUDIVERIS_BIN;
   });
 
@@ -220,10 +221,12 @@ describe("intakeFileToParsedScore", () => {
   });
 
   it("runs Audiveris when PDF and tools fail → 501 with setup hints", () => {
-    const resolveBinSpy = vi
-      .spyOn(audiverisPipeline, "resolveAudiverisBin")
-      .mockReturnValue("/fake/Audiveris");
-    mockedSpawn.mockImplementation((cmd: string) => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "hf-audiveris-test-"));
+    const fakeBin = join(tmpDir, "Audiveris");
+    writeFileSync(fakeBin, "", { mode: 0o755 });
+    process.env.AUDIVERIS_BIN = fakeBin;
+
+    mockSpawnSync.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && (cmd === "java" || cmd.endsWith("/java"))) {
         return {
           status: 0,
@@ -250,11 +253,13 @@ describe("intakeFileToParsedScore", () => {
         expect(r.failure.status).toBe(501);
         expect(r.failure.error).toMatch(/audiveris/i);
         expect(r.failure.error).toMatch(/make audiveris-setup/i);
+        // Proves batch OMR ran (not only "binary not found" preflight skip).
+        expect(r.failure.error).toMatch(/audiveris import/i);
       }
-      // java -version preflight + at least one Audiveris batch invocation
-      expect(mockedSpawn.mock.calls.length).toBeGreaterThanOrEqual(1);
+      expect(mockSpawnSync.mock.calls.length).toBeGreaterThanOrEqual(1);
     } finally {
-      resolveBinSpy.mockRestore();
+      delete process.env.AUDIVERIS_BIN;
+      rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });
