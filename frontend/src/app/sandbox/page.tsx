@@ -1344,7 +1344,7 @@ function TactileSandboxPageInner({
   );
 
   const handleToolbarAction = React.useCallback(
-    (toolId: string, _sourceActionId?: unknown) => {
+    (toolId: string) => {
       handleToolSelect(toolId);
       return true;
     },

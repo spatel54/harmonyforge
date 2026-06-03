@@ -613,7 +613,7 @@ function consumeUnitsFromSlice(
   const notes = measure.notes;
 
   if (direction === "forward") {
-    let j = anchorIdx + 1;
+    const j = anchorIdx + 1;
     while (j < notes.length && consumed < unitsNeeded) {
       const cell = notes[j]!;
       const cellUnits = beatsToUnits(noteBeats(cell));
@@ -662,7 +662,7 @@ function consumeUnitsFromSlice(
       break;
     }
 
-    const { first, second } = splitNoteForBarline(cell, cellUnits - need);
+    const { first } = splitNoteForBarline(cell, cellUnits - need);
     notes.splice(j, 1, ...first);
     consumed += need;
     break;
