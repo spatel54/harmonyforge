@@ -48,5 +48,7 @@ describe("scoreToExportMusicXML", () => {
     const xml = scoreToExportMusicXML(tinyScore, "demo.xml");
     expect(xml).toContain("score-partwise");
     expect(xml).toContain("<part-list>");
+    expect(xml).toContain("<identification>");
+    expect(xml).toContain("<software>HarmonyForge</software>");
   });
 });

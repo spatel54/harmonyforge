@@ -22,18 +22,41 @@ function interleaveChannels(
   return out;
 }
 
+function buildListInfoIsftChunk(software: string): Uint8Array {
+  const sw = new TextEncoder().encode(software);
+  const swPadded = sw.length % 2 === 1 ? sw.length + 1 : sw.length;
+  const isftPayload = 4 + swPadded;
+  const infoBody = 4 + isftPayload;
+  const listPayload = 4 + infoBody;
+  const chunk = new Uint8Array(8 + listPayload);
+  const dv = new DataView(chunk.buffer);
+  chunk.set([0x4c, 0x49, 0x53, 0x54], 0);
+  dv.setUint32(4, listPayload, true);
+  chunk.set([0x49, 0x4e, 0x46, 0x4f], 8);
+  chunk.set([0x49, 0x53, 0x46, 0x54], 12);
+  dv.setUint32(16, sw.length, true);
+  chunk.set(sw, 20);
+  return chunk;
+}
+
 function writeWavPcm16Stereo(
   sampleRate: number,
   pcm: Int16Array,
+  options?: { softwareTag?: string },
 ): ArrayBuffer {
   const dataSize = pcm.length * 2;
-  const buffer = new ArrayBuffer(44 + dataSize);
+  const infoChunk = options?.softwareTag
+    ? buildListInfoIsftChunk(options.softwareTag)
+    : null;
+  const infoSize = infoChunk?.length ?? 0;
+  const riffSize = 36 + infoSize + dataSize;
+  const buffer = new ArrayBuffer(44 + infoSize + dataSize);
   const v = new DataView(buffer);
   const writeStr = (o: number, s: string) => {
     for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i));
   };
   writeStr(0, "RIFF");
-  v.setUint32(4, 36 + dataSize, true);
+  v.setUint32(4, riffSize, true);
   writeStr(8, "WAVE");
   writeStr(12, "fmt ");
   v.setUint32(16, 16, true);
@@ -43,30 +66,46 @@ function writeWavPcm16Stereo(
   v.setUint32(28, sampleRate * 4, true);
   v.setUint16(32, 4, true);
   v.setUint16(34, 16, true);
-  writeStr(36, "data");
-  v.setUint32(40, dataSize, true);
+  let dataOffset = 36;
+  if (infoChunk) {
+    new Uint8Array(buffer).set(infoChunk, dataOffset);
+    dataOffset += infoSize;
+  }
+  writeStr(dataOffset, "data");
+  v.setUint32(dataOffset + 4, dataSize, true);
   for (let i = 0; i < pcm.length; i++) {
-    v.setInt16(44 + i * 2, pcm[i]!, true);
+    v.setInt16(dataOffset + 8 + i * 2, pcm[i]!, true);
   }
   return buffer;
 }
 
+export type ScoreToWavOptions = {
+  /** RIFF LIST/INFO ISFT chunk (subtle attribution in file metadata). */
+  softwareTag?: string;
+};
+
 /** ~0.25s of silence for empty scores */
-function silentWav(sampleRate: number): ArrayBuffer {
+function silentWav(
+  sampleRate: number,
+  options?: ScoreToWavOptions,
+): ArrayBuffer {
   const n = Math.floor(sampleRate * 0.25);
   const pcm = new Int16Array(n * 2);
-  return writeWavPcm16Stereo(sampleRate, pcm);
+  return writeWavPcm16Stereo(sampleRate, pcm, options);
 }
 
 /**
  * Renders all non-rest notes through a PolySynth (same character as usePlayback fallback).
  */
-export async function scoreToWavBuffer(score: EditableScore): Promise<ArrayBuffer> {
+export async function scoreToWavBuffer(
+  score: EditableScore,
+  options?: ScoreToWavOptions,
+): Promise<ArrayBuffer> {
   const bpm = score.bpm ?? DEFAULT_BPM;
   const events = scoreToScheduledNotes(score);
   const timed = scheduledNotesToSeconds(events, bpm);
   if (timed.length === 0) {
-    return silentWav(44100);
+    return silentWav(44100, options);
   }
 
   const totalSec =
@@ -91,7 +130,7 @@ export async function scoreToWavBuffer(score: EditableScore): Promise<ArrayBuffe
 
   const buffer = toneAudioBuffer.get();
   if (!buffer) {
-    return silentWav(44100);
+    return silentWav(44100, options);
   }
 
   const sr = buffer.sampleRate;
@@ -99,5 +138,5 @@ export async function scoreToWavBuffer(score: EditableScore): Promise<ArrayBuffe
   const ch1 =
     buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : ch0;
   const pcm = interleaveChannels(ch0, ch1);
-  return writeWavPcm16Stereo(sr, pcm);
+  return writeWavPcm16Stereo(sr, pcm, options);
 }

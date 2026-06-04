@@ -4,6 +4,11 @@ import type { EditableScore } from "@/lib/music/scoreTypes";
 import { scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { scoreToMidiBuffer } from "@/lib/music/scoreToMidi";
 import { scoreToWavBuffer } from "@/lib/music/scoreToWav";
+import {
+  HARMONYFORGE_EXPORT_ATTRIBUTION_LONG,
+  HARMONYFORGE_EXPORT_BRAND,
+  injectMusicXmlExportBranding,
+} from "@/lib/sandbox/exportBranding";
 
 export const SANDBOX_EXPORT_FORMATS = [
   { id: "pdf", icon: FileText, label: "PDF", desc: "Print or save as PDF" },
@@ -33,7 +38,8 @@ export function scoreToExportMusicXML(
   score: EditableScore,
   sourceFileName?: string | null,
 ): string {
-  return scoreToPartwiseMusicXML(score, sourceFileName ?? undefined);
+  const xml = scoreToPartwiseMusicXML(score, sourceFileName ?? undefined);
+  return injectMusicXmlExportBranding(xml);
 }
 
 export type RunSandboxExportOptions = {
@@ -61,7 +67,9 @@ export async function runSandboxExport(
       );
       return;
     case "midi": {
-      const mid = scoreToMidiBuffer(score);
+      const mid = scoreToMidiBuffer(score, {
+        attributionText: HARMONYFORGE_EXPORT_ATTRIBUTION_LONG,
+      });
       downloadBlob(
         new Blob([new Uint8Array(mid)], { type: "audio/midi" }),
         "harmony-forge-score.mid",
@@ -69,7 +77,9 @@ export async function runSandboxExport(
       return;
     }
     case "wav": {
-      const ab = await scoreToWavBuffer(score);
+      const ab = await scoreToWavBuffer(score, {
+        softwareTag: HARMONYFORGE_EXPORT_BRAND,
+      });
       downloadBlob(new Blob([ab], { type: "audio/wav" }), "harmony-forge-score.wav");
       return;
     }

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
 import { extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { renderOsmdExportScore } from "@/lib/music/osmdExportRender";
+import { HARMONYFORGE_EXPORT_ATTRIBUTION } from "@/lib/sandbox/exportBranding";
 
 export interface ScorePreviewPaneProps {
   /** Partwise MusicXML — rendered with the same OSMD path as PDF export. */
@@ -120,10 +121,13 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
 
       <div className="flex flex-col items-center justify-center min-h-[56px] py-2 px-4 gap-0.5 border-t border-[color-mix(in_srgb,var(--hf-detail)_70%,transparent)] bg-[var(--hf-bg)] shrink-0 md:rounded-bl-[12px]">
         <span className="font-mono text-[10px] text-[var(--hf-text-primary)] opacity-50 text-center leading-snug">
-          {meta
-            ? `${meta.title || "Score"} · ${meta.meta || "HarmonyForge"}`
-            : "Export your score"}
+          {meta ? `${meta.title || "Score"} · ${meta.meta}` : "Export your score"}
         </span>
+        {musicXML ? (
+          <span className="hf-export-attribution text-[9px] tracking-[0.08em] opacity-90">
+            {HARMONYFORGE_EXPORT_ATTRIBUTION}
+          </span>
+        ) : null}
       </div>
     </div>
   );

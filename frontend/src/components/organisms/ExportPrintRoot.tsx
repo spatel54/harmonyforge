@@ -6,6 +6,7 @@ import {
   PrintableScore,
   type PrintableScoreHandle,
 } from "@/components/score/PrintableScore";
+import { HARMONYFORGE_EXPORT_ATTRIBUTION } from "@/lib/sandbox/exportBranding";
 
 export type { PrintableScoreHandle };
 
@@ -37,6 +38,7 @@ export const ExportPrintRoot = forwardRef<PrintableScoreHandle, ExportPrintRootP
         <div className="hf-print-root__score">
           <PrintableScore ref={ref} xml={xml} />
         </div>
+        <p className="hf-export-attribution">{HARMONYFORGE_EXPORT_ATTRIBUTION}</p>
       </div>,
       document.body,
     );

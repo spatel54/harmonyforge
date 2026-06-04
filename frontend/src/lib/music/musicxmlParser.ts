@@ -178,10 +178,14 @@ export function extractMusicXMLMetadata(xml: string): { title: string; meta: str
     });
   }
   const voices = partNames.length > 0 ? partNames.join(", ") : `${partCount} voices`;
+  const software =
+    root.querySelector("encoding software")?.textContent?.trim() ??
+    root.querySelector('creator[type="software"]')?.textContent?.trim() ??
+    null;
 
   return {
     title: workTitle,
-    meta: `${voices} • Page 1`,
+    meta: software ? `${voices} · ${software}` : `${voices} · Page 1`,
   };
 }
 

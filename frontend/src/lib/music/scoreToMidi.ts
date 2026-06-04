@@ -51,6 +51,20 @@ function endOfTrack(): number[] {
   return [0x00, 0xff, 0x2f, 0x00];
 }
 
+/** Text meta event (FF 01) on track 0 — e.g. export attribution. */
+function metaText(text: string): number[] {
+  const enc = new TextEncoder().encode(text);
+  const out: number[] = [0x00, 0xff, 0x01];
+  pushVLQ(out, enc.length);
+  for (const b of enc) out.push(b);
+  return out;
+}
+
+export type ScoreToMidiOptions = {
+  /** Prepends a text meta event on the tempo/meta track (export attribution). */
+  attributionText?: string;
+};
+
 function collectPartNoteEvents(
   score: EditableScore,
   partIndex: number,
@@ -109,11 +123,17 @@ function absEventsToTrackBytes(events: AbsEv[]): number[] {
 /**
  * Build a Type 1 SMF: track 0 = tempo; tracks 1..N = score.parts (channels 0..min(15,N-1)).
  */
-export function scoreToMidiBuffer(score: EditableScore): Uint8Array {
+export function scoreToMidiBuffer(
+  score: EditableScore,
+  options?: ScoreToMidiOptions,
+): Uint8Array {
   const bpm = score.bpm ?? DEFAULT_BPM;
   const beatsDefault = 4;
 
   const metaBytes: number[] = [];
+  if (options?.attributionText) {
+    metaBytes.push(...metaText(options.attributionText));
+  }
   metaBytes.push(...metaSetTempo(bpm));
   metaBytes.push(...endOfTrack());
   const metaChunk = buildTrackChunk(metaBytes);

@@ -55,4 +55,12 @@ describe("scoreToMidiBuffer", () => {
     const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     expect(dv.getUint16(10, false)).toBe(3);
   });
+
+  it("can embed attribution text on the meta track", () => {
+    const buf = scoreToMidiBuffer(tinyScore, {
+      attributionText: "Exported from HarmonyForge",
+    });
+    const text = new TextDecoder().decode(buf);
+    expect(text).toContain("Exported from HarmonyForge");
+  });
 });

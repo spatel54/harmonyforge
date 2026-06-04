@@ -79,7 +79,7 @@ export function ExportOptionsPane({
         <button
           type="button"
           onClick={onClose}
-          className="hf-pressable hidden sm:flex h-10 px-4 rounded-lg font-mono text-[11px] text-[var(--hf-text-primary)] opacity-70 border border-[color-mix(in_srgb,var(--hf-detail)_60%,transparent)] hover:opacity-100"
+          className="hf-pressable hidden sm:inline-flex items-center justify-center h-10 px-4 rounded-lg font-mono text-[12px] font-medium leading-none text-[var(--hf-text-primary)] opacity-70 border border-[color-mix(in_srgb,var(--hf-detail)_60%,transparent)] hover:opacity-100"
         >
           Cancel
         </button>

@@ -1059,6 +1059,16 @@ a.hf-pressable:active {
   height: auto;
 }
 
+.hf-export-attribution {
+  margin: 0;
+  padding: 10px 0 2px;
+  text-align: center;
+  font-family: var(--font-inter, Inter, sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(45, 24, 23, 0.42);
+}
+
 /* Export modal — OSMD PDF preview (same renderer as print). */
 .hf-export-osmd-preview {
   -webkit-overflow-scrolling: touch;
@@ -1121,5 +1131,18 @@ a.hf-pressable:active {
     display: block !important;
     max-width: 100% !important;
     height: auto !important;
+  }
+
+  body.hf-printing-score .hf-export-attribution {
+    display: block !important;
+    position: fixed;
+    bottom: 0.12in;
+    left: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    font-size: 9pt;
+    color: rgba(0, 0, 0, 0.38);
+    z-index: 1;
   }
 }
