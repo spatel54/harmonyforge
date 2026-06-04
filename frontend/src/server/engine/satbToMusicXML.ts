@@ -3,8 +3,9 @@
  * Builds timewise MusicXML that preserves source melody rhythm when available.
  */
 
+import { chordSymbolToHarmonyXml, romanToChordSymbol } from "../../lib/music/chordSymbolFormat";
 import type { SolverResult } from "./solver";
-import type { BassRhythmMode, ParsedScore, RhythmDensity, Voice } from "./types";
+import type { BassRhythmMode, ChordSlot, KeyContext, ParsedScore, RhythmDensity, Voice } from "./types";
 import { pitchToMidi, midiToPitch, getVoiceRange } from "./types";
 
 const DIVISIONS = 8;
@@ -127,6 +128,22 @@ function getChordBoundaries(result: SolverResult, totalBeats: number, beatsPerMe
   const fallbackEnd = beats.length > 0 ? beats[beats.length - 1] + DEFAULT_CHORD_SPAN : beatsPerMeasure;
   beats.push(Math.max(totalBeats, fallbackEnd));
   return beats;
+}
+
+function voiceForInputPartName(name: string): Voice {
+  const n = name.toLowerCase();
+  if (n.includes("bass")) return "Bass";
+  if (n.includes("tenor")) return "Tenor";
+  if (n.includes("alto")) return "Alto";
+  return "Soprano";
+}
+
+function melodyNotesToTimedEvents(notes: ParsedScore["melody"]): TimedEvent[] {
+  return notes.map((note) => ({
+    pitch: note.pitch,
+    startBeat: note.beat,
+    duration: clampDurationBeats(note.duration ?? 1),
+  }));
 }
 
 function buildSopranoEvents(result: SolverResult, source?: ParsedScore): TimedEvent[] {
@@ -480,16 +497,73 @@ function clefXmlForPart(partName: string, voice: Voice): { sign: string; line: n
   return { sign: "G", line: 2 };
 }
 
-function measureContentXML(segments: MeasureSegment[], beatsPerMeasure: number): string {
-  const sorted = [...segments].sort((a, b) => a.startBeat - b.startBeat);
+interface HarmonyAtBeat {
+  localBeat: number;
+  xml: string;
+}
+
+function findMeasureIndexForBeat(beat: number, layout: MeasureLayout): number {
+  for (let i = layout.starts.length - 1; i >= 0; i--) {
+    if (beat + 1e-4 >= layout.starts[i]!) return i;
+  }
+  return 0;
+}
+
+/** Group chord slots into per-measure harmony XML on the melody part (P1). */
+function buildHarmoniesByMeasure(
+  chords: ChordSlot[],
+  key: KeyContext,
+  layout: MeasureLayout,
+): Map<number, HarmonyAtBeat[]> {
+  const byMeasure = new Map<number, HarmonyAtBeat[]>();
+  const sorted = [...chords].sort((a, b) => (a.beat ?? 0) - (b.beat ?? 0));
+  for (const slot of sorted) {
+    const beat = clampDurationBeats(slot.beat ?? 0);
+    const measureIndex = findMeasureIndexForBeat(beat, layout);
+    const localBeat = clampDurationBeats(beat - layout.starts[measureIndex]!);
+    const symbol = romanToChordSymbol(slot.roman, key);
+    const xml = chordSymbolToHarmonyXml(symbol);
+    const list = byMeasure.get(measureIndex) ?? [];
+    list.push({ localBeat, xml });
+    byMeasure.set(measureIndex, list);
+  }
+  return byMeasure;
+}
+
+function measureContentXML(
+  segments: MeasureSegment[],
+  beatsPerMeasure: number,
+  harmonies: HarmonyAtBeat[] = [],
+): string {
+  type TimelineItem =
+    | { kind: "harmony"; beat: number; xml: string }
+    | { kind: "note"; beat: number; pitch?: string; duration: number };
+
+  const timeline: TimelineItem[] = [
+    ...harmonies.map((h) => ({ kind: "harmony" as const, beat: h.localBeat, xml: h.xml })),
+    ...segments.map((s) => ({
+      kind: "note" as const,
+      beat: s.startBeat,
+      pitch: s.pitch,
+      duration: s.duration,
+    })),
+  ].sort((a, b) => a.beat - b.beat || (a.kind === "harmony" ? -1 : 1));
+
   const xml: string[] = [];
   let cursor = 0;
 
-  for (const segment of sorted) {
-    const gap = clampDurationBeats(segment.startBeat - cursor);
-    if (gap > 0) xml.push(noteXML(undefined, gap));
-    xml.push(noteXML(segment.pitch, segment.duration));
-    cursor = clampDurationBeats(segment.startBeat + segment.duration);
+  for (const item of timeline) {
+    const gap = clampDurationBeats(item.beat - cursor);
+    if (gap > 0) {
+      xml.push(noteXML(undefined, gap));
+      cursor = clampDurationBeats(cursor + gap);
+    }
+    if (item.kind === "harmony") {
+      xml.push(item.xml);
+    } else {
+      xml.push(noteXML(item.pitch, item.duration));
+      cursor = clampDurationBeats(item.beat + item.duration);
+    }
   }
 
   const trailing = clampDurationBeats(beatsPerMeasure - cursor);
@@ -603,7 +677,7 @@ export function satbToMusicXML(
   let partEvents: MeasureSegment[][][];
 
   if (additive && instruments) {
-    const melodyPartName = source.melodyPartName ?? "Melody";
+    const inputParts = source?.inputParts;
     const harmonyParts: { voice: Voice; name: string; groupIndex: number }[] = [];
     for (const v of ["Soprano", "Alto", "Tenor", "Bass"] as Voice[]) {
       const insts = instruments[v];
@@ -613,27 +687,67 @@ export function satbToMusicXML(
         harmonyParts.push({ voice: voiceForPart, name: insts[i]!, groupIndex: i });
       }
     }
-    activeVoices = ["Soprano", ...harmonyParts.map((p) => p.voice)];
-    partIds = ["P1", ...harmonyParts.map((_, i) => `P${i + 2}`)];
-    partNames = [melodyPartName, ...harmonyParts.map((p) => p.name)];
-    partEvents = [
-      allPartEvents[0],
-      ...harmonyParts.map((p) =>
-        splitEventsByMeasure(
-          buildHarmonyEventsForInstrument(
-            result,
-            p.voice,
-            p.groupIndex,
-            source,
-            density,
-            bassRhythmMode,
+
+    if (inputParts && inputParts.length > 1) {
+      const numInput = inputParts.length;
+      activeVoices = [
+        ...inputParts.map((p) => voiceForInputPartName(p.name)),
+        ...harmonyParts.map((p) => p.voice),
+      ];
+      partIds = [
+        ...inputParts.map((p, i) => p.partId || `P${i + 1}`),
+        ...harmonyParts.map((_, i) => `P${numInput + i + 1}`),
+      ];
+      partNames = [...inputParts.map((p) => p.name), ...harmonyParts.map((p) => p.name)];
+      partEvents = [
+        ...inputParts.map((p) =>
+          splitEventsByMeasure(
+            melodyNotesToTimedEvents(p.notes),
+            totalMeasures,
+            beatsPerMeasure,
+            layout,
           ),
-          totalMeasures,
-          beatsPerMeasure,
-          layout,
-        )
-      ),
-    ];
+        ),
+        ...harmonyParts.map((p) =>
+          splitEventsByMeasure(
+            buildHarmonyEventsForInstrument(
+              result,
+              p.voice,
+              p.groupIndex,
+              source,
+              density,
+              bassRhythmMode,
+            ),
+            totalMeasures,
+            beatsPerMeasure,
+            layout,
+          ),
+        ),
+      ];
+    } else {
+      const melodyPartName = source!.melodyPartName ?? "Melody";
+      activeVoices = ["Soprano", ...harmonyParts.map((p) => p.voice)];
+      partIds = ["P1", ...harmonyParts.map((_, i) => `P${i + 2}`)];
+      partNames = [melodyPartName, ...harmonyParts.map((p) => p.name)];
+      partEvents = [
+        allPartEvents[0],
+        ...harmonyParts.map((p) =>
+          splitEventsByMeasure(
+            buildHarmonyEventsForInstrument(
+              result,
+              p.voice,
+              p.groupIndex,
+              source,
+              density,
+              bassRhythmMode,
+            ),
+            totalMeasures,
+            beatsPerMeasure,
+            layout,
+          ),
+        ),
+      ];
+    }
   } else if (additive && !instruments) {
     activeVoices = ["Soprano"];
     partIds = ["P1"];
@@ -652,6 +766,13 @@ export function satbToMusicXML(
     );
     partEvents = activeVoices.map((v) => allPartEvents[VOICE_ORDER.indexOf(v)]);
   }
+
+  const emitChordHarmonies =
+    partIds.length >= 2 && (source?.chords?.length ?? 0) > 0 && Boolean(source?.key);
+  const harmoniesByMeasure =
+    emitChordHarmonies && source?.key && source.chords
+      ? buildHarmoniesByMeasure(source.chords, source.key, layout)
+      : null;
 
   const partList = partIds
     .map((id, i) => `  <score-part id="${id}">
@@ -682,7 +803,9 @@ export function satbToMusicXML(
       const measureEls = Array.from({ length: totalMeasures }, (_, mIdx) => {
         const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
         const measureBeats = layout.lengths[mIdx]!;
-        const note = measureContentXML(partEvents[i][mIdx] ?? [], measureBeats);
+        const measureHarmonies =
+          i === 0 && harmoniesByMeasure ? harmoniesByMeasure.get(mIdx) ?? [] : [];
+        const note = measureContentXML(partEvents[i][mIdx] ?? [], measureBeats, measureHarmonies);
         return `  <measure${measureAttrs(mIdx)}>
 ${indentInnerMusicXml(attributes, note)}
   </measure>`;
@@ -709,7 +832,9 @@ ${parts.join("\n")}
     const partEls = partIds.map((id, i) => {
       const attributes = mIdx === 0 ? `${attributesXML(id, activeVoices[i], partNames[i] ?? "", source, beatsPerMeasure, beatType)}\n` : "";
       const measureBeats = layout.lengths[mIdx]!;
-      const note = measureContentXML(partEvents[i][mIdx] ?? [], measureBeats);
+      const measureHarmonies =
+        i === 0 && harmoniesByMeasure ? harmoniesByMeasure.get(mIdx) ?? [] : [];
+      const note = measureContentXML(partEvents[i][mIdx] ?? [], measureBeats, measureHarmonies);
       return `  <part id="${id}">
 ${indentInnerMusicXml(attributes, note)}
   </part>`;

@@ -3,6 +3,7 @@
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
 import { renderOsmdExportScore } from "@/lib/music/osmdExportRender";
 import { osmdExportRenderOptionsForPdf } from "@/lib/music/osmdExportRenderOptions";
+import { musicXmlForExportDisplay } from "@/lib/music/musicXmlExportDisplay";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export interface PrintableScoreHandle {
@@ -21,11 +22,12 @@ export const PrintableScore = forwardRef<PrintableScoreHandle, Props>(
       printWhenReady: async (xmlOverride?: string) => {
         const xmlToLoad = xmlOverride ?? xml;
         if (!containerRef.current || !xmlToLoad) return;
-        const showLetterNames = useScoreDisplayStore.getState().showNoteNameLabels;
+        const { showNoteNameLabels, showChordSymbols } = useScoreDisplayStore.getState();
+        const xmlForPrint = musicXmlForExportDisplay(xmlToLoad, { showChordSymbols });
         await renderOsmdExportScore(
           containerRef.current,
-          xmlToLoad,
-          osmdExportRenderOptionsForPdf(showLetterNames),
+          xmlForPrint,
+          osmdExportRenderOptionsForPdf(showNoteNameLabels),
         );
 
         const printRoot = containerRef.current.closest(".hf-print-root");

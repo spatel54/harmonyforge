@@ -12,6 +12,8 @@ export interface ExportModalProps {
   onExport: (format: SandboxExportFormatId) => void;
   /** Partwise MusicXML — OSMD PDF preview + exports. */
   musicXML?: string | null;
+  /** Show chord-symbol toggle when melody + harmony are present. */
+  showChordSymbolsToggle?: boolean;
   className?: string;
 }
 
@@ -20,6 +22,7 @@ export function ExportModal({
   onClose,
   onExport,
   musicXML = null,
+  showChordSymbolsToggle = false,
   className,
 }: ExportModalProps) {
   if (!isOpen) return null;
@@ -44,7 +47,10 @@ export function ExportModal({
             className,
           )}
         >
-          <ScorePreviewPane musicXML={musicXML} />
+          <ScorePreviewPane
+            musicXML={musicXML}
+            showChordSymbolsToggle={showChordSymbolsToggle}
+          />
           <ExportOptionsPane onClose={onClose} onExport={onExport} />
         </div>
       </div>

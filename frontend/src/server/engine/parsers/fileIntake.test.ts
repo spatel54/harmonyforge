@@ -128,36 +128,39 @@ describe("fileIntake helpers", () => {
 });
 
 describe("intakeFileToParsedScore", () => {
+  const intake = async (
+    ...args: Parameters<typeof intakeFileToParsedScore>
+  ) => intakeFileToParsedScore(...args);
   beforeEach(() => {
     mockSpawnSync.mockReset();
     delete process.env.AUDIVERIS_BIN;
   });
 
-  it("parses MXL buffer mislabeled as .xml via ZIP sniff", () => {
+  it("parses MXL buffer mislabeled as .xml via ZIP sniff", async () => {
     const buf = createMXL(MINIMAL_MUSICXML);
-    const r = intakeFileToParsedScore(buf, "score.xml", { allowPdfOm: false });
+    const r = await intake(buf, "score.xml", { allowPdfOm: false });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.parsed.melody.length).toBeGreaterThan(0);
   });
 
-  it("parses plain MusicXML .musicxml buffer", () => {
-    const r = intakeFileToParsedScore(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "a.musicxml", {
+  it("parses plain MusicXML .musicxml buffer", async () => {
+    const r = await intake(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "a.musicxml", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
   });
 
-  it("extracts embedded score-partwise from noisy .xml wrapper", () => {
+  it("extracts embedded score-partwise from noisy .xml wrapper", async () => {
     const wrapped = `<!-- export log -->\n${MINIMAL_MUSICXML}\n<!-- end -->\n`;
-    const r = intakeFileToParsedScore(Buffer.from(wrapped, "utf-8"), "wrapped.xml", {
+    const r = await intake(Buffer.from(wrapped, "utf-8"), "wrapped.xml", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.parsed.melody.length).toBeGreaterThan(0);
   });
 
-  it("parses namespaced MusicXML .musicxml buffer (MuseScore-style)", () => {
-    const r = intakeFileToParsedScore(Buffer.from(NAMESPACED_MUSICXML, "utf-8"), "ns.musicxml", {
+  it("parses namespaced MusicXML .musicxml buffer (MuseScore-style)", async () => {
+    const r = await intake(Buffer.from(NAMESPACED_MUSICXML, "utf-8"), "ns.musicxml", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
@@ -167,15 +170,15 @@ describe("intakeFileToParsedScore", () => {
     }
   });
 
-  it("parses namespaced MXL via ZIP sniff", () => {
+  it("parses namespaced MXL via ZIP sniff", async () => {
     const buf = createMXL(NAMESPACED_MUSICXML);
-    const r = intakeFileToParsedScore(buf, "labeled.xml", { allowPdfOm: false });
+    const r = await intake(buf, "labeled.xml", { allowPdfOm: false });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.parsed.melody[0]!.pitch).toBe("G4");
   });
 
-  it("rejects PDF for validation when allowPdfOm is false", () => {
-    const r = intakeFileToParsedScore(Buffer.from("%PDF-1.1\n"), "a.pdf", { allowPdfOm: false });
+  it("rejects PDF for validation when allowPdfOm is false", async () => {
+    const r = await intake(Buffer.from("%PDF-1.1\n"), "a.pdf", { allowPdfOm: false });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.failure.status).toBe(501);
@@ -183,8 +186,8 @@ describe("intakeFileToParsedScore", () => {
     }
   });
 
-  it("returns 400 for unknown extension when content is not MIDI or MusicXML", () => {
-    const r = intakeFileToParsedScore(Buffer.from("x"), "a.bin", { allowPdfOm: true });
+  it("returns 400 for unknown extension when content is not MIDI or MusicXML", async () => {
+    const r = await intake(Buffer.from("x"), "a.bin", { allowPdfOm: true });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.failure.status).toBe(400);
@@ -192,35 +195,35 @@ describe("intakeFileToParsedScore", () => {
     }
   });
 
-  it("parses SMF via MThd magic when extension is .txt", () => {
+  it("parses SMF via MThd magic when extension is .txt", async () => {
     const buf = Buffer.from(MINIMAL_MIDI_HEX, "hex");
-    const r = intakeFileToParsedScore(buf, "export.txt", { allowPdfOm: false });
+    const r = await intake(buf, "export.txt", { allowPdfOm: false });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.parsed.melody.length).toBeGreaterThan(0);
   });
 
-  it("parses MusicXML when extension is .txt (looksLikeMusicXml)", () => {
-    const r = intakeFileToParsedScore(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "score.txt", {
+  it("parses MusicXML when extension is .txt (looksLikeMusicXml)", async () => {
+    const r = await intake(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "score.txt", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
   });
 
-  it("parses MusicXML with empty extension via sniff + fallback", () => {
-    const r = intakeFileToParsedScore(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "MyScore", {
+  it("parses MusicXML with empty extension via sniff + fallback", async () => {
+    const r = await intake(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "MyScore", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
   });
 
-  it("parses .mxml like MusicXML", () => {
-    const r = intakeFileToParsedScore(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "x.mxml", {
+  it("parses .mxml like MusicXML", async () => {
+    const r = await intake(Buffer.from(MINIMAL_MUSICXML, "utf-8"), "x.mxml", {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
   });
 
-  it("runs Audiveris when PDF and tools fail → 501 with setup hints", () => {
+  it("runs Audiveris when PDF and tools fail → 501 with setup hints", async () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "hf-audiveris-test-"));
     const fakeBin = join(tmpDir, "Audiveris");
     writeFileSync(fakeBin, "", { mode: 0o755 });
@@ -243,7 +246,7 @@ describe("intakeFileToParsedScore", () => {
       };
     });
     try {
-      const r = intakeFileToParsedScore(
+      const r = await intake(
         Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"),
         "score.pdf",
         { allowPdfOm: true },

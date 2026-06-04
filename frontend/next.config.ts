@@ -17,9 +17,11 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: [
     "@tonejs/midi",
+    "@napi-rs/canvas",
     "adm-zip",
     "fast-xml-parser",
     "musicxml-interfaces",
+    "pdfjs-dist",
   ],
 };
 

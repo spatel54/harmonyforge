@@ -97,4 +97,36 @@ describe("schedulePlaybackMetronome", () => {
     // 60 BPM = 1s/beat; absolute beats at 0,1,2,3 → transport -1 gives 0,1,2
     expect(scheduled).toEqual([0, 1, 2]);
   });
+
+  it("keeps strictly increasing transport times (avoids Tone duplicate-time errors)", () => {
+    const scheduled: number[] = [];
+    const fakeTransport = {
+      schedule: (_fn: (time: number) => void, time: number) => {
+        scheduled.push(time);
+        return scheduled.length;
+      },
+      clear: () => {},
+    };
+    const fakeTone = {
+      Transport: fakeTransport,
+      MembraneSynth: class {
+        volume = { value: 0 };
+        toDestination() {
+          return this;
+        }
+        triggerAttackRelease() {}
+      },
+    };
+
+    schedulePlaybackMetronome(fakeTone as never, {
+      bpm: 90,
+      startTimeOffset: 0.001,
+      totalEnd: 8,
+      timeSignature: "4/4",
+    });
+
+    for (let i = 1; i < scheduled.length; i++) {
+      expect(scheduled[i]).toBeGreaterThan(scheduled[i - 1]!);
+    }
+  });
 });

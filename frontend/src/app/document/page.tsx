@@ -22,7 +22,7 @@ import { getStudyCondition } from "@/lib/study/studyConfig";
 import { readMelodyXmlForReviewer } from "@/lib/study/readMelodyXml";
 import { logStudyEvent } from "@/lib/study/studyEventLog";
 import { isProbablyZipBytes } from "@/lib/music/isProbablyZipBytes";
-import { useClientPdfPreview } from "@/hooks/useClientPdfPreview";
+import { rasterizePdf, useClientPdfPreview } from "@/hooks/useClientPdfPreview";
 import { AudioUnlockBanner } from "@/components/molecules/AudioUnlockBanner";
 import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 
@@ -208,6 +208,27 @@ export default function DocumentPage() {
           });
           const fd = new FormData();
           fd.append("file", file);
+          if (pdfPreview.pages.length > 0) {
+            for (const page of pdfPreview.pages) {
+              fd.append(
+                "pages",
+                new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+              );
+            }
+          } else {
+            try {
+              const buf = await file.arrayBuffer();
+              const pages = await rasterizePdf(buf, { maxPages: 8, scale: 2 });
+              for (const page of pages) {
+                fd.append(
+                  "pages",
+                  new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+                );
+              }
+            } catch {
+              // Server will rasterize the PDF if client preview fails.
+            }
+          }
           const res = await fetch(`/api/to-preview-musicxml`, {
             method: "POST",
             body: fd,

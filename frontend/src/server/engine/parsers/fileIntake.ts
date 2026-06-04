@@ -199,10 +199,7 @@ export function collectAltoTextContent(altoXml: string): string {
   return chunks.join("\n");
 }
 
-/**
- * @deprecated Client page PNGs are no longer used for OMR. Prefer the original PDF via Audiveris.
- * Kept for API compatibility — returns 501 directing callers to upload PDF directly.
- */
+/** Client- or server-rasterized PNG/JPG pages (e.g. from pdfjs) → Audiveris image OMR. */
 export function intakeImagePagesToParsedScore(
   pages: Buffer[],
   options: Pick<IntakeOptions, "audiverisTimeoutMs" | "omrTimeoutMs"> = {},
@@ -242,11 +239,11 @@ export function intakeImagePagesToParsedScore(
   };
 }
 
-export function intakeFileToParsedScore(
+export async function intakeFileToParsedScore(
   buffer: Buffer,
   originalname: string,
   options: IntakeOptions,
-): IntakeResult {
+): Promise<IntakeResult> {
   const ext = getExtension(originalname);
   const audiverisMs = effectiveAudiverisTimeoutMs(options);
 
@@ -302,7 +299,7 @@ export function intakeFileToParsedScore(
         },
       };
     }
-    const { parsed, details } = tryAudiverisOnPdfBuffer(buffer, audiverisMs);
+    const { parsed, details } = await tryAudiverisOnPdfBuffer(buffer, audiverisMs);
     if (parsed && parsed.melody.length > 0) {
       return { ok: true, parsed };
     }

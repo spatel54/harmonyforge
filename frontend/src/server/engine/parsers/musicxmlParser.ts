@@ -10,7 +10,7 @@
  */
 
 import { createRequire } from "node:module";
-import { parsePartwiseMusicXML } from "./partwiseParser";
+import { parsePartwiseMusicXMLFull } from "./partwiseParser";
 import { parseTimewiseMusicXML } from "./timewiseParser";
 import { hasScorePartwiseMarker, hasScoreTimewiseMarker } from "./musicXmlMarkers";
 import type { ParsedScore, PitchClass } from "../types";
@@ -60,6 +60,20 @@ function fifthsToKey(fifths: number, mode?: string): { tonic: PitchClass; mode: 
   return { tonic, mode: isMinor ? "minor" : "major" };
 }
 
+function sanitizeMusicXmlText(raw: string): string {
+  return raw
+    .split("\n")
+    .filter((line) => !/^<!DOCTYPE /i.test(line))
+    .join("\n");
+}
+
+function attachMultiPartSourceXml(parsed: ParsedScore, xml: string): ParsedScore {
+  if ((parsed.inputParts?.length ?? 0) > 1) {
+    return { ...parsed, sourceMusicXml: sanitizeMusicXmlText(xml) };
+  }
+  return parsed;
+}
+
 /** Extract Roman numeral from Harmony function if present */
 function harmonyToRoman(harmony: Harmony): string | null {
   const fn = (harmony as { function?: { data?: string } }).function;
@@ -75,16 +89,18 @@ export function parseMusicXML(xml: string): ParsedScore | null {
   const hasTimewise = hasScoreTimewiseMarker(xml);
 
   if (hasPartwise) {
-    const partwise = parsePartwiseMusicXML(xml);
-    if (partwise && partwise.melody.length > 0) return partwise;
+    const partwise = parsePartwiseMusicXMLFull(xml);
+    if (partwise && partwise.melody.length > 0) {
+      return attachMultiPartSourceXml(partwise, xml);
+    }
   }
   if (hasTimewise) {
     const timewise = parseTimewiseMusicXML(xml);
     if (timewise && timewise.melody.length > 0) return timewise;
   }
   if (hasPartwise) {
-    const partwise = parsePartwiseMusicXML(xml);
-    if (partwise) return partwise;
+    const partwise = parsePartwiseMusicXMLFull(xml);
+    if (partwise) return attachMultiPartSourceXml(partwise, xml);
   }
   if (hasTimewise) {
     const timewise = parseTimewiseMusicXML(xml);
@@ -189,7 +205,8 @@ export function parseMusicXML(xml: string): ParsedScore | null {
 
     if (melodyNotes.length === 0) {
       if (hasTimewise) return parseTimewiseMusicXML(xml);
-      return parsePartwiseMusicXML(xml);
+      const partwise = parsePartwiseMusicXMLFull(xml);
+      return partwise ? attachMultiPartSourceXml(partwise, xml) : null;
     }
 
     return {
@@ -202,6 +219,7 @@ export function parseMusicXML(xml: string): ParsedScore | null {
     };
   } catch {
     if (hasTimewise) return parseTimewiseMusicXML(xml);
-    return parsePartwiseMusicXML(xml);
+    const partwise = parsePartwiseMusicXMLFull(xml);
+    return partwise ? attachMultiPartSourceXml(partwise, xml) : null;
   }
 }

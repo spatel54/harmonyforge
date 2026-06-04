@@ -40,4 +40,13 @@ describe("parsePartwiseMusicXML", () => {
     expect(parsed!.melody[0]!.pitch).toBe("G5");
     expect(parsed!.melodyPartName).toBe("Violin");
   });
+
+  it("populates inputParts for every staff when multiple parts exist", () => {
+    const parsed = parsePartwiseMusicXML(TWO_PART_MELODY_ON_P2);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.inputParts).toHaveLength(2);
+    expect(parsed!.inputParts!.map((p) => p.partId).sort()).toEqual(["P1", "P2"]);
+    expect(parsed!.inputParts!.find((p) => p.partId === "P2")!.notes[0]!.pitch).toBe("G5");
+    expect(parsed!.inputParts!.find((p) => p.partId === "P1")!.notes[0]!.pitch).toBe("C2");
+  });
 });

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const pageImages = await readFormFiles(form, "pages");
-  const result = runToPreviewMusicXML(file, pageImages);
+  const result = await runToPreviewMusicXML(file, pageImages);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

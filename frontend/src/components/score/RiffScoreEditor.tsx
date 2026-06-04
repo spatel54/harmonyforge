@@ -50,6 +50,7 @@ import {
   hfNotePitchFromLiveRsScore,
   shouldShowChordNotation,
 } from "@/lib/music/riffscoreAdapter";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 import { cn } from "@/lib/utils";
 import {
   cloneScore,
@@ -90,6 +91,7 @@ import {
 } from "@/lib/sandbox/riffscoreDurationToolbar";
 import { installPlaybackMetronomeBridge } from "@/lib/music/playbackMetronome";
 import { installPlaybackPositionBridge } from "@/lib/music/playbackPositionBridge";
+import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
 /** Map an instrument name to a recognisable Lucide icon by family. */
@@ -394,8 +396,13 @@ export function RiffScoreEditor({
     return fromSel;
   }, [selection]);
 
+  const showChordSymbols = useScoreDisplayStore((s) => s.showChordSymbols);
+  const showChordTrack = Boolean(
+    showChordSymbols && score && shouldShowChordNotation(score),
+  );
+
   const { pushToRiffScore, getRsToHf, flushToZustand, syncMultiPitchFromBaseline, resetMultiPitchDragSync } =
-    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds);
+    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds, { showChordTrack });
   const flushToZustandRef = useRef(flushToZustand);
   flushToZustandRef.current = flushToZustand;
   const runEditorHistoryOp = useCallback((op: "undo" | "redo") => {
@@ -737,9 +744,10 @@ export function RiffScoreEditor({
             toolbarPlugins: presentation ? [] : toolbarPlugins,
             showToolbar: !presentation,
             enableScoreEditing: presentation ? false : enableScoreEditing,
+            showChordTrack,
           })
         : undefined,
-    [score, rsTheme, toolbarPlugins, presentation, enableScoreEditing],
+    [score, rsTheme, toolbarPlugins, presentation, enableScoreEditing, showChordTrack],
   );
 
   /**
@@ -1057,6 +1065,18 @@ export function RiffScoreEditor({
   }, []);
 
   useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !isReady || presentation) return;
+    const unsub = api.on("operation", (r: { method?: string; ok?: boolean; error?: string }) => {
+      if (r.method !== "play" || r.ok !== false) return;
+      showSandboxToast(
+        r.error ? `Playback failed: ${r.error}` : "Playback failed to start. Try Play again.",
+      );
+    });
+    return unsub;
+  }, [isReady, presentation]);
+
+  useEffect(() => {
     if (!isReady || !onSessionReady) return;
     const session: RiffScoreSessionHandles = {
       flushToZustand,
@@ -1202,6 +1222,11 @@ export function RiffScoreEditor({
       pushToRiffScore();
     }
   }, [isReady, score, pushToRiffScore]);
+
+  useEffect(() => {
+    if (!isReady || !score) return;
+    pushToRiffScore();
+  }, [isReady, score, showChordTrack, pushToRiffScore]);
 
   // Extract note positions after renders for overlay positioning
   useEffect(() => {
@@ -1597,7 +1622,7 @@ export function RiffScoreEditor({
 
   const selectedIds = new Set(selection.map((s) => s.noteId));
 
-  const chordUiOn = Boolean(score && shouldShowChordNotation(score));
+  const chordUiOn = showChordTrack;
 
   const clipUnderRiffToolbarStyle: CSSProperties | undefined =
     !presentation && scoreOverlayClipTopPx > 0

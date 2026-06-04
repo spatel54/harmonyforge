@@ -1,3 +1,4 @@
+import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { applyOsmdPrintEngravingRules } from "./osmdPrintLayout";
 import {
   applyOsmdLearnerLetterLabels,
@@ -25,7 +26,7 @@ export async function renderOsmdExportScore(
   container: HTMLElement,
   xml: string,
   options?: OsmdExportRenderOptions,
-): Promise<void> {
+): Promise<OpenSheetMusicDisplay> {
   container.innerHTML = "";
   const { OpenSheetMusicDisplay } = await import("opensheetmusicdisplay");
   const osmd = new OpenSheetMusicDisplay(container, {
@@ -46,4 +47,6 @@ export async function renderOsmdExportScore(
   } else {
     removeOsmdLearnerLetterLabels(container);
   }
+
+  return osmd;
 }

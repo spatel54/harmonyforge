@@ -18,6 +18,7 @@ import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { isOmrIntakeExtension } from "@/lib/ui/intakeOverlayProgress";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
+import { rasterizePdf } from "@/hooks/useClientPdfPreview";
 import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 import { AlertTriangle } from "lucide-react";
 
@@ -55,9 +56,24 @@ export default function Home() {
       if (needsServerPreview) {
         const formData = new FormData();
         formData.append("file", file);
+        if (ext === "pdf") {
+          try {
+            const buf = await file.arrayBuffer();
+            const pages = await rasterizePdf(buf, { maxPages: 8, scale: 2 });
+            for (const page of pages) {
+              formData.append(
+                "pages",
+                new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+              );
+            }
+          } catch {
+            // Server will rasterize the PDF if client preview fails.
+          }
+        }
         const res = await fetch(`/api/to-preview-musicxml`, {
           method: "POST",
           body: formData,
+          signal: AbortSignal.timeout(900_000),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));

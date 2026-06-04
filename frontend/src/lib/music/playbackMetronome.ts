@@ -3,6 +3,8 @@
  * Installed via {@link installPlaybackMetronomeBridge} for the riffscore patch.
  */
 
+import { hfLogPlayback } from "./playbackDebugLog";
+
 export type PlaybackMetronomeOptions = {
   bpm: number;
   /** Absolute timeline seconds where playback begins. */
@@ -20,6 +22,11 @@ type MetronomeGlobals = typeof globalThis & {
     opts: PlaybackMetronomeOptions,
   ) => void;
   __HF_CLEAR_METRONOME?: (Tone: ToneModule) => void;
+  /**
+   * When true, patched RiffScore skips all chord audio: score-play chord track,
+   * symbol click/select, and keyboard navigation previews (notation only).
+   */
+  __HF_DISABLE_CHORD_PLAYBACK?: boolean;
 };
 
 /** Synth gain (still scales with Tone destination / header volume slider). */
@@ -84,25 +91,49 @@ export function schedulePlaybackMetronome(
 
   ensureClickSynths(Tone);
   const secondsPerBeat = 60 / bpm;
+  const lastAbsBeat = Math.floor((totalEnd + 1e-6) / secondsPerBeat);
 
-  let beatIndex = 0;
-  for (let absTime = 0; absTime <= totalEnd + 1e-6; absTime += secondsPerBeat, beatIndex++) {
+  let lastTransportTime = -Infinity;
+  for (let beatIndex = 0; beatIndex <= lastAbsBeat; beatIndex++) {
+    const absTime = beatIndex * secondsPerBeat;
     if (absTime + 1e-6 < startTimeOffset) continue;
     const transportTime = absTime - startTimeOffset;
+    // Tone.Transport and MembraneSynth require strictly increasing schedule/trigger times.
+    if (transportTime <= lastTransportTime + 1e-9) continue;
+    lastTransportTime = transportTime;
+
     const isDownbeat = beatIndex % beatsPerMeasure === 0;
     const synth = isDownbeat ? downbeatClick! : beatClick!;
     const pitch = isDownbeat ? "C2" : "G3";
     const id = Tone.Transport.schedule((time) => {
-      synth.triggerAttackRelease(pitch, 0.04, time);
+      try {
+        synth.triggerAttackRelease(pitch, 0.04, time);
+      } catch {
+        // Ignore duplicate-time triggers if Transport batches events at the same tick.
+      }
     }, transportTime);
     scheduledTransportIds.push(id);
   }
+
+  hfLogPlayback({
+    hypothesisId: "C",
+    location: "playbackMetronome.ts:schedulePlaybackMetronome",
+    message: "metronome scheduled",
+    data: {
+      clickCount: scheduledTransportIds.length,
+      bpm,
+      startTimeOffset,
+      totalEnd,
+      beatsPerMeasure,
+    },
+  });
 }
 
 export function installPlaybackMetronomeBridge(): void {
   const g = globalThis as MetronomeGlobals;
   g.__HF_SCHEDULE_METRONOME = (Tone, opts) => schedulePlaybackMetronome(Tone, opts);
   g.__HF_CLEAR_METRONOME = (Tone) => clearPlaybackMetronome(Tone);
+  g.__HF_DISABLE_CHORD_PLAYBACK = true;
 }
 
 export function isPlaybackMetronomeBridgeInstalled(): boolean {

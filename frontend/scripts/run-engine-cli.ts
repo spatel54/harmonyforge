@@ -80,7 +80,7 @@ function parseArgs(): {
   return { input, output, mood, instruments };
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const { input, output, mood, instruments } = parseArgs();
 
   let buffer: Buffer;
@@ -91,7 +91,7 @@ function main(): number {
     return 1;
   }
 
-  const intake = intakeFileToParsedScore(buffer, basename(input), { allowPdfOm: true });
+  const intake = await intakeFileToParsedScore(buffer, basename(input), { allowPdfOm: true });
   if (!intake.ok) {
     console.error(intake.failure.error);
     return 1;
@@ -137,4 +137,9 @@ function main(): number {
   return 0;
 }
 
-process.exit(main());
+main()
+  .then((code) => process.exit(code))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

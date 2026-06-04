@@ -17,7 +17,9 @@ import { dirname, join, basename } from "node:path";
 import type { ParsedScore } from "../types";
 import { mergeParsedScores } from "./mergeParsedScores";
 import { parseMusicXML } from "./musicxmlParser";
-import { parseMXL } from "./mxlParser";
+import { extractMusicXmlFromMxlBuffer, parseMXL } from "./mxlParser";
+import { parsePartwiseMusicXMLFull } from "./partwiseParser";
+import { isLikelyRasterImagePdf } from "./pdfRasterHeuristic";
 
 const LOG_PREVIEW = 800;
 const DETAIL_OUTPUT_MAX = 1_800;
@@ -229,10 +231,23 @@ function parseScoreFile(path: string): ParsedScore | null {
     if (/\.mxl$/i.test(path)) {
       const buf = readFileSync(path);
       const parsed = parseMXL(buf);
-      return parsed && parsed.melody.length > 0 ? parsed : null;
+      if (!parsed || parsed.melody.length === 0) return null;
+      const rawXml = extractMusicXmlFromMxlBuffer(buf);
+      if (rawXml) {
+        const xml = sanitizeMusicXmlText(rawXml);
+        const full = parsePartwiseMusicXMLFull(xml);
+        if (full && full.melody.length > 0) {
+          return { ...full, sourceMusicXml: xml };
+        }
+      }
+      return parsed;
     }
     const raw = readFileSync(path, "utf-8");
     const xml = sanitizeMusicXmlText(raw);
+    const full = parsePartwiseMusicXMLFull(xml);
+    if (full && full.melody.length > 0) {
+      return { ...full, sourceMusicXml: xml };
+    }
     const parsed = parseMusicXML(xml);
     return parsed && parsed.melody.length > 0 ? parsed : null;
   } catch {
@@ -371,20 +386,91 @@ export function audiverisPipelineFailureMessage(details: string[]): string {
   return `${base}\n\nDetails:\n- ${details.join("\n- ")}`;
 }
 
+function tryAudiverisOnPngBuffers(
+  pngPages: Buffer[],
+  timeoutMs: number,
+  details: string[],
+): ParsedScore | null {
+  if (pngPages.length === 0) return null;
+  const perPageMs = Math.max(60_000, Math.floor(timeoutMs / pngPages.length));
+  const parsedParts: ParsedScore[] = [];
+
+  for (let i = 0; i < pngPages.length; i++) {
+    const { parsed: one, details: pageDetails } = tryAudiverisOnImageBuffer(
+      pngPages[i]!,
+      "png",
+      perPageMs,
+    );
+    details.push(...pageDetails.map((d) => `page ${i + 1}: ${d}`));
+    if (one && one.melody.length > 0) parsedParts.push(one);
+  }
+
+  const merged = mergeParsedScores(parsedParts);
+  return merged && merged.melody.length > 0 ? merged : null;
+}
+
+async function tryAudiverisOnPdfViaRaster(
+  buffer: Buffer,
+  timeoutMs: number,
+  details: string[],
+): Promise<ParsedScore | null> {
+  try {
+    const { rasterizePdfBufferToPngPages } = await import("./pdfServerRaster");
+    const pages = await rasterizePdfBufferToPngPages(buffer, {
+      maxPages: 8,
+      maxEdgePx: 2400,
+    });
+    if (pages.length === 0) {
+      details.push("pdf-raster: no pages rendered");
+      return null;
+    }
+    details.push(
+      `pdf-raster: rendered ${pages.length} page(s) for OMR (${pages[0]!.width}×${pages[0]!.height}px)`,
+    );
+    return tryAudiverisOnPngBuffers(
+      pages.map((p) => p.png),
+      timeoutMs,
+      details,
+    );
+  } catch (e) {
+    details.push(
+      `pdf-raster: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
+}
+
 /**
  * Convert a PDF buffer to ParsedScore via Audiveris.
+ * Photo/scanned PDFs are rasterized first (faster and more reliable than native PDF OMR).
  */
-export function tryAudiverisOnPdfBuffer(
+export async function tryAudiverisOnPdfBuffer(
   buffer: Buffer,
   timeoutMs: number = DEFAULT_AUDIVERIS_MS,
-): { parsed: ParsedScore | null; details: string[] } {
+): Promise<{ parsed: ParsedScore | null; details: string[] }> {
   const details: string[] = [];
+  const preferRasterFirst = isLikelyRasterImagePdf(buffer);
+
+  if (preferRasterFirst) {
+    const rasterParsed = await tryAudiverisOnPdfViaRaster(buffer, timeoutMs, details);
+    if (rasterParsed) return { parsed: rasterParsed, details };
+    details.push("pdf-raster: no melody from rasterized pages; trying native PDF…");
+  }
+
   const tmpDir = mkdtempSync(join(tmpdir(), "hf-audiveris-"));
   const pdfPath = join(tmpDir, "input.pdf");
   try {
     writeFileSync(pdfPath, buffer);
-    const parsed = tryAudiverisOnInputFile(pdfPath, tmpDir, "input", timeoutMs, details);
-    return { parsed, details };
+    const nativeParsed = tryAudiverisOnInputFile(pdfPath, tmpDir, "input", timeoutMs, details);
+    if (nativeParsed) return { parsed: nativeParsed, details };
+
+    if (!preferRasterFirst) {
+      details.push("native PDF OMR produced no melody; trying rasterized pages…");
+      const rasterParsed = await tryAudiverisOnPdfViaRaster(buffer, timeoutMs, details);
+      if (rasterParsed) return { parsed: rasterParsed, details };
+    }
+
+    return { parsed: null, details };
   } catch (e) {
     console.error("[audiveris] pipeline error:", e);
     details.push(`unexpected error: ${e instanceof Error ? e.message : String(e)}`);

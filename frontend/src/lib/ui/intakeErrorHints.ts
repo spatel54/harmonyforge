@@ -14,7 +14,12 @@ const PDF_JAVA_HINT =
   "Audiveris requires Java 25 or newer. Install a JDK (e.g. brew install openjdk@25) and re-run `make audiveris-setup`.";
 
 const PDF_NO_OUTPUT_HINT =
-  "Audiveris ran but produced no readable MusicXML. Ensure the PDF is upright, high-contrast, and contains notated staves.";
+  "Audiveris ran but produced no readable MusicXML. Ensure the PDF is upright, high-contrast, and contains notated staves. " +
+  "Phone photos saved as PDF work best when the full staff is visible and in focus; MusicXML/MXL is still fastest.";
+
+const PDF_RASTER_DEPS_HINT =
+  "Server PDF rasterization failed (@napi-rs/canvas). From the repo root run `make install` (or `cd frontend && npm install`), restart `make dev`, then retry. " +
+  "If it still fails, export MusicXML/MXL from your notation app.";
 
 const GENERIC_NON_XML_HINT =
   "The app converts these files on the server (POST /api/to-preview-musicxml). If you’re local, confirm `npm run dev` is running; use plain .xml/.musicxml for the fastest path.";
@@ -24,6 +29,14 @@ export const INTAKE_TROUBLESHOOTING_PATH = "docs/progress.md#wl-export-audiveris
 
 function classifyPdfError(message: string): string {
   const m = message.toLowerCase();
+  if (
+    m.includes("@napi-rs/canvas") ||
+    m.includes("skia.darwin") ||
+    m.includes("pdf-raster:") ||
+    (m.includes("module_not_found") && m.includes("canvas"))
+  ) {
+    return PDF_RASTER_DEPS_HINT;
+  }
   if (m.includes("no musicxml") || m.includes("no readable notation") || m.includes("no .omr")) {
     return PDF_NO_OUTPUT_HINT;
   }
@@ -41,6 +54,9 @@ function classifyPdfError(message: string): string {
   }
   if (m.includes("audiveris")) {
     return PDF_AUDIVERIS_HINT;
+  }
+  if (m.includes("preview failed: 500") || m === "500") {
+    return PDF_RASTER_DEPS_HINT;
   }
   return PDF_AUDIVERIS_HINT;
 }

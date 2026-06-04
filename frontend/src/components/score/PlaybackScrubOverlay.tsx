@@ -21,11 +21,13 @@ import {
   quantToBeatLabel,
   type MeasurePlaybackSpan,
 } from "@/lib/music/playbackScrub";
+import { hfLogPlayback } from "@/lib/music/playbackDebugLog";
 import {
   clearHfPlaybackPosition,
   getHfPlaybackPositionTick,
   setPendingRiffScorePlayFrom,
 } from "@/lib/music/riffscorePlaybackBridge";
+import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 
 /** Patched RiffScore (`patch-package`) listens for this so toolbar Play uses `MusicEditorAPI` scrub position. */
 const RIFFSCORE_CLEAR_PLAYBACK_ANCHOR = "riffscore-clear-playback-anchor";
@@ -265,10 +267,28 @@ export function PlaybackScrubOverlay({
       if (!api) return;
       suppressDomSyncRef.current = true;
       try {
+        hfLogPlayback({
+          hypothesisId: "B",
+          location: "PlaybackScrubOverlay.tsx:seekTo",
+          message: "scrub seek play",
+          data: { measureIndex, quant, resume },
+        });
         await api.play(measureIndex, quant);
         if (!resume) api.pause();
-      } catch {
-        /* RiffScore / Tone may throw if not ready */
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Playback failed";
+        hfLogPlayback({
+          hypothesisId: "B",
+          location: "PlaybackScrubOverlay.tsx:seekTo",
+          message: "scrub seek failed",
+          data: {
+            measureIndex,
+            quant,
+            resume,
+            error: msg,
+          },
+        });
+        showSandboxToast(`Playback could not start: ${msg}`);
       } finally {
         suppressDomSyncRef.current = false;
         applyScrubPosition(targetContentX);

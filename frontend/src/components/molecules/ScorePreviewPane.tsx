@@ -6,22 +6,35 @@ import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
 import { extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { renderOsmdExportScore } from "@/lib/music/osmdExportRender";
+import {
+  applyOsmdLearnerLetterLabels,
+  removeOsmdLearnerLetterLabels,
+} from "@/lib/music/osmdLearnerLabels";
 import { osmdExportRenderOptionsForPdf } from "@/lib/music/osmdExportRenderOptions";
+import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import { musicXmlForExportDisplay } from "@/lib/music/musicXmlExportDisplay";
 import { HARMONYFORGE_EXPORT_ATTRIBUTION } from "@/lib/sandbox/exportBranding";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
+import { ScoreDisplayToggles } from "./ScoreDisplayToggles";
 
 export interface ScorePreviewPaneProps {
   /** Partwise MusicXML — rendered with the same OSMD path as PDF export. */
   musicXML?: string | null;
+  /** Show chord-symbol toggle when the score has melody + harmony. */
+  showChordSymbolsToggle?: boolean;
   className?: string;
 }
 
 export function ScorePreviewPane({
   musicXML,
+  showChordSymbolsToggle = false,
   className,
 }: ScorePreviewPaneProps) {
   const showLetterNames = useScoreDisplayStore((s) => s.showNoteNameLabels);
+  const showChordSymbols = useScoreDisplayStore((s) => s.showChordSymbols);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const osmdRef = React.useRef<OpenSheetMusicDisplay | null>(null);
+  const lastRenderedXmlRef = React.useRef<string | null>(null);
   const renderGenRef = React.useRef(0);
   const [status, setStatus] = React.useState<"idle" | "loading" | "ready" | "error">(
     "idle",
@@ -33,12 +46,36 @@ export function ScorePreviewPane({
     return extractMusicXMLMetadata(musicXML);
   }, [musicXML]);
 
+  const displayXml = React.useMemo(() => {
+    if (!musicXML?.trim()) return null;
+    return musicXmlForExportDisplay(musicXML, { showChordSymbols });
+  }, [musicXML, showChordSymbols]);
+
   React.useEffect(() => {
     const container = containerRef.current;
-    if (!musicXML?.trim() || !container) {
+    if (!displayXml?.trim() || !container) {
       setStatus(musicXML ? "idle" : "idle");
       setErrorMessage(null);
-      if (container) container.innerHTML = "";
+      if (container) {
+        container.innerHTML = "";
+        osmdRef.current = null;
+        lastRenderedXmlRef.current = null;
+      }
+      return;
+    }
+
+    const xmlUnchanged = lastRenderedXmlRef.current === displayXml;
+    const osmd = osmdRef.current;
+    const canToggleLettersOnly = xmlUnchanged && osmd && container.querySelector("svg");
+
+    if (canToggleLettersOnly) {
+      if (showLetterNames) {
+        applyOsmdLearnerLetterLabels(container, osmd);
+      } else {
+        removeOsmdLearnerLetterLabels(container);
+      }
+      setStatus("ready");
+      setErrorMessage(null);
       return;
     }
 
@@ -46,16 +83,21 @@ export function ScorePreviewPane({
     setStatus("loading");
     setErrorMessage(null);
     container.innerHTML = "";
+    osmdRef.current = null;
 
     const renderOpts = osmdExportRenderOptionsForPdf(showLetterNames);
 
-    void renderOsmdExportScore(container, musicXML, renderOpts)
-      .then(() => {
+    void renderOsmdExportScore(container, displayXml, renderOpts)
+      .then((osmd) => {
         if (renderGenRef.current !== gen) return;
+        osmdRef.current = osmd;
+        lastRenderedXmlRef.current = displayXml;
         setStatus("ready");
       })
       .catch((err) => {
         if (renderGenRef.current !== gen) return;
+        osmdRef.current = null;
+        lastRenderedXmlRef.current = null;
         setStatus("error");
         setErrorMessage(
           err instanceof Error ? err.message : "Could not render PDF preview",
@@ -65,7 +107,7 @@ export function ScorePreviewPane({
     return () => {
       renderGenRef.current += 1;
     };
-  }, [musicXML, showLetterNames]);
+  }, [displayXml, showLetterNames, musicXML]);
 
   return (
     <div
@@ -76,8 +118,8 @@ export function ScorePreviewPane({
         className,
       )}
     >
-      <div className="flex items-center justify-between h-[56px] px-6 border-b border-[color-mix(in_srgb,var(--hf-detail)_70%,transparent)] shrink-0">
-        <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-3 h-[56px] px-4 sm:px-6 border-b border-[color-mix(in_srgb,var(--hf-detail)_70%,transparent)] shrink-0">
+        <div className="flex flex-col gap-0.5 min-w-0">
           <h2
             id="export-modal-title"
             className="font-serif text-[17px] text-[var(--hf-text-primary)] leading-tight"
@@ -88,6 +130,9 @@ export function ScorePreviewPane({
             Same layout as print export
           </span>
         </div>
+        {musicXML ? (
+          <ScoreDisplayToggles showChordSymbolsToggle={showChordSymbolsToggle} />
+        ) : null}
       </div>
 
       <div className="flex-1 relative overflow-hidden min-h-0 bg-[#F8F3EA] [color-scheme:light]">

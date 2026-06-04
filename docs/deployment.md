@@ -45,6 +45,8 @@ If Theory Inspector returns **401** and the error text names a **model** (e.g. `
 
 **PDF on Vercel:** the browser client-rasterizes PDFs via `pdfjs-dist` so you always see a thumbnail on `/document`. Running **Audiveris** requires Java on the server — if you need PDF → MusicXML, use Path B or local **`make audiveris-setup`**.
 
+**Local dev — `Preview failed: 500` on PDF:** If the Next dev log shows **`@napi-rs/canvas`** / **`skia.*.node` MODULE_NOT_FOUND**, run **`make install`**, ensure **`frontend/next.config.ts`** lists **`@napi-rs/canvas`** under **`serverExternalPackages`**, then **`make dev-clean && make dev`**. That failure is **not** fixed by Audiveris setup alone — see **[progress.md — PDF intake 2026-06-04 PM](progress.md#wl-pdf-intake-chords-export-2026-06-04-pm)**.
+
 > Never put secrets in `NEXT_PUBLIC_*` variables — they're in the client bundle.
 
 ---
@@ -107,7 +109,7 @@ Upload a PDF on Playground after setup completes.
 6. Sandbox → Export → PDF → print preview shows OSMD engraving (no app chrome)
 ```
 
-If step 5 fails with a 501, confirm **`AUDIVERIS_BIN`** is on PATH or run **`make audiveris-setup`** locally.
+If step 5 fails with a **501**, confirm **`AUDIVERIS_BIN`** is on PATH or run **`make audiveris-setup`** locally. If step 5 fails with **500** and the server log mentions **`@napi-rs/canvas`**, fix native canvas deps and restart dev (see PDF note above). Playground may show an Audiveris hint even for **500** — read the **first line** of the error and the dev-server stack trace.
 
 ---
 

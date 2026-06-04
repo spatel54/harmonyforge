@@ -7,6 +7,7 @@
 import type { EditableScore, Note, Measure, Part } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
 import { looksLikeMusicXml } from "./musicXmlMarkers";
+import { attachChordsFromFirstPartXml } from "./parseHarmonyFromMusicXml";
 
 /** Fallback when part name is generic SATB (engine default labels). */
 const PART_CLEFS: Record<string, string> = {
@@ -309,6 +310,7 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
 
   let divisions = 4;
   let measureKeySig: number | undefined;
+  const firstPartMeasureElements: Element[] = [];
 
   for (let mIdx = 0; mIdx < measures.length; mIdx++) {
     const measureEl = measures[mIdx];
@@ -341,11 +343,14 @@ function parseTimewise(_doc: Document, scoreTimewise: Element): EditableScore | 
       const measure: Measure = { id: generateId("m"), notes, timeSignature };
       if (measureKeySig !== undefined) measure.keySignature = measureKeySig;
       parts[pIdx].measures.push(measure);
+      if (pIdx === 0 && partEl) firstPartMeasureElements.push(partEl);
     }
   }
 
   const bpm = extractSoundTempoBpm(measures[0] ?? null);
-  return bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
+  const base: EditableScore =
+    bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
+  return attachChordsFromFirstPartXml(base, firstPartMeasureElements);
 }
 
 /**
@@ -361,6 +366,7 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
 
   const parts: Part[] = [];
   let maxMeasures = 0;
+  const firstPartMeasureElements: Element[] = [];
 
   for (let pIdx = 0; pIdx < partEls.length; pIdx++) {
     const partEl = partEls[pIdx];
@@ -375,6 +381,7 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
     let partKeySig: number | undefined;
     let partClefFromXml: string | null = null;
     for (const measureEl of measureEls) {
+      if (pIdx === 0) firstPartMeasureElements.push(measureEl);
       if (!partClefFromXml) partClefFromXml = clefFromMusicXmlAttributes(measureEl);
       partKeySig = advanceKeyFromMeasureAttributes(measureEl, partKeySig);
       const notes = extractNotesFromElement(
@@ -407,7 +414,9 @@ function parsePartwise(_doc: Document, scorePartwise: Element): EditableScore | 
   const firstMeasureEl =
     partEls[0]?.querySelector("measure") ?? findAllByLocalName(partEls[0]!, "measure")[0];
   const bpm = extractSoundTempoBpm(firstMeasureEl ?? null);
-  return bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
+  const base: EditableScore =
+    bpm !== undefined ? { parts, divisions, bpm } : { parts, divisions };
+  return attachChordsFromFirstPartXml(base, firstPartMeasureElements);
 }
 
 function inferClef(

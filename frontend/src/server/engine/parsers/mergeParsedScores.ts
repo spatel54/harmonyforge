@@ -1,4 +1,4 @@
-import type { ParsedScore } from "../types";
+import type { ParsedInputPart, ParsedScore } from "../types";
 
 /**
  * Append parsed scores (in time order) into a single ParsedScore.
@@ -19,11 +19,31 @@ export function mergeParsedScores(parts: ParsedScore[]): ParsedScore | null {
     totalMeasures: head.totalMeasures,
     melodyPartName: head.melodyPartName,
     pickupBeats: head.pickupBeats,
+    inputParts: head.inputParts
+      ? head.inputParts.map((ip) => ({ ...ip, notes: [...ip.notes] }))
+      : undefined,
+    sourceMusicXml: head.sourceMusicXml,
   };
 
   for (const part of rest) {
     const beatOffset = merged.totalBeats ?? 0;
     const measureOffset = merged.totalMeasures ?? 0;
+    const offsetInputPartNotes = (notes: ParsedInputPart["notes"]) =>
+      notes.map((note) => ({
+        pitch: note.pitch,
+        beat: note.beat + beatOffset,
+        duration: note.duration,
+        measure: note.measure !== undefined ? note.measure + measureOffset : undefined,
+      }));
+    if (part.inputParts?.length) {
+      if (!merged.inputParts) merged.inputParts = [];
+      for (const ip of part.inputParts) {
+        merged.inputParts.push({
+          ...ip,
+          notes: offsetInputPartNotes(ip.notes),
+        });
+      }
+    }
     for (const note of part.melody) {
       merged.melody.push({
         pitch: note.pitch,

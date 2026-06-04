@@ -42,6 +42,11 @@ type GraphicalMeasureLike = {
   }>;
 };
 
+/** OSMD exposes `graphic` as protected; we only read after `render()`. */
+type OsmdWithGraphic = OpenSheetMusicDisplay & {
+  graphic?: { MeasureList?: GraphicalMeasureLike[][] };
+};
+
 /** Pitches in part order (legacy). */
 export function collectLetterLabelPitchesFromScore(score: EditableScore): string[] {
   const pitches: string[] = [];
@@ -265,7 +270,7 @@ export function collectLetterPlacementsFromOsmd(
   _container?: HTMLElement,
 ): OsmdLetterPlacement[] {
   const placements: OsmdLetterPlacement[] = [];
-  const measureList = osmd.graphic?.MeasureList;
+  const measureList = (osmd as OsmdWithGraphic).graphic?.MeasureList;
   if (measureList?.length) {
     for (const staffMeasures of measureList) {
       if (!staffMeasures) continue;
@@ -277,7 +282,7 @@ export function collectLetterPlacementsFromOsmd(
 
   if (placements.length > 0) return placements;
 
-  const rules = osmd.EngravingRules as {
+  const rules = osmd.EngravingRules as unknown as {
     GNote?: (note: {
       isRest(): boolean;
       Pitch?: { ToStringShort(): string };

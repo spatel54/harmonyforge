@@ -3,6 +3,7 @@
  */
 
 import type { BarlineStyle, EditableScore, Note } from "./scoreTypes";
+import { chordSymbolToHarmonyXml } from "./chordSymbolFormat";
 import { noteBeats } from "./scoreUtils";
 import { riffQuantsForMeasure } from "./playbackScrub";
 
@@ -14,21 +15,12 @@ function measureGlobalQuantStart(score: EditableScore, measureIndex: number): nu
   return q;
 }
 
-/** Minimal `<harmony>` for chord symbols (root + generic major kind). */
-function naiveHarmonyXml(symbol: string): string {
-  const m = symbol.trim().match(/^([A-Ga-g])([#b♯♭]?)/);
-  const step = (m?.[1] ?? "C").toUpperCase();
-  let alter = 0;
-  const acc = m?.[2];
-  if (acc === "#" || acc === "♯") alter = 1;
-  if (acc === "b" || acc === "♭") alter = -1;
-  const alterEl = alter !== 0 ? `\n      <root-alter>${alter}</root-alter>` : "";
-  return `    <harmony>
-      <root>
-        <root-step>${step}</root-step>${alterEl}
-      </root>
-      <kind>major</kind>
-    </harmony>`;
+/** Indented `<harmony>` for timewise export. */
+function indentedHarmonyXml(symbol: string): string {
+  return chordSymbolToHarmonyXml(symbol)
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
 }
 
 function esc(s: string): string {
@@ -384,6 +376,24 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         }
       }
 
+      const qStart = measureGlobalQuantStart(score, mIdx);
+      const measureChords =
+        pIdx === 0 && score.chords?.length
+          ? score.chords
+              .filter((c) => c.quant >= qStart && c.quant < qStart + riffQuantsForMeasure(score, mIdx))
+              .sort((a, b) => a.quant - b.quant)
+          : [];
+      let noteBeatCursor = 0;
+      let chordIdx = 0;
+      const emitGlobalHarmony = (symbol: string) => {
+        lines.push(
+          chordSymbolToHarmonyXml(symbol)
+            .split("\n")
+            .map((line) => `      ${line}`)
+            .join("\n"),
+        );
+      };
+
       // Notes
       const noteEls = measure.notes.length > 0 ? measure.notes : [];
       const measureBeams = computeMeasureBeams(
@@ -391,6 +401,16 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         measure.timeSignature ?? "4/4",
       );
       noteEls.forEach((note, noteIdx) => {
+        if (measureChords.length > 0) {
+          const beatAtNote = noteBeatCursor;
+          while (
+            chordIdx < measureChords.length &&
+            (measureChords[chordIdx]!.quant - qStart) / 16 <= beatAtNote + 1e-4
+          ) {
+            emitGlobalHarmony(measureChords[chordIdx]!.symbol);
+            chordIdx++;
+          }
+        }
         // Pre-note directions: hairpin / octave-shift start
         if (note.lineStart === "cresc-hairpin") {
           lines.push(`      <direction placement="below">
@@ -427,7 +447,12 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
 
         // Chord symbol (harmony element precedes the note)
         if (note.chordSymbol) {
-          lines.push(naiveHarmonyXml(note.chordSymbol));
+          lines.push(
+            chordSymbolToHarmonyXml(note.chordSymbol)
+              .split("\n")
+              .map((line) => `      ${line}`)
+              .join("\n"),
+          );
         }
 
         // Note element — MusicXML DTD order: pitch/rest, duration, tie*, type, dot*, notations*, lyric*
@@ -480,7 +505,14 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         <direction-type><octave-shift type="stop" size="8" number="1"/></direction-type>
       </direction>`);
         }
+
+        noteBeatCursor += noteBeats(note);
       });
+
+      while (chordIdx < measureChords.length) {
+        emitGlobalHarmony(measureChords[chordIdx]!.symbol);
+        chordIdx++;
+      }
 
       // Empty measure fallback
       if (measure.notes.length === 0) {
@@ -535,7 +567,7 @@ export function scoreToMusicXML(score: EditableScore): string {
     const qStart = measureGlobalQuantStart(score, mIdx);
     const harmonyPrefix = (score.chords ?? [])
       .filter((c) => c.quant === qStart)
-      .map((c) => naiveHarmonyXml(c.symbol))
+      .map((c) => indentedHarmonyXml(c.symbol))
       .join("\n");
 
     const partEls = score.parts

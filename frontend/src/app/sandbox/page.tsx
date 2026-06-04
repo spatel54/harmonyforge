@@ -39,14 +39,18 @@ import {
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML } from "@/lib/music/musicxmlParser";
+import { detectChordsFromScore } from "@/lib/music/detectChordsFromScore";
+import { shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
 import { scoreToMusicXML, scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import {
   isSandboxExportFormatId,
   runSandboxExport,
+  scoreToBrandedExportMusicXML,
   scoreToExportMusicXML,
   type SandboxExportFormatId,
 } from "@/lib/sandbox/exportFormats";
+import { HF_SANDBOX_TOAST_EVENT } from "@/lib/sandbox/sandboxToast";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ExportPrintRoot, type PrintableScoreHandle } from "@/components/organisms/ExportPrintRoot";
@@ -299,6 +303,15 @@ function TactileSandboxPageInner({
     window.setTimeout(() => setNoteExplainToast(null), 4000);
   }, []);
 
+  React.useEffect(() => {
+    const onPlaybackToast = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail;
+      if (detail?.message) showInspectorToast(detail.message);
+    };
+    window.addEventListener(HF_SANDBOX_TOAST_EVENT, onPlaybackToast);
+    return () => window.removeEventListener(HF_SANDBOX_TOAST_EVENT, onPlaybackToast);
+  }, [showInspectorToast]);
+
   const handleAcceptIdeaAction = React.useCallback(
     (action: IdeaAction) => {
       riffSessionRef.current?.flushToZustand();
@@ -409,11 +422,6 @@ function TactileSandboxPageInner({
   }, [restoreFromStorage]);
 
   React.useEffect(() => {
-    if (coachmarkTourActive || !generatedMusicXML) return;
-    if (!isSandboxFirstVisitDone()) setSandboxIntroOpen(true);
-  }, [coachmarkTourActive, generatedMusicXML]);
-
-  React.useEffect(() => {
     if (generatedMusicXML || coachmarkTourActive) return;
     router.replace("/document");
   }, [generatedMusicXML, coachmarkTourActive, router]);
@@ -424,6 +432,11 @@ function TactileSandboxPageInner({
   const [isInspectorOpen, setIsInspectorOpen] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const [sandboxIntroOpen, setSandboxIntroOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (coachmarkTourActive || !generatedMusicXML) return;
+    if (!isSandboxFirstVisitDone()) setSandboxIntroOpen(true);
+  }, [coachmarkTourActive, generatedMusicXML]);
   const [inspectorFabHintLoaded, setInspectorFabHintLoaded] = React.useState(false);
   const [inspectorFabHintDismissed, setInspectorFabHintDismissed] = React.useState(true);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
@@ -482,9 +495,11 @@ function TactileSandboxPageInner({
     height: FLOAT_INSPECTOR_DEFAULT_H,
   });
   const inspectorFloatPosRef = React.useRef(inspectorFloatPos);
-  inspectorFloatPosRef.current = inspectorFloatPos;
   const inspectorFloatSizeRef = React.useRef(inspectorFloatSize);
-  inspectorFloatSizeRef.current = inspectorFloatSize;
+  React.useLayoutEffect(() => {
+    inspectorFloatPosRef.current = inspectorFloatPos;
+    inspectorFloatSizeRef.current = inspectorFloatSize;
+  });
 
   const setInspectorDockModePersisted = React.useCallback(
     (mode: "sidebar" | "floating") => {
@@ -704,7 +719,7 @@ function TactileSandboxPageInner({
   const openExportModal = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     setExportModalMusicXML(
-      live ? scoreToExportMusicXML(live, sourceFileName) : generatedMusicXML,
+      live ? scoreToBrandedExportMusicXML(live, sourceFileName) : generatedMusicXML,
     );
     setIsExportModalOpen(true);
   }, [generatedMusicXML, sourceFileName]);
@@ -734,7 +749,7 @@ function TactileSandboxPageInner({
     // Serialize immediately after flush so OSMD always receives the latest score,
     // bypassing any React re-render latency on the ExportPrintRoot xml prop.
     const freshXml = live
-      ? scoreToPartwiseMusicXML(live, useUploadStore.getState().sourceFileName)
+      ? scoreToExportMusicXML(live, useUploadStore.getState().sourceFileName)
       : undefined;
     if (!freshXml?.trim()) {
       window.alert("No score to print.");
@@ -1362,7 +1377,10 @@ function TactileSandboxPageInner({
 
   const hydrateSandboxFromMusicXml = React.useCallback(
     (xml: string) => {
-      const parsed = parseMusicXML(xml);
+      let parsed = parseMusicXML(xml);
+      if (parsed && shouldShowChordNotation(parsed)) {
+        parsed = { ...parsed, chords: detectChordsFromScore(parsed) };
+      }
       setScore(parsed);
       setSelection([]);
       clearCursor();
@@ -1371,7 +1389,11 @@ function TactileSandboxPageInner({
         if (!s) return;
         void captureGenerationBaseline(s, ENGINE_URL).then((payload) => {
           const stamped = applyOriginalGeneratedPitches(s, payload.harmonyNotePitches);
-          useScoreStore.getState().applyScore(stamped);
+          const withChords =
+            shouldShowChordNotation(stamped)
+              ? { ...stamped, chords: detectChordsFromScore(stamped) }
+              : stamped;
+          useScoreStore.getState().applyScore(withChords);
           useTheoryInspectorStore.getState().setGenerationBaseline({
             harmonyNotePitches: payload.harmonyNotePitches,
             satbTrace: payload.satbTrace,
@@ -1593,26 +1615,27 @@ function TactileSandboxPageInner({
     [cursor, partOrderForCursor, score, setCursor],
   );
 
-  // Latest handler state for window listener — ref + `[]` effect avoids React 19 / Compiler
-  // "dependency array changed size" when Fast Refresh or optimization reshapes hook deps.
-  sandboxKeyboardCtxRef.current = {
-    notationMode,
-    score,
-    selection,
-    activeTool,
-    noteEntryDuration: durationForInput,
-    getSession: () => riffSessionRef.current,
-    clearSelection,
-    setSelection,
-    setActiveTool,
-    setIsPaletteOpen,
-    handleToolSelect,
-    applyScore,
-    resolveInsertionTarget,
-    moveCursorHorizontally,
-    moveCursorVertically,
-    openHotkeyHelp,
-  };
+  // Latest handler state for window listener — sync ref in layout effect (eslint: no ref writes during render).
+  React.useLayoutEffect(() => {
+    sandboxKeyboardCtxRef.current = {
+      notationMode,
+      score,
+      selection,
+      activeTool,
+      noteEntryDuration: durationForInput,
+      getSession: () => riffSessionRef.current,
+      clearSelection,
+      setSelection,
+      setActiveTool,
+      setIsPaletteOpen,
+      handleToolSelect,
+      applyScore,
+      resolveInsertionTarget,
+      moveCursorHorizontally,
+      moveCursorVertically,
+      openHotkeyHelp,
+    };
+  });
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1878,6 +1901,7 @@ function TactileSandboxPageInner({
         showResetWorkspace={Boolean(workspaceBaselineXml)}
         onResetWorkspaceClick={() => setResetWorkspaceModalOpen(true)}
         onHotkeysClick={() => setHotkeysDialogOpen(true)}
+        showChordSymbolsToggle={Boolean(score && shouldShowChordNotation(score))}
       />
       <AudioUnlockBanner />
       {noteExplainToast && (
@@ -2285,6 +2309,7 @@ function TactileSandboxPageInner({
         }}
         onExport={handleExport}
         musicXML={exportModalMusicXML}
+        showChordSymbolsToggle={Boolean(score && shouldShowChordNotation(score))}
       />
     </div>
   );

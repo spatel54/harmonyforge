@@ -86,6 +86,24 @@ export function parseMeasureBeats(timeSignature?: string): number {
   return (num * 4) / den;
 }
 
+/**
+ * Bar length on the global beat timeline (quarter-note beats).
+ * At least the time signature per measure; longer when notation exceeds that cap.
+ * Aligns chord quants with RiffScore (64 quants per 4/4 measure).
+ */
+export function measureLengthBeats(score: EditableScore, measureIndex: number): number {
+  const ts = effectiveMeasureTimeSignature(score, measureIndex);
+  const nominal = parseMeasureBeats(ts);
+  let maxNotated = 0;
+  for (const part of score.parts) {
+    const measure = part.measures[measureIndex];
+    if (!measure) continue;
+    const len = measure.notes.reduce((acc, n) => acc + noteBeats(n), 0);
+    maxNotated = Math.max(maxNotated, len);
+  }
+  return Math.max(maxNotated, nominal);
+}
+
 /** Time signature string for column `measureIndex` (cascades to previous measures, then 4/4). */
 export function effectiveMeasureTimeSignature(score: EditableScore, measureIndex: number): string {
   const ref = score.parts[0];

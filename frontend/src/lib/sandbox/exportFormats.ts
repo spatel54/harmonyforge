@@ -4,11 +4,13 @@ import type { EditableScore } from "@/lib/music/scoreTypes";
 import { scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { scoreToMidiBuffer } from "@/lib/music/scoreToMidi";
 import { scoreToWavBuffer } from "@/lib/music/scoreToWav";
+import { musicXmlForExportDisplay } from "@/lib/music/musicXmlExportDisplay";
 import {
   HARMONYFORGE_EXPORT_ATTRIBUTION_LONG,
   HARMONYFORGE_EXPORT_BRAND,
   injectMusicXmlExportBranding,
 } from "@/lib/sandbox/exportBranding";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export const SANDBOX_EXPORT_FORMATS = [
   { id: "pdf", icon: FileText, label: "PDF", desc: "Print or save as PDF" },
@@ -33,13 +35,23 @@ export function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(a.href);
 }
 
-/** Partwise MusicXML for preview, download, and print (OSMD / MuseScore). */
-export function scoreToExportMusicXML(
+/** Partwise MusicXML + branding; harmony kept for export-preview toggles. */
+export function scoreToBrandedExportMusicXML(
   score: EditableScore,
   sourceFileName?: string | null,
 ): string {
   const xml = scoreToPartwiseMusicXML(score, sourceFileName ?? undefined);
   return injectMusicXmlExportBranding(xml);
+}
+
+/** Partwise MusicXML for download and print — respects chord/letter display prefs. */
+export function scoreToExportMusicXML(
+  score: EditableScore,
+  sourceFileName?: string | null,
+): string {
+  const branded = scoreToBrandedExportMusicXML(score, sourceFileName);
+  const { showChordSymbols } = useScoreDisplayStore.getState();
+  return musicXmlForExportDisplay(branded, { showChordSymbols });
 }
 
 export type RunSandboxExportOptions = {

@@ -5,7 +5,7 @@
  */
 
 import { XMLParser } from "fast-xml-parser";
-import type { ParsedScore, PitchClass } from "../types";
+import type { ParsedInputPart, ParsedScore, PitchClass } from "../types";
 import { pitchToMidi } from "../types";
 
 const PITCH_CLASSES: PitchClass[] = [
@@ -200,56 +200,74 @@ function meanMidiOfNotes(notes: PartwiseMelodyExtraction["melodyNotes"]): number
   return sum / notes.length;
 }
 
+type PartwiseCandidate = PartwiseMelodyExtraction & {
+  partId: string;
+  meanMidi: number;
+};
+
+function collectPartwiseCandidates(
+  xml: string,
+): { candidates: PartwiseCandidate[]; idToName: Map<string, string> } | null {
+  if (!xml || typeof xml !== "string") return null;
+  const parsed = parser.parse(xml);
+  if (!parsed || typeof parsed !== "object") return null;
+
+  const root = findPartwiseRoot(parsed as Record<string, unknown>);
+  if (!root || typeof root !== "object") return null;
+
+  const parts = arr(root.part);
+  if (parts.length === 0) return null;
+
+  const partList = root["part-list"] as Record<string, unknown> | undefined;
+  const idToName = buildPartIdToName(partList);
+  const candidates: PartwiseCandidate[] = [];
+
+  for (const partEl of parts) {
+    const p = partEl as Record<string, unknown>;
+    const partId = typeof p["@_id"] === "string" ? p["@_id"] : "";
+    const measures = arr(p.measure) as Record<string, unknown>[];
+    const extracted = extractMelodyFromMeasures(measures);
+    if (!extracted) continue;
+    candidates.push({
+      ...extracted,
+      partId,
+      meanMidi: meanMidiOfNotes(extracted.melodyNotes),
+    });
+  }
+
+  if (candidates.length === 0) return null;
+  return { candidates, idToName };
+}
+
 /**
- * Parse score-partwise MusicXML into ParsedScore.
- * When multiple parts exist, picks the part with the highest mean pitch (tie: more notes)—better for melody vs bass on P1.
- * Handles namespaced XML, grace notes (skipped), chords (first pitch).
+ * Parse all parts from score-partwise MusicXML. Melody = highest mean-pitch part;
+ * `inputParts` lists every part with notes (for multi-staff chord inference / export).
  */
-export function parsePartwiseMusicXML(xml: string): ParsedScore | null {
+export function parsePartwiseMusicXMLFull(xml: string): ParsedScore | null {
   try {
-    if (!xml || typeof xml !== "string") return null;
-    const parsed = parser.parse(xml);
-    if (!parsed || typeof parsed !== "object") return null;
+    const collected = collectPartwiseCandidates(xml);
+    if (!collected) return null;
 
-    const root = findPartwiseRoot(parsed as Record<string, unknown>);
-    if (!root || typeof root !== "object") return null;
-
-    const parts = arr(root.part);
-    if (parts.length === 0) return null;
-
-    const partList = root["part-list"] as Record<string, unknown> | undefined;
-    const idToName = buildPartIdToName(partList);
-
-    type Candidate = PartwiseMelodyExtraction & { partId: string; meanMidi: number };
-    const candidates: Candidate[] = [];
-
-    for (const partEl of parts) {
-      const p = partEl as Record<string, unknown>;
-      const partId = typeof p["@_id"] === "string" ? p["@_id"] : "";
-      const measures = arr(p.measure) as Record<string, unknown>[];
-      const extracted = extractMelodyFromMeasures(measures);
-      if (!extracted) continue;
-      candidates.push({
-        ...extracted,
-        partId,
-        meanMidi: meanMidiOfNotes(extracted.melodyNotes),
-      });
-    }
-
-    if (candidates.length === 0) return null;
-
-    candidates.sort((a, b) => b.meanMidi - a.meanMidi || b.melodyNotes.length - a.melodyNotes.length);
+    const { candidates, idToName } = collected;
+    candidates.sort(
+      (a, b) => b.meanMidi - a.meanMidi || b.melodyNotes.length - a.melodyNotes.length,
+    );
     const best = candidates[0]!;
+
+    const inputParts: ParsedInputPart[] = candidates.map((c) => ({
+      partId: c.partId || "P1",
+      name:
+        (c.partId && idToName.get(c.partId)) ||
+        c.partId ||
+        "Part",
+      notes: c.melodyNotes,
+    }));
 
     let melodyPartName: string | undefined;
     if (best.partId && idToName.has(best.partId)) {
       melodyPartName = idToName.get(best.partId);
-    } else if (parts.length === 1) {
-      const firstSp = partList ? arr(partList["score-part"])[0] : undefined;
-      if (firstSp && typeof firstSp === "object") {
-        const pn = (firstSp as { "part-name"?: string })["part-name"];
-        if (typeof pn === "string") melodyPartName = pn;
-      }
+    } else if (candidates.length === 1) {
+      melodyPartName = inputParts[0]!.name;
     }
 
     return {
@@ -260,8 +278,18 @@ export function parsePartwiseMusicXML(xml: string): ParsedScore | null {
       totalMeasures: best.totalMeasures,
       melodyPartName,
       pickupBeats: best.pickupBeats > 0 ? best.pickupBeats : undefined,
+      inputParts: inputParts.length > 0 ? inputParts : undefined,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse score-partwise MusicXML into ParsedScore.
+ * When multiple parts exist, picks the part with the highest mean pitch (tie: more notes)—better for melody vs bass on P1.
+ * Handles namespaced XML, grace notes (skipped), chords (first pitch).
+ */
+export function parsePartwiseMusicXML(xml: string): ParsedScore | null {
+  return parsePartwiseMusicXMLFull(xml);
 }
