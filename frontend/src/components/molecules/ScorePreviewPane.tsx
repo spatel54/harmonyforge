@@ -6,7 +6,9 @@ import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
 import { extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { renderOsmdExportScore } from "@/lib/music/osmdExportRender";
+import { osmdExportRenderOptionsForPdf } from "@/lib/music/osmdExportRenderOptions";
 import { HARMONYFORGE_EXPORT_ATTRIBUTION } from "@/lib/sandbox/exportBranding";
+import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 
 export interface ScorePreviewPaneProps {
   /** Partwise MusicXML — rendered with the same OSMD path as PDF export. */
@@ -14,7 +16,11 @@ export interface ScorePreviewPaneProps {
   className?: string;
 }
 
-export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps) {
+export function ScorePreviewPane({
+  musicXML,
+  className,
+}: ScorePreviewPaneProps) {
+  const showLetterNames = useScoreDisplayStore((s) => s.showNoteNameLabels);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const renderGenRef = React.useRef(0);
   const [status, setStatus] = React.useState<"idle" | "loading" | "ready" | "error">(
@@ -41,7 +47,9 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
     setErrorMessage(null);
     container.innerHTML = "";
 
-    void renderOsmdExportScore(container, musicXML)
+    const renderOpts = osmdExportRenderOptionsForPdf(showLetterNames);
+
+    void renderOsmdExportScore(container, musicXML, renderOpts)
       .then(() => {
         if (renderGenRef.current !== gen) return;
         setStatus("ready");
@@ -57,7 +65,7 @@ export function ScorePreviewPane({ musicXML, className }: ScorePreviewPaneProps)
     return () => {
       renderGenRef.current += 1;
     };
-  }, [musicXML]);
+  }, [musicXML, showLetterNames]);
 
   return (
     <div

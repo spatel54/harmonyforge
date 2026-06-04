@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04) — **PDF preview = OSMD print**; formats **PDF / MusicXML / WAV / MIDI**; **HarmonyForge** branding; **letter names** on PDF preview + print when toggle on; print margins + **final barline**; metronome gain + playhead through **rests** — **`make test` 338** — **resolved:** OSMD label placement; **open:** PDF OMR quality, viola/tenor manual QA, toolbar **`Octave ↓`**
 - [Work log — Duration change: rest split + neighbor absorption (2026-06-03)](#wl-duration-change-rests-2026-06-03) — **`setNoteDurations`** shorten/lengthen; **`setNoteDurationOnSelection`**; RS **`setDuration`** intercept; **`[` / `]`** on selection — **`make test` 312**
 - [Work log — Delete → rest placeholders + beat-accurate playback scrub (2026-06-03)](#wl-rest-delete-beat-scrub-2026-06-03) — **`deleteSelectionAsRests`** central path; block RiffScore **`DeleteEventCommand`** (capture keys + undo intercept); scrub releases at **measure + quant** with drag label + measure band — **`make test` 307**
 - [Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03) — **RiffScore alto/tenor layout patch restored** in **`patches/riffscore+1.0.0-alpha.9.patch`** (`getOffsetForPitch` / `getPitchForOffset`); sandbox viola noteheads should match **OSMD PDF/Print**; **`origin`** → **`spatel54/harmonyforge`** — **open:** manual viola/tenor QA after **`rm -rf .next`**
@@ -54,6 +55,73 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
+<a id="wl-export-osmd-learners-2026-06-04"></a>
+
+## Work log — Export modal polish + OSMD learner letter names (2026-06-04)
+
+### End goal
+
+1. **Export modal** should match **print/PDF output**: left pane shows the same **OSMD** engraving users get from **Print** or **Save as PDF**, not a RiffScore screenshot.
+2. **Export formats** should be the four formats we ship: **PDF**, **MusicXML**, **WAV**, **MIDI** (drop PNG and other legacy modal options from the primary UX).
+3. **Learner letter names** (sandbox **Letter Names** toggle) should appear on **PDF preview and print only** — small labels **just above** each notehead — without changing MusicXML/MIDI/WAV downloads or the RiffScore editing canvas export path.
+4. **Playback polish:** Louder **metronome** clicks; orange **playhead** advances through **rests** and pickup silence, not only when RiffScore moves the SVG cursor.
+5. **Product polish:** Tighter **print margins**, correct **final barline** on last measure, **HarmonyForge** attribution in exports, aligned **Cancel** in export modal, updated **onboarding/coachmark** copy for new formats.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **PDF preview** | [`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx) calls [`renderOsmdExportScore()`](../frontend/src/lib/music/osmdExportRender.ts) with the same rules as [`PrintableScore.tsx`](../frontend/src/components/score/PrintableScore.tsx) (`osmdExportRenderOptionsForPdf`, [`osmdPrintLayout.ts`](../frontend/src/lib/music/osmdPrintLayout.ts)). |
+| **Export formats** | [`exportFormats.ts`](../frontend/src/lib/sandbox/exportFormats.ts) — `SANDBOX_EXPORT_FORMATS` = pdf, xml, wav, midi; [`exportFormats.test.ts`](../frontend/src/lib/sandbox/exportFormats.test.ts). |
+| **Letter labels (PDF/print)** | Walk OSMD **`graphic.MeasureList`** → match each graphical note to **`.vf-notehead`** ([`resolveNoteheadElement`](../frontend/src/lib/music/osmdLearnerLabels.ts)); append SVG `<text>` in the **VexFlow note group** parent (local coords + CTM top-edge), not root-SVG coordinates (avoids stem-flip / staff drift). Baseline **`hanging`** with `y = noteheadTop − gap − fontSize` (avoid **`text-after-edge`** — inconsistent across browsers). |
+| **Label format** | [`formatLearnerLetterName()`](../frontend/src/lib/music/learnerPitchLabel.ts) — letter + accidental only; strip OSMD quirks (e.g. trailing `.` on pitch strings). |
+| **MusicXML engraving** | [`effectiveMeasureBarline()`](../frontend/src/lib/music/scoreToMusicXML.ts) — proper **final barline** on last measure; existing beams + metronome from 2026-06-03 tranche. |
+| **Branding** | [`exportBranding.ts`](../frontend/src/lib/sandbox/exportBranding.ts) — MusicXML `<identification>`, MIDI text meta, WAV ISFT chunk, print footer **from HarmonyForge**. |
+| **Playhead + metronome** | [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + riffscore patch **`__HF_ON_PLAYBACK_POSITION`**; [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts); [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx); [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) gain/timbre. |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| OSMD PDF preview | Export modal left pane = OSMD; toggle **Letter Names** re-renders via `showLetterNames` in render options. |
+| Formats trimmed | PNG (and validate-harmony UI) removed from export modal; **PDF / MusicXML / WAV / MIDI** only. |
+| OSMD learner labels | [`osmdLearnerLabels.ts`](../frontend/src/lib/music/osmdLearnerLabels.ts) — collect placements from OSMD graphic tree; SVG labels in note parent groups; CSS [`.hf-osmd-letter-label`](../frontend/src/app/globals.css) (8px user units, light stroke halo). |
+| Label placement iterations | Fixed empty **`.vf-stavenote`** selector; rejected HTML overlay + root-SVG CTM (labels floated far above/below staff); fixed **`text-after-edge`** browser bugs; **shipped** parent-local anchors + visual top of notehead. |
+| Print / layout | [`osmdPrintLayout.ts`](../frontend/src/lib/music/osmdPrintLayout.ts) ~4mm margins; print CSS `@page` **0.35in**; final barline in partwise XML. |
+| Export UX | [`ExportOptionsPane.tsx`](../frontend/src/components/molecules/ExportOptionsPane.tsx) Cancel vertical alignment; [`CoachmarkOverlay.tsx`](../frontend/src/components/organisms/CoachmarkOverlay.tsx) + onboarding copy for formats. |
+| Playback | Metronome **-8 / -12 dB** downbeat/beat; HF-driven scrub position during transport through rests. |
+| Tests | **`make test` → 338** Vitest — `osmdLearnerLabels.test.ts`, `learnerPitchLabel.test.ts`, `exportFormats.test.ts`, `exportBranding.test.ts`, `playbackMetronome.test.ts`, `playbackPositionBridge.test.ts`, `playbackScrub.test.ts`, etc. |
+
+### Verification
+
+- Toggle **Letter Names** in sandbox → open **Export** → PDF preview shows labels **just above** noteheads on all staves (viola/alto, stem-up/down, beamed runs).
+- **Print / Save as PDF** matches preview layout; MusicXML/MIDI/WAV downloads have **no** letter overlay.
+- Play score with metronome: downbeats audibly stronger; drag playhead into a rest → **Play** → audio and orange line advance through silence.
+
+### Current failure / open work
+
+| Status | Item |
+|--------|------|
+| **Resolved (2026-06-04)** | OSMD **letter name** misplacement (floating above staff, labels above and below same notes, inconsistent gaps) — root cause was root-SVG CTM + **`text-after-edge`**; fix = **parent-local** SVG text + **`hanging`** offset. |
+| **Open (product)** | **PDF OMR recognition quality** on real scans (e.g. imported Chinese lead sheets) — Audiveris wiring is done; accuracy is the gap ([§1.9q-open](plan.md)). |
+| **Open (QA)** | **Viola / alto–tenor** sandbox noteheads vs OSMD PDF after **`rm -rf .next`** ([2026-06-03 PM work log](#wl-viola-sandbox-export-parity-2026-06-03)). |
+| **Open (program)** | Toolbar **`Octave ↓`** intermittent for some users ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)). |
+
+### Learnings (2026-06-04)
+
+- **OSMD DOM:** VexFlow 1.9 / OSMD expose **`.vf-note`** groups and **`.vf-notehead`** glyphs — not **`.vf-stavenote`** for head bounds.
+- **SVG text baselines:** Do not rely on **`dominant-baseline: text-after-edge`** for vertical alignment; browsers disagree (labels can render far from the anchor).
+- **Transforms:** Letter labels must live in the **same coordinate system as the note** (append to stavenote / notehead parent), mapping notehead top through **`getCTM()`** into that parent.
+- **Scope split:** Sandbox **RiffScore** overlay ([`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx)) remains the editing-time learner UI; **OSMD** path is **PDF preview + print only** when the user enables **Letter Names**.
+
+<a id="last-updated-2026-06-04-export-learners"></a>
+
+### Last updated (2026-06-04 — Export modal + OSMD learner letter names)
+
+- **Narrative:** **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**.
+- **Tests:** **`make test` → 338** Vitest passing.
+- **Current failure:** **None** for letter-name placement (user-verified **perfect**). **Still open:** PDF **OMR quality**, viola/tenor **manual QA**, toolbar **`Octave ↓`**.
+
 <a id="wl-duration-change-rests-2026-06-03"></a>
 
 ## Work log — Duration change: rest split + neighbor absorption (2026-06-03)
@@ -88,7 +156,7 @@ MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten*
 2. **Playback scrub** starts at the **beat** where the user releases the orange playhead, not only at measure start.
 3. **Playback through rests (2026-06-03 follow-up):** RiffScore patch — start offset from **measure + quant** (not first note); timeline includes **rest** segments so pickup/anacrusis silence plays before the first pitch and the orange playhead advances through rests.
 4. **Metronome clicks (2026-06-03):** [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — quarter-note clicks on Tone.Transport at score **BPM** (accented downbeats per time signature); wired via riffscore patch + `installPlaybackMetronomeBridge()` in `RiffScoreEditor`.
-5. **Metronome + playhead polish (2026-06-04):** Metronome gain **-8 / -12 dB** (`METRONOME_DOWNBEAT_DB`, `METRONOME_BEAT_DB`), stronger downbeat timbre; orange scrub line driven by [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts) during transport (advances through **rests**, not only when RiffScore SVG cursor moves). **`make test`:** **323** Vitest.
+5. **Metronome + playhead polish (2026-06-04):** Metronome gain **-8 / -12 dB** (`METRONOME_DOWNBEAT_DB`, `METRONOME_BEAT_DB`), stronger downbeat timbre; orange scrub line driven by [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts) during transport (advances through **rests**, not only when RiffScore SVG cursor moves). Full export + OSMD letter-label narrative: **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **`make test`:** **338** Vitest (was **323** before export/label tests).
 
 ### Root cause (delete)
 
@@ -109,7 +177,7 @@ MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten*
 
 ### Verification
 
-- `make test` → **323** Vitest (frontend).
+- `make test` → **338** Vitest (frontend) after 2026-06-04 export/label tranche.
 - Manual: delete middle note in 4/4 → **rest placeholder**, no empty spacing; drag playhead to beat 2 → Play → audio starts mid-bar; score with **leading rests** → orange line **moves through silence** with metronome; downbeats **audibly stronger** than weak beats at default volume.
 
 <a id="wl-viola-sandbox-export-parity-2026-06-03"></a>
@@ -808,7 +876,7 @@ This section is the **handover-friendly summary**: end goal, approach, what has 
 | **Sandbox parity — palettes, rest repitch, clean export (2026-04-20)** | MuseScore/Noteflight-style **palette panel** (F9); **rest → note re-pitch** (`restsToNotes`, A–G on selected rest); **export/print score-only** (`ExportPrintRoot`, `presentation` RiffScore, `body.hf-printing-score`); Document **PDF preview** posts `pages[]` to `/api/to-preview-musicxml`; Vitest **`rasterizePdf`** tests — [work log](#wl-palettes-repitch-2026-04-20). |
 | **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20)** | **Chord track gated** to 3+ parts; Document **audio unlock** + floating **play**; **Glass Box** + **(i)** copy; **tooltip width** fix — [work log](#wl-document-ux-2026-04-20). |
 | **Ensemble Builder UI (2026-04-21)** | **Collapsible** Glass Box pedagogy; **always-visible** algorithms-vs-AI + Theory Inspector sentence under the heading; **Sound & style** + **Instruments (SATB)** section cards; concise classical-scope line — [work log](#wl-ensemble-builder-ui-2026-04-21). |
-| **Learner note names + classical-only scope + bar-regenerate removal (2026-04-20)** | Optional **letter+accidental** labels **above** noteheads (exports stay clean); RiffScore **testid → HF id** mapping + rest-aware walks; **toolbar clip** + z-order vs FAB/palette; **Genre / infer-chords** UI removed with **classical disclaimer**; **forced classical** on generate API; **sandbox bar regeneration** removed — [scope work log](#wl-learner-notes-scope-2026-04-20), [label refinement](#wl-learner-pitch-labels-refine-2026-04-20). |
+| **Learner note names + classical-only scope + bar-regenerate removal (2026-04-20)** | Optional **letter+accidental** labels **above** noteheads in sandbox; **(2026-06-04)** same toggle adds labels on **OSMD PDF preview + print** only — [export work log](#wl-export-osmd-learners-2026-06-04); RiffScore **testid → HF id** mapping + rest-aware walks; **toolbar clip** + z-order vs FAB/palette; **Genre / infer-chords** UI removed with **classical disclaimer**; **forced classical** on generate API; **sandbox bar regeneration** removed — [scope work log](#wl-learner-notes-scope-2026-04-20), [label refinement](#wl-learner-pitch-labels-refine-2026-04-20). |
 | **MVP polish + Inspector bundle (2026-04-22)** | Pickup + infer-chords Advanced; **`localStorage`** generation config; progression window FACTs; Inspector tabs/tags/chat layout; sandbox reset + onboarding key; VoiceDropdown groups; engine **`pickupBeats`**; lint hook fix — [narrative](#program-narrative-2026-04-22), [work log](#wl-mvp-phase-ship-2026-04-22). |
 | **Sandbox score UX — rest hover + hotkeys (2026-04-22 late)** | **Hover** rest → ghost pitch from staff Y; **click** replaces with rest’s **duration/dots**; **paste/insert** replace rest; **ConfigurationBackFAB**, **StepBar** labels, reset re-hydrate — [work log](#wl-sandbox-score-ux-2026-04-22). |
 
@@ -1138,7 +1206,7 @@ Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged 
 
 ### End goal (this thread)
 
-1. **Learner affordance:** Beginners (or anyone mapping staff to pitch names) can toggle **pitch help** on the score **without** polluting export/print previews. *(Initial implementation used scientific pitch with octave; **refinement** switched to **letter + accidental** only — see **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**.)*
+1. **Learner affordance:** Beginners can toggle **pitch help** on the **sandbox (RiffScore)** score. **(2026-06-04)** When the same toggle is on, **PDF preview and print (OSMD)** also show letter labels above noteheads; **MusicXML / MIDI / WAV** downloads stay unlabeled — see **[Work log — Export modal + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. *(Initial implementation used scientific pitch with octave; **refinement** switched to **letter + accidental** only — see **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**.)*
 2. **Product honesty:** The app **defaults** to **basic classical-style** harmony generation; **do not** imply jazz/pop or “infer over file chords” until those paths are reliable and tested.
 3. **Scope control:** Remove the **localized bar regeneration** experiment from Sandbox so the surface area matches the **single-pass Document → Generate** flow.
 
@@ -1219,7 +1287,7 @@ Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged 
 
 ### Current failure / focus (what we are working on *next*)
 
-**No open engineering failure** for learner labels at this snapshot. **Product “current failure”** remains **Iteration 3** framing in **[Iteration3.txt](Iteration3.txt)** — progression-aware **Theory Inspector**, voicing/expressiveness gaps, genre fidelity when multi-style generation returns — **not** blocked by this overlay work. Run **`make verify`** before release as the full gate.
+**Sandbox RiffScore labels:** No open engineering failure at the 2026-04-20 snapshot. **OSMD export labels (2026-06-04):** Placement bugs (floating / above+below staff) **resolved** — see **[Work log — Export modal + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **Product “current failure”** remains **Iteration 3** framing in **[Iteration3.txt](Iteration3.txt)** and **PDF OMR quality** — not blocked by learner overlay work. Run **`make verify`** before release as the full gate.
 
 ---
 
@@ -2132,6 +2200,8 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 ---
 
 ## Current Focus
+
+**2026-06-04 session (export modal · OSMD learner letter names · playback polish):** End goal, approach, completed steps, and **open work** — **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **Shipped:** Export modal **OSMD PDF preview** (same path as print); formats **PDF / MusicXML / WAV / MIDI**; **HarmonyForge** export branding; **letter names** on PDF preview + print when **Letter Names** on (SVG in VexFlow note groups); tighter print margins + **final barline**; louder metronome + playhead through **rests**. **Resolved:** OSMD label misplacement (parent-local coords, avoid `text-after-edge`). **`make test`:** **338**. **Open:** PDF **OMR quality**; viola/tenor **manual QA**; toolbar **`Octave ↓`**.
 
 **2026-06-03 PM session (viola sandbox vs export · git remote):** End goal, approach, completed steps, and **open work** — **[Work log — Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)**. **Shipped:** RiffScore **`getOffsetForPitch` / `getPitchForOffset`** alto/tenor fix restored in **`patches/riffscore+1.0.0-alpha.9.patch`**; **`origin`** corrected to **`spatel54/harmonyforge`**. **Open:** **Manual QA** — viola/tenor noteheads and learner labels vs OSMD PDF after **`cd frontend && rm -rf .next && make dev`**.
 

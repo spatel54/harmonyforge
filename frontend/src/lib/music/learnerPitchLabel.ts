@@ -15,9 +15,12 @@ export function formatLearnerLetterName(pitch: string): string {
     return `${letter}${acc}`;
   }
 
-  // Fallback: strip trailing digits (octave) if present
-  const stripped = trimmed.replace(/\d+$/, "");
-  if (/^[A-G][#b]?$/.test(stripped)) return stripped;
+  const letterAcc = trimmed.match(/^([A-Ga-g])([#b♯♭]?)/);
+  if (letterAcc) {
+    const letter = letterAcc[1].toUpperCase();
+    const acc = (letterAcc[2] ?? "").replace(/♯/g, "#").replace(/♭/g, "b");
+    return `${letter}${acc}`;
+  }
 
-  return trimmed;
+  return "";
 }

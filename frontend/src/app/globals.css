@@ -1080,6 +1080,16 @@ a.hf-pressable:active {
   margin: 0 auto;
 }
 
+.hf-osmd-letter-labels .hf-osmd-letter-label {
+  font-family: ui-monospace, "IBM Plex Mono", monospace;
+  font-weight: 600;
+  fill: #2d1817;
+  stroke: #f8f3ea;
+  stroke-width: 2.5px;
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
 @media print {
   @page {
     /* Slightly inside typical 0.5in office margins; still safe for home printers. */
@@ -1131,6 +1141,12 @@ a.hf-pressable:active {
     display: block !important;
     max-width: 100% !important;
     height: auto !important;
+  }
+
+  body.hf-printing-score .hf-osmd-letter-labels .hf-osmd-letter-label {
+    fill: #1a1a1a !important;
+    stroke: #fff !important;
+    stroke-width: 2px !important;
   }
 
   body.hf-printing-score .hf-export-attribution {
