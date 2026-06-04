@@ -2,7 +2,7 @@
  * Serialize EditableScore to MusicXML (minimal timewise format).
  */
 
-import type { EditableScore, Note } from "./scoreTypes";
+import type { BarlineStyle, EditableScore, Note } from "./scoreTypes";
 import { noteBeats } from "./scoreUtils";
 import { riffQuantsForMeasure } from "./playbackScrub";
 
@@ -64,6 +64,42 @@ function clefAttrs(clef: string): { sign: string; line: number } {
   if (clef === "alto") return { sign: "C", line: 3 };
   if (clef === "tenor") return { sign: "C", line: 4 };
   return { sign: "G", line: 2 };
+}
+
+const MUSICXML_BAR_STYLE: Record<Exclude<BarlineStyle, "normal">, string> = {
+  double: "light-light",
+  final: "light-heavy",
+  "start-repeat": "heavy-light",
+  "end-repeat": "light-heavy",
+  dashed: "dashed",
+  tick: "tick",
+};
+
+/** End-of-piece thin + heavy bar unless the measure already has an explicit barline. */
+export function effectiveMeasureBarline(
+  barline: BarlineStyle | undefined,
+  isLastMeasure: boolean,
+): BarlineStyle | undefined {
+  if (barline && barline !== "normal") return barline;
+  if (isLastMeasure) return "final";
+  return undefined;
+}
+
+function musicXmlBarlineLines(barline: BarlineStyle | undefined): string[] {
+  if (!barline || barline === "normal") return [];
+  const barStyle = MUSICXML_BAR_STYLE[barline];
+  if (!barStyle) return [];
+  const repeatEl =
+    barline === "start-repeat"
+      ? '\n        <repeat direction="forward"/>'
+      : barline === "end-repeat"
+        ? '\n        <repeat direction="backward"/>'
+        : "";
+  return [
+    `      <barline location="right">
+        <bar-style>${barStyle}</bar-style>${repeatEl}
+      </barline>`,
+  ];
 }
 
 // ── partwise serialization helpers ───────────────────────────────────────────
@@ -253,9 +289,12 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
   const parts = score.parts.map((p, pIdx) => {
     const { sign, line } = clefAttrs(p.clef ?? "treble");
 
+    const measureCount = p.measures.length;
+
     const measures = p.measures.map((measure, mIdx) => {
       const lines: string[] = [];
       const isFirst = mIdx === 0;
+      const isLast = mIdx === measureCount - 1;
 
       // Attributes block
       if (isFirst) {
@@ -452,29 +491,11 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
       </note>`);
       }
 
-      // Barline
-      if (measure.barline && measure.barline !== "normal") {
-        const barStyleMap: Record<string, string> = {
-          double: "light-light",
-          final: "light-heavy",
-          "start-repeat": "heavy-light",
-          "end-repeat": "light-heavy",
-          dashed: "dashed",
-          tick: "tick",
-        };
-        const barStyle = barStyleMap[measure.barline];
-        if (barStyle) {
-          const repeatEl =
-            measure.barline === "start-repeat"
-              ? '\n        <repeat direction="forward"/>'
-              : measure.barline === "end-repeat"
-              ? '\n        <repeat direction="backward"/>'
-              : "";
-          lines.push(`      <barline location="right">
-        <bar-style>${barStyle}</bar-style>${repeatEl}
-      </barline>`);
-        }
-      }
+      lines.push(
+        ...musicXmlBarlineLines(
+          effectiveMeasureBarline(measure.barline, isLast),
+        ),
+      );
 
       return `    <measure number="${mIdx + 1}">\n${lines.join("\n")}\n    </measure>`;
     });

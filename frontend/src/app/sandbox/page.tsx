@@ -41,10 +41,12 @@ import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML } from "@/lib/music/musicxmlParser";
 import { scoreToMusicXML, scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
-import { scoreToMidiBuffer } from "@/lib/music/scoreToMidi";
-import { scoreToWavBuffer } from "@/lib/music/scoreToWav";
-import { toPng } from "html-to-image";
-import { zipSync, strToU8 } from "fflate";
+import {
+  isSandboxExportFormatId,
+  runSandboxExport,
+  scoreToExportMusicXML,
+  type SandboxExportFormatId,
+} from "@/lib/sandbox/exportFormats";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ExportPrintRoot, type PrintableScoreHandle } from "@/components/organisms/ExportPrintRoot";
@@ -434,7 +436,6 @@ function TactileSandboxPageInner({
   const auditRunWhileInspectorOpenRef = React.useRef(false);
 
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
-  const exportPreviewRef = React.useRef<HTMLDivElement | null>(null);
   const printRootRef = React.useRef<PrintableScoreHandle>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const notationMode = "edit" as const;
@@ -702,20 +703,24 @@ function TactileSandboxPageInner({
 
   const openExportModal = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
-    setExportModalMusicXML(live ? scoreToMusicXML(live) : generatedMusicXML);
+    setExportModalMusicXML(
+      live ? scoreToExportMusicXML(live, sourceFileName) : generatedMusicXML,
+    );
     setIsExportModalOpen(true);
-  }, [generatedMusicXML]);
+  }, [generatedMusicXML, sourceFileName]);
 
   const downloadLiveXml = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     if (!live) return;
-    const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
+    const blob = new Blob([scoreToExportMusicXML(live, sourceFileName)], {
+      type: "application/vnd.recordare.musicxml+xml",
+    });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "harmony-forge-score.xml";
+    a.download = "harmony-forge-score.musicxml";
     a.click();
     URL.revokeObjectURL(a.href);
-  }, []);
+  }, [sourceFileName]);
 
   /**
    * Print the score alone. Temporarily tag <body> with `hf-printing-score`
@@ -1823,82 +1828,32 @@ function TactileSandboxPageInner({
     setInspectorScoreFocus(null);
   }, [clearSelection, setInspectorScoreFocus]);
 
-  const handleExport = async (format: string) => {
+  const handleExport = async (format: SandboxExportFormatId) => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     if (!live) {
       window.alert("No score to export.");
       setIsExportModalOpen(false);
       return;
     }
-    const downloadBlob = (blob: Blob, filename: string) => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    };
-
-    const xml = scoreToMusicXML(live);
+    if (!isSandboxExportFormatId(format)) {
+      window.alert(`Unknown export format: ${format}`);
+      setIsExportModalOpen(false);
+      return;
+    }
 
     try {
-      if (format === "xml") {
-        downloadBlob(new Blob([xml], { type: "application/xml" }), "harmony-forge-score.xml");
-      } else if (format === "json") {
-        downloadBlob(new Blob([JSON.stringify(live, null, 2)], { type: "application/json" }), "harmony-forge-score.json");
-      } else if (format === "pdf") {
-        // Close the export dialog first so only the print root is captured.
+      if (format === "pdf") {
         setIsExportModalOpen(false);
-        window.setTimeout(() => printScoreOnly(), 50);
+        window.setTimeout(() => void printScoreOnly(), 50);
         return;
-      } else if (format === "chord-chart") {
-        const formData = new FormData();
-        formData.append(
-          "file",
-          new Blob([scoreToMusicXML(live)], { type: "application/xml" }),
-          "score.xml",
-        );
-        const res = await fetch(`/api/export-chord-chart`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!res.ok) throw new Error("Could not generate chord chart");
-        const chart = await res.text();
-        downloadBlob(new Blob([chart], { type: "text/plain" }), "harmony-forge-chord-chart.txt");
-      } else if (format === "midi") {
-        const mid = scoreToMidiBuffer(live);
-        downloadBlob(new Blob([new Uint8Array(mid)], { type: "audio/midi" }), "harmony-forge-score.mid");
-      } else if (format === "png") {
-        const root = exportPreviewRef.current;
-        if (!root) {
-          window.alert("Score preview is not ready. Close and reopen Export.");
-        } else {
-          const dataUrl = await toPng(root, {
-            pixelRatio: 2,
-            backgroundColor: "#F8F3EA",
-          });
-          const res = await fetch(dataUrl);
-          downloadBlob(await res.blob(), "harmony-forge-score.png");
-        }
-      } else if (format === "wav") {
-        const ab = await scoreToWavBuffer(live);
-        downloadBlob(new Blob([ab], { type: "audio/wav" }), "harmony-forge-score.wav");
-      } else if (format === "zip") {
-        const midi = scoreToMidiBuffer(live);
-        const json = JSON.stringify(live, null, 2);
-        const fd = new FormData();
-        fd.append("file", new Blob([xml], { type: "application/xml" }), "score.xml");
-        const chartRes = await fetch(`/api/export-chord-chart`, { method: "POST", body: fd });
-        const chart = chartRes.ok ? await chartRes.text() : "Chord chart unavailable.";
-        const zipped = zipSync({
-          "score.musicxml": strToU8(xml),
-          "score.mid": midi,
-          "score.json": strToU8(json),
-          "chord-chart.txt": strToU8(chart),
-        });
-        downloadBlob(new Blob([new Uint8Array(zipped)], { type: "application/zip" }), "harmony-forge-export.zip");
-      } else {
-        window.alert(`Unknown export format: ${format}`);
       }
+
+      await runSandboxExport({
+        format,
+        score: live,
+        sourceFileName,
+        onPrintPdf: printScoreOnly,
+      });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Export failed");
     }
@@ -2330,7 +2285,6 @@ function TactileSandboxPageInner({
         }}
         onExport={handleExport}
         musicXML={exportModalMusicXML}
-        previewContainerRef={exportPreviewRef}
       />
     </div>
   );

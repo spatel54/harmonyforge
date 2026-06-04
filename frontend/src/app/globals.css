@@ -1059,6 +1059,17 @@ a.hf-pressable:active {
   height: auto;
 }
 
+/* Export modal — OSMD PDF preview (same renderer as print). */
+.hf-export-osmd-preview {
+  -webkit-overflow-scrolling: touch;
+}
+.hf-export-osmd-preview svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
 @media print {
   @page {
     /* Slightly inside typical 0.5in office margins; still safe for home printers. */
