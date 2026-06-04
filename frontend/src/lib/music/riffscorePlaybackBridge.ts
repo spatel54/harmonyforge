@@ -22,3 +22,10 @@ export function clearPendingRiffScorePlayFrom(): void {
 }
 
 export { installPlaybackMetronomeBridge } from "./playbackMetronome";
+export {
+  clearHfPlaybackPosition,
+  getHfPlaybackPositionTick,
+  installPlaybackPositionBridge,
+  isPlaybackPositionBridgeInstalled,
+} from "./playbackPositionBridge";
+export type { HfPlaybackPositionTick } from "./playbackPositionBridge";

@@ -88,6 +88,7 @@ MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten*
 2. **Playback scrub** starts at the **beat** where the user releases the orange playhead, not only at measure start.
 3. **Playback through rests (2026-06-03 follow-up):** RiffScore patch — start offset from **measure + quant** (not first note); timeline includes **rest** segments so pickup/anacrusis silence plays before the first pitch and the orange playhead advances through rests.
 4. **Metronome clicks (2026-06-03):** [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — quarter-note clicks on Tone.Transport at score **BPM** (accented downbeats per time signature); wired via riffscore patch + `installPlaybackMetronomeBridge()` in `RiffScoreEditor`.
+5. **Metronome + playhead polish (2026-06-04):** Metronome gain **-8 / -12 dB** (`METRONOME_DOWNBEAT_DB`, `METRONOME_BEAT_DB`), stronger downbeat timbre; orange scrub line driven by [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts) during transport (advances through **rests**, not only when RiffScore SVG cursor moves). **`make test`:** **323** Vitest.
 
 ### Root cause (delete)
 
@@ -101,13 +102,15 @@ MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten*
 | Central delete | [`frontend/src/lib/sandbox/deleteSelectionAsRests.ts`](../frontend/src/lib/sandbox/deleteSelectionAsRests.ts) — `scheduleDeleteSelectionAsRests`, `applyDeleteSelectionAsRests`, `hasDeletableEditorSelection` |
 | Sandbox wiring | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts) — capture-phase Delete with **`stopPropagation`** |
 | RS intercept | [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — on **`deleteSelected`**: **`api.undo()`** then HF rest delete |
-| Beat scrub | [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx), [`playbackScrub.ts`](../frontend/src/lib/music/playbackScrub.ts) — `contentXForMeasureQuant`, drag pill, triangle cap, measure band, auto-scroll while playing |
-| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts), [`playbackScrub.test.ts`](../frontend/src/lib/music/playbackScrub.test.ts) |
+| Beat scrub | [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx), [`playbackScrub.ts`](../frontend/src/lib/music/playbackScrub.ts) — `contentXForMeasureQuant`, `contentXForPlaybackTick`, drag pill, triangle cap, measure band, auto-scroll while playing |
+| Playhead bridge | [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) — `__HF_ON_PLAYBACK_POSITION` / `__HF_CLEAR_PLAYBACK_POSITION` in riffscore patch |
+| Metronome | [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — louder clicks (`METRONOME_DOWNBEAT_DB` / `METRONOME_BEAT_DB`) |
+| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts), [`playbackScrub.test.ts`](../frontend/src/lib/music/playbackScrub.test.ts), [`playbackPositionBridge.test.ts`](../frontend/src/lib/music/playbackPositionBridge.test.ts), [`playbackMetronome.test.ts`](../frontend/src/lib/music/playbackMetronome.test.ts) |
 
 ### Verification
 
-- `make test` → **307** Vitest (frontend).
-- Manual: delete middle note in 4/4 → **rest placeholder**, no empty spacing; drag playhead to beat 2 → Play → audio starts mid-bar.
+- `make test` → **323** Vitest (frontend).
+- Manual: delete middle note in 4/4 → **rest placeholder**, no empty spacing; drag playhead to beat 2 → Play → audio starts mid-bar; score with **leading rests** → orange line **moves through silence** with metronome; downbeats **audibly stronger** than weak beats at default volume.
 
 <a id="wl-viola-sandbox-export-parity-2026-06-03"></a>
 

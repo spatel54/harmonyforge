@@ -1036,8 +1036,8 @@ a.hf-pressable:active {
   position: fixed;
   left: -10000px;
   top: 0;
-  width: 1000px;
-  max-width: 1000px;
+  width: 1120px;
+  max-width: 1120px;
   pointer-events: none;
   z-index: -1;
 }
@@ -1051,7 +1051,7 @@ a.hf-pressable:active {
   width: 100%;
   background: white;
   color: black;
-  padding: 12px;
+  padding: 8px;
 }
 
 .hf-print-root__score svg {
@@ -1061,7 +1061,8 @@ a.hf-pressable:active {
 
 @media print {
   @page {
-    margin: 0.4in;
+    /* Slightly inside typical 0.5in office margins; still safe for home printers. */
+    margin: 0.35in;
     size: auto;
   }
 

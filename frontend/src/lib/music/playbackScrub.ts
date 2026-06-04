@@ -97,6 +97,36 @@ function measureQuantInSpan(
 }
 
 /** Map RiffScore measure + quant back to horizontal content X for the scrub overlay. */
+/** Seconds per RiffScore quant (16 quants per quarter) at the score BPM. */
+export function secondsPerQuantForScore(score: EditableScore): number {
+  const bpm = score.bpm ?? 120;
+  return 60 / bpm / 16;
+}
+
+/**
+ * Horizontal playhead X during an active note/rest segment, advancing by elapsed time.
+ */
+export function contentXForPlaybackTick(
+  score: EditableScore,
+  spans: MeasurePlaybackSpan[],
+  measureIndex: number,
+  quant: number,
+  segmentDurationSec: number,
+  elapsedSecSinceTick: number,
+): number {
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const spq = secondsPerQuantForScore(score);
+  const quantAdvance =
+    segmentDurationSec > 0 && spq > 0
+      ? Math.floor(elapsedSecSinceTick / spq)
+      : 0;
+  const quantNow = Math.min(
+    quant + Math.max(0, quantAdvance),
+    Math.max(0, maxQ - 1),
+  );
+  return contentXForMeasureQuant(measureIndex, quantNow, spans, score);
+}
+
 export function contentXForMeasureQuant(
   measureIndex: number,
   quant: number,

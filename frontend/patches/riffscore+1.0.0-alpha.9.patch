@@ -46,7 +46,7 @@ index 1ca537c..ee2d0eb 100644
      scale?: number;
      label?: string;
 diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
-index ef82e00..917c4ff 100644
+index ef82e00..0ec3982 100644
 --- a/node_modules/riffscore/dist/index.js
 +++ b/node_modules/riffscore/dist/index.js
 @@ -1165,12 +1165,25 @@ var CLEF_REFERENCE = {
@@ -99,7 +99,7 @@ index ef82e00..917c4ff 100644
    sampler = new Tone.Sampler({
      urls: {
        A0: "A0.mp3",
-@@ -3492,9 +3511,23 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3492,9 +3511,24 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }
    stopTonePlayback();
    Tone.Transport.bpm.value = bpm;
@@ -115,6 +115,7 @@ index ef82e00..917c4ff 100644
 +    if (playDuration > 0) {
 +      Tone.Transport.scheduleOnce(() => {
 +        updateState({ isPlaying: false });
++        clearHfPlaybackPositionIfInstalled();
 +        onComplete == null ? void 0 : onComplete();
 +      }, playDuration + 0.1);
 +      Tone.Transport.start();
@@ -125,7 +126,7 @@ index ef82e00..917c4ff 100644
      return;
    }
    const adjustedTimeline = filteredTimeline.map((e) => __spreadProps(__spreadValues({}, e), {
-@@ -3502,12 +3535,19 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3502,12 +3536,20 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }));
    const events = adjustedTimeline.map((e) => ({
      time: e.time,
@@ -137,6 +138,7 @@ index ef82e00..917c4ff 100644
      quant: e.quant
    }));
    const part = new Tone.Part((time, event) => {
++    notifyHfPlaybackPositionIfInstalled(event.measureIndex, event.quant, event.duration);
 +    if (event.type === "rest" || !event.note) {
 +      Tone.Draw.schedule(() => {
 +        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
@@ -146,7 +148,7 @@ index ef82e00..917c4ff 100644
      instrument.triggerAttackRelease(event.note, event.duration, time);
      Tone.Draw.schedule(() => {
        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
-@@ -3516,7 +3556,7 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3516,9 +3558,10 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    currentPart = part;
    part.start(0);
    const lastEvent = events[events.length - 1];
@@ -154,8 +156,11 @@ index ef82e00..917c4ff 100644
 +  const endTime = Math.max(lastEvent.time + lastEvent.duration, playDuration) + 0.1;
    Tone.Transport.scheduleOnce(() => {
      updateState({ isPlaying: false });
++    clearHfPlaybackPositionIfInstalled();
      onComplete == null ? void 0 : onComplete();
-@@ -3547,8 +3587,34 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
+   }, endTime);
+   Tone.Transport.start();
+@@ -3547,8 +3590,48 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
    chordPart = chordPartInstance;
    chordPartInstance.start(0);
  };
@@ -171,6 +176,20 @@ index ef82e00..917c4ff 100644
 +  const clear = g && g.__HF_CLEAR_METRONOME;
 +  if (typeof clear === "function" && Tone) {
 +    clear(Tone);
++  }
++};
++var notifyHfPlaybackPositionIfInstalled = (measureIndex, quant, durationSec) => {
++  const g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const notify = g && g.__HF_ON_PLAYBACK_POSITION;
++  if (typeof notify === "function") {
++    notify(measureIndex, quant, durationSec);
++  }
++};
++var clearHfPlaybackPositionIfInstalled = () => {
++  const g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const clear = g && g.__HF_CLEAR_PLAYBACK_POSITION;
++  if (typeof clear === "function") {
++    clear();
 +  }
 +};
  var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeOffset = 0, onPositionUpdate, onComplete) => {
@@ -190,15 +209,16 @@ index ef82e00..917c4ff 100644
    if ((chordConfig == null ? void 0 : chordConfig.enabled) && score.chordTrack && score.chordTrack.length > 0) {
      const chordEvents = createChordPlaybackEvents(score, bpm, chordConfig.velocity);
      await scheduleChordPlayback(chordEvents, startTimeOffset);
-@@ -3557,6 +3623,7 @@ var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeO
+@@ -3557,6 +3640,8 @@ var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeO
  var stopTonePlayback = () => {
    const Tone = getTone();
    if (!Tone) return;
 +  clearHfMetronomeIfInstalled(Tone);
++  clearHfPlaybackPositionIfInstalled();
    Tone.Transport.stop();
    Tone.Transport.cancel();
    if (currentPart) {
-@@ -3613,19 +3680,15 @@ var createTimeline = (score, bpm) => {
+@@ -3613,19 +3698,15 @@ var createTimeline = (score, bpm) => {
        let currentMeasureQuant = 0;
        measure.events.forEach((event, eIndex) => {
          const eventDurQuants = getNoteDuration(event.duration, event.dotted, event.tuplet);
@@ -222,7 +242,7 @@ index ef82e00..917c4ff 100644
              duration: eventDurQuants * secondsPerQuant,
              pitch: note.pitch,
              tied: !!note.tied,
-@@ -3635,10 +3698,25 @@ var createTimeline = (score, bpm) => {
+@@ -3635,10 +3716,25 @@ var createTimeline = (score, bpm) => {
              staffIndex
            });
          });
@@ -248,7 +268,7 @@ index ef82e00..917c4ff 100644
        if (a.pitch !== b.pitch) return a.pitch.localeCompare(b.pitch);
        return a.time - b.time;
      });
-@@ -3646,7 +3724,7 @@ var createTimeline = (score, bpm) => {
+@@ -3646,7 +3742,7 @@ var createTimeline = (score, bpm) => {
        let current = rawEvents[0];
        for (let i = 1; i < rawEvents.length; i++) {
          const next = rawEvents[i];
@@ -257,7 +277,7 @@ index ef82e00..917c4ff 100644
          if (isConnected) {
            current.duration += next.duration;
            current.tied = next.tied;
-@@ -3659,6 +3737,18 @@ var createTimeline = (score, bpm) => {
+@@ -3659,6 +3755,18 @@ var createTimeline = (score, bpm) => {
      }
    });
    function addEventToTimeline(raw) {
@@ -276,7 +296,7 @@ index ef82e00..917c4ff 100644
      const freq = getFrequency(raw.pitch);
      if (freq) {
        timeline.push({
-@@ -3692,6 +3782,16 @@ var usePlayback = (score, bpm) => {
+@@ -3692,6 +3800,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -293,7 +313,7 @@ index ef82e00..917c4ff 100644
    const exitPlaybackMode = React2.useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3700,6 +3800,10 @@ var usePlayback = (score, bpm) => {
+@@ -3700,6 +3818,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -304,7 +324,7 @@ index ef82e00..917c4ff 100644
    }, []);
    const pausePlayback = React2.useCallback(() => {
      stopTonePlayback();
-@@ -3708,24 +3812,43 @@ var usePlayback = (score, bpm) => {
+@@ -3708,24 +3830,43 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = React2.useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -359,7 +379,7 @@ index ef82e00..917c4ff 100644
        setIsActive(true);
        requestAnimationFrame(() => {
          requestAnimationFrame(() => {
-@@ -3738,10 +3861,12 @@ var usePlayback = (score, bpm) => {
+@@ -3738,10 +3879,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -372,7 +392,7 @@ index ef82e00..917c4ff 100644
              }
            );
          });
-@@ -3754,9 +3879,23 @@ var usePlayback = (score, bpm) => {
+@@ -3754,9 +3897,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -399,7 +419,7 @@ index ef82e00..917c4ff 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -7158,21 +7297,10 @@ var useModifiers = ({
+@@ -7158,21 +7315,10 @@ var useModifiers = ({
      if (tools.activeTie !== targetState) tools.handleTieToggle();
    }, [selection, tools, dispatch, scoreRef]);
    const checkDurationValidity = React2.useCallback(
@@ -424,7 +444,7 @@ index ef82e00..917c4ff 100644
    );
    const checkDotValidity = React2.useCallback(() => {
      if (selection.measureIndex === null || !selection.eventId) return true;
-@@ -8740,13 +8868,36 @@ var useInteraction = ({
+@@ -8740,13 +8886,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -462,7 +482,7 @@ index ef82e00..917c4ff 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8765,7 +8916,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8765,7 +8934,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -474,7 +494,7 @@ index ef82e00..917c4ff 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -18041,7 +18195,8 @@ var Toolbar = React2.forwardRef(
+@@ -18041,7 +18213,8 @@ var Toolbar = React2.forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -484,7 +504,7 @@ index ef82e00..917c4ff 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18190,6 +18345,26 @@ var Toolbar = React2.forwardRef(
+@@ -18190,6 +18363,26 @@ var Toolbar = React2.forwardRef(
                  }
                )
              ] }),
@@ -511,7 +531,7 @@ index ef82e00..917c4ff 100644
              /* @__PURE__ */ jsxRuntime.jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsxRuntime.jsx(
                ToolbarButton_default,
-@@ -23943,7 +24118,8 @@ var ScoreEditorContent = ({
+@@ -23943,7 +24136,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -521,7 +541,7 @@ index ef82e00..917c4ff 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24159,7 +24335,8 @@ var ScoreEditorContent = ({
+@@ -24159,7 +24353,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -531,7 +551,7 @@ index ef82e00..917c4ff 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsxRuntime.jsx(Portal_default, { children: /* @__PURE__ */ jsxRuntime.jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24272,7 +24449,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24272,7 +24467,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,
@@ -542,7 +562,7 @@ index ef82e00..917c4ff 100644
          ) }) })
        ]
 diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
-index fc71835..604e3df 100644
+index fc71835..bb8f10b 100644
 --- a/node_modules/riffscore/dist/index.mjs
 +++ b/node_modules/riffscore/dist/index.mjs
 @@ -1159,12 +1159,25 @@ var CLEF_REFERENCE = {
@@ -586,7 +606,7 @@ index fc71835..604e3df 100644
    const mapping = getYToPitch(clef);
    return mapping[offset];
  };
-@@ -3486,9 +3505,23 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3486,9 +3505,24 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }
    stopTonePlayback();
    Tone.Transport.bpm.value = bpm;
@@ -602,6 +622,7 @@ index fc71835..604e3df 100644
 +    if (playDuration > 0) {
 +      Tone.Transport.scheduleOnce(() => {
 +        updateState({ isPlaying: false });
++        clearHfPlaybackPositionIfInstalled();
 +        onComplete == null ? void 0 : onComplete();
 +      }, playDuration + 0.1);
 +      Tone.Transport.start();
@@ -612,7 +633,7 @@ index fc71835..604e3df 100644
      return;
    }
    const adjustedTimeline = filteredTimeline.map((e) => __spreadProps(__spreadValues({}, e), {
-@@ -3496,12 +3529,19 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3496,12 +3530,20 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }));
    const events = adjustedTimeline.map((e) => ({
      time: e.time,
@@ -624,6 +645,7 @@ index fc71835..604e3df 100644
      quant: e.quant
    }));
    const part = new Tone.Part((time, event) => {
++    notifyHfPlaybackPositionIfInstalled(event.measureIndex, event.quant, event.duration);
 +    if (event.type === "rest" || !event.note) {
 +      Tone.Draw.schedule(() => {
 +        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
@@ -633,7 +655,7 @@ index fc71835..604e3df 100644
      instrument.triggerAttackRelease(event.note, event.duration, time);
      Tone.Draw.schedule(() => {
        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
-@@ -3510,7 +3550,7 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3510,9 +3552,10 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    currentPart = part;
    part.start(0);
    const lastEvent = events[events.length - 1];
@@ -641,8 +663,11 @@ index fc71835..604e3df 100644
 +  const endTime = Math.max(lastEvent.time + lastEvent.duration, playDuration) + 0.1;
    Tone.Transport.scheduleOnce(() => {
      updateState({ isPlaying: false });
++    clearHfPlaybackPositionIfInstalled();
      onComplete == null ? void 0 : onComplete();
-@@ -3541,8 +3581,34 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
+   }, endTime);
+   Tone.Transport.start();
+@@ -3541,8 +3584,48 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
    chordPart = chordPartInstance;
    chordPartInstance.start(0);
  };
@@ -658,6 +683,20 @@ index fc71835..604e3df 100644
 +  const clear = g && g.__HF_CLEAR_METRONOME;
 +  if (typeof clear === "function" && Tone) {
 +    clear(Tone);
++  }
++};
++var notifyHfPlaybackPositionIfInstalled = (measureIndex, quant, durationSec) => {
++  const g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const notify = g && g.__HF_ON_PLAYBACK_POSITION;
++  if (typeof notify === "function") {
++    notify(measureIndex, quant, durationSec);
++  }
++};
++var clearHfPlaybackPositionIfInstalled = () => {
++  const g = typeof globalThis !== "undefined" ? globalThis : void 0;
++  const clear = g && g.__HF_CLEAR_PLAYBACK_POSITION;
++  if (typeof clear === "function") {
++    clear();
 +  }
 +};
  var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeOffset = 0, onPositionUpdate, onComplete) => {
@@ -677,15 +716,16 @@ index fc71835..604e3df 100644
    if ((chordConfig == null ? void 0 : chordConfig.enabled) && score.chordTrack && score.chordTrack.length > 0) {
      const chordEvents = createChordPlaybackEvents(score, bpm, chordConfig.velocity);
      await scheduleChordPlayback(chordEvents, startTimeOffset);
-@@ -3551,6 +3617,7 @@ var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeO
+@@ -3551,6 +3634,8 @@ var scheduleScorePlayback = async (timeline, score, bpm, chordConfig, startTimeO
  var stopTonePlayback = () => {
    const Tone = getTone();
    if (!Tone) return;
 +  clearHfMetronomeIfInstalled(Tone);
++  clearHfPlaybackPositionIfInstalled();
    Tone.Transport.stop();
    Tone.Transport.cancel();
    if (currentPart) {
-@@ -3607,19 +3674,15 @@ var createTimeline = (score, bpm) => {
+@@ -3607,19 +3692,15 @@ var createTimeline = (score, bpm) => {
        let currentMeasureQuant = 0;
        measure.events.forEach((event, eIndex) => {
          const eventDurQuants = getNoteDuration(event.duration, event.dotted, event.tuplet);
@@ -709,7 +749,7 @@ index fc71835..604e3df 100644
              duration: eventDurQuants * secondsPerQuant,
              pitch: note.pitch,
              tied: !!note.tied,
-@@ -3629,10 +3692,25 @@ var createTimeline = (score, bpm) => {
+@@ -3629,10 +3710,25 @@ var createTimeline = (score, bpm) => {
              staffIndex
            });
          });
@@ -735,7 +775,7 @@ index fc71835..604e3df 100644
        if (a.pitch !== b.pitch) return a.pitch.localeCompare(b.pitch);
        return a.time - b.time;
      });
-@@ -3640,7 +3718,7 @@ var createTimeline = (score, bpm) => {
+@@ -3640,7 +3736,7 @@ var createTimeline = (score, bpm) => {
        let current = rawEvents[0];
        for (let i = 1; i < rawEvents.length; i++) {
          const next = rawEvents[i];
@@ -744,7 +784,7 @@ index fc71835..604e3df 100644
          if (isConnected) {
            current.duration += next.duration;
            current.tied = next.tied;
-@@ -3653,6 +3731,18 @@ var createTimeline = (score, bpm) => {
+@@ -3653,6 +3749,18 @@ var createTimeline = (score, bpm) => {
      }
    });
    function addEventToTimeline(raw) {
@@ -763,7 +803,7 @@ index fc71835..604e3df 100644
      const freq = getFrequency(raw.pitch);
      if (freq) {
        timeline.push({
-@@ -3686,6 +3776,16 @@ var usePlayback = (score, bpm) => {
+@@ -3686,6 +3794,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -780,7 +820,7 @@ index fc71835..604e3df 100644
    const exitPlaybackMode = useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3694,6 +3794,10 @@ var usePlayback = (score, bpm) => {
+@@ -3694,6 +3812,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -791,7 +831,7 @@ index fc71835..604e3df 100644
    }, []);
    const pausePlayback = useCallback(() => {
      stopTonePlayback();
-@@ -3702,24 +3806,43 @@ var usePlayback = (score, bpm) => {
+@@ -3702,24 +3824,43 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -846,7 +886,7 @@ index fc71835..604e3df 100644
        setIsActive(true);
        requestAnimationFrame(() => {
          requestAnimationFrame(() => {
-@@ -3732,10 +3855,12 @@ var usePlayback = (score, bpm) => {
+@@ -3732,10 +3873,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -859,7 +899,7 @@ index fc71835..604e3df 100644
              }
            );
          });
-@@ -3748,9 +3873,23 @@ var usePlayback = (score, bpm) => {
+@@ -3748,9 +3891,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -886,7 +926,7 @@ index fc71835..604e3df 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -7152,21 +7291,10 @@ var useModifiers = ({
+@@ -7152,21 +7309,10 @@ var useModifiers = ({
      if (tools.activeTie !== targetState) tools.handleTieToggle();
    }, [selection, tools, dispatch, scoreRef]);
    const checkDurationValidity = useCallback(
@@ -911,7 +951,7 @@ index fc71835..604e3df 100644
    );
    const checkDotValidity = useCallback(() => {
      if (selection.measureIndex === null || !selection.eventId) return true;
-@@ -8734,13 +8862,36 @@ var useInteraction = ({
+@@ -8734,13 +8880,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -949,7 +989,7 @@ index fc71835..604e3df 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8759,7 +8910,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8759,7 +8928,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -961,7 +1001,7 @@ index fc71835..604e3df 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -18035,7 +18189,8 @@ var Toolbar = forwardRef(
+@@ -18035,7 +18207,8 @@ var Toolbar = forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -971,7 +1011,7 @@ index fc71835..604e3df 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18184,6 +18339,26 @@ var Toolbar = forwardRef(
+@@ -18184,6 +18357,26 @@ var Toolbar = forwardRef(
                  }
                )
              ] }),
@@ -998,7 +1038,7 @@ index fc71835..604e3df 100644
              /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsx(
                ToolbarButton_default,
-@@ -23937,7 +24112,8 @@ var ScoreEditorContent = ({
+@@ -23937,7 +24130,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -1008,7 +1048,7 @@ index fc71835..604e3df 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24153,7 +24329,8 @@ var ScoreEditorContent = ({
+@@ -24153,7 +24347,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -1018,7 +1058,7 @@ index fc71835..604e3df 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24266,7 +24443,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24266,7 +24461,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,

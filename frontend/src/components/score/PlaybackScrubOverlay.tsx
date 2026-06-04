@@ -16,11 +16,16 @@ import {
   buildMeasurePlaybackSpans,
   clampContentX,
   contentXForMeasureQuant,
+  contentXForPlaybackTick,
   contentXToMeasureQuant,
   quantToBeatLabel,
   type MeasurePlaybackSpan,
 } from "@/lib/music/playbackScrub";
-import { setPendingRiffScorePlayFrom } from "@/lib/music/riffscorePlaybackBridge";
+import {
+  clearHfPlaybackPosition,
+  getHfPlaybackPositionTick,
+  setPendingRiffScorePlayFrom,
+} from "@/lib/music/riffscorePlaybackBridge";
 
 /** Patched RiffScore (`patch-package`) listens for this so toolbar Play uses `MusicEditorAPI` scrub position. */
 const RIFFSCORE_CLEAR_PLAYBACK_ANCHOR = "riffscore-clear-playback-anchor";
@@ -161,6 +166,7 @@ export function PlaybackScrubOverlay({
         if (r.method === "pause" || r.method === "stop") {
           playingRef.current = false;
           setIsPlaying(false);
+          clearHfPlaybackPosition();
         }
         if (r.method === "rewind") {
           const wasPlaying = Boolean(
@@ -182,26 +188,49 @@ export function PlaybackScrubOverlay({
     if (!container || !isReady || spans.length === 0) return;
 
     const tick = () => {
-      if (!draggingRef.current) {
-        const g =
-          container.querySelector<SVGElement>(
-            "svg.riff-ScoreCanvas__svg [data-testid=\"playback-cursor\"]",
-          ) ?? container.querySelector("[data-testid=\"playback-cursor\"]");
-        if (g) {
-          const gRect = g.getBoundingClientRect();
-          const cRect = container.getBoundingClientRect();
-          const cx =
-            gRect.left - cRect.left + container.scrollLeft + gRect.width / 2;
+      if (!draggingRef.current && !suppressDomSyncRef.current) {
+        const hfTick = playingRef.current
+          ? getHfPlaybackPositionTick()
+          : null;
 
-          if (!suppressDomSyncRef.current) {
-            applyScrubPosition(cx);
+        if (hfTick) {
+          const elapsed =
+            (typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now()) - hfTick.at;
+          const cx = contentXForPlaybackTick(
+            score,
+            spans,
+            hfTick.measureIndex,
+            hfTick.quant,
+            hfTick.durationSec,
+            elapsed / 1000,
+          );
+          applyScrubPosition(cx);
+          if (scrollRafRef.current == null) {
+            scrollRafRef.current = requestAnimationFrame(() => {
+              scrollRafRef.current = null;
+              scrollPlayheadIntoView(contentXRef.current);
+            });
           }
-          if (playingRef.current && !suppressDomSyncRef.current) {
-            if (scrollRafRef.current == null) {
-              scrollRafRef.current = requestAnimationFrame(() => {
-                scrollRafRef.current = null;
-                scrollPlayheadIntoView(contentXRef.current);
-              });
+        } else {
+          const g =
+            container.querySelector<SVGElement>(
+              "svg.riff-ScoreCanvas__svg [data-testid=\"playback-cursor\"]",
+            ) ?? container.querySelector("[data-testid=\"playback-cursor\"]");
+          if (g) {
+            const gRect = g.getBoundingClientRect();
+            const cRect = container.getBoundingClientRect();
+            const cx =
+              gRect.left - cRect.left + container.scrollLeft + gRect.width / 2;
+            applyScrubPosition(cx);
+            if (playingRef.current) {
+              if (scrollRafRef.current == null) {
+                scrollRafRef.current = requestAnimationFrame(() => {
+                  scrollRafRef.current = null;
+                  scrollPlayheadIntoView(contentXRef.current);
+                });
+              }
             }
           }
         }
@@ -214,7 +243,7 @@ export function PlaybackScrubOverlay({
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
     };
-  }, [containerRef, isReady, spans, applyScrubPosition, scrollPlayheadIntoView]);
+  }, [containerRef, isReady, spans, score, applyScrubPosition, scrollPlayheadIntoView]);
 
   useLayoutEffect(() => {
     if (draggingRef.current || spans.length === 0) return;

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import { applyOsmdPrintEngravingRules } from "@/lib/music/osmdPrintLayout";
 
 export interface PrintableScoreHandle {
   printWhenReady: (xmlOverride?: string) => Promise<void>;
@@ -25,9 +26,7 @@ export const PrintableScore = forwardRef<PrintableScoreHandle, Props>(
           drawTitle: true,
           drawingParameters: "default",
         });
-        osmd.EngravingRules.PageLeftMargin = 1;
-        osmd.EngravingRules.PageRightMargin = 10;
-        osmd.EngravingRules.SystemLeftMargin = 0;
+        applyOsmdPrintEngravingRules(osmd.EngravingRules);
         await osmd.load(xmlToLoad);
         osmd.render();
 

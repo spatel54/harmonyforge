@@ -22,6 +22,10 @@ type MetronomeGlobals = typeof globalThis & {
   __HF_CLEAR_METRONOME?: (Tone: ToneModule) => void;
 };
 
+/** Synth gain (still scales with Tone destination / header volume slider). */
+export const METRONOME_DOWNBEAT_DB = -8;
+export const METRONOME_BEAT_DB = -12;
+
 const scheduledTransportIds: number[] = [];
 let downbeatClick: import("tone").MembraneSynth | null = null;
 let beatClick: import("tone").MembraneSynth | null = null;
@@ -38,10 +42,10 @@ function ensureClickSynths(Tone: ToneModule): void {
   if (!downbeatClick) {
     downbeatClick = new Tone.MembraneSynth({
       pitchDecay: 0.001,
-      octaves: 2,
-      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 },
+      octaves: 2.5,
+      envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.06 },
     }).toDestination();
-    downbeatClick.volume.value = -16;
+    downbeatClick.volume.value = METRONOME_DOWNBEAT_DB;
   }
   if (!beatClick) {
     beatClick = new Tone.MembraneSynth({
@@ -49,7 +53,7 @@ function ensureClickSynths(Tone: ToneModule): void {
       octaves: 1,
       envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.04 },
     }).toDestination();
-    beatClick.volume.value = -20;
+    beatClick.volume.value = METRONOME_BEAT_DB;
   }
 }
 
@@ -87,7 +91,7 @@ export function schedulePlaybackMetronome(
     const transportTime = absTime - startTimeOffset;
     const isDownbeat = beatIndex % beatsPerMeasure === 0;
     const synth = isDownbeat ? downbeatClick! : beatClick!;
-    const pitch = isDownbeat ? "C2" : "G2";
+    const pitch = isDownbeat ? "C2" : "G3";
     const id = Tone.Transport.schedule((time) => {
       synth.triggerAttackRelease(pitch, 0.04, time);
     }, transportTime);

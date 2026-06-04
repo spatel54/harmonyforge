@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  METRONOME_BEAT_DB,
+  METRONOME_DOWNBEAT_DB,
   beatsPerMeasureFromTimeSignature,
   clearPlaybackMetronome,
   schedulePlaybackMetronome,
 } from "./playbackMetronome";
+
+describe("metronome gain constants", () => {
+  it("exposes louder downbeat than weak beats", () => {
+    expect(METRONOME_DOWNBEAT_DB).toBeGreaterThan(METRONOME_BEAT_DB);
+    expect(METRONOME_DOWNBEAT_DB).toBe(-8);
+    expect(METRONOME_BEAT_DB).toBe(-12);
+  });
+});
 
 describe("beatsPerMeasureFromTimeSignature", () => {
   it("parses common meters", () => {

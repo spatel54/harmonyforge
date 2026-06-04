@@ -89,6 +89,7 @@ import {
   isRiffScoreDurationToolbarButton,
 } from "@/lib/sandbox/riffscoreDurationToolbar";
 import { installPlaybackMetronomeBridge } from "@/lib/music/playbackMetronome";
+import { installPlaybackPositionBridge } from "@/lib/music/playbackPositionBridge";
 import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
 /** Map an instrument name to a recognisable Lucide icon by family. */
@@ -1052,6 +1053,7 @@ export function RiffScoreEditor({
 
   useEffect(() => {
     installPlaybackMetronomeBridge();
+    installPlaybackPositionBridge();
   }, []);
 
   useEffect(() => {
