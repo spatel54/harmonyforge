@@ -158,6 +158,7 @@ describe("File pipeline", () => {
     expect(xml).toContain("<part-name>Violin</part-name>");
     expect(xml).toContain("<part-name>Flute</part-name>");
     expect(xml).toContain("<part-name>Cello</part-name>");
+    expect(xml).toContain("<harmony>");
     const violinIdx = xml.indexOf("<part-name>Violin</part-name>");
     const fluteIdx = xml.indexOf("<part-name>Flute</part-name>");
     const celloIdx = xml.indexOf("<part-name>Cello</part-name>");
@@ -496,6 +497,40 @@ describe("File pipeline", () => {
     const firstMeasureBody = celloPart.match(/<measure number="0"[^>]*>[\s\S]*?<\/measure>/)?.[0] ?? "";
     expect(firstMeasureBody).not.toMatch(/<pitch>/);
     expect(firstMeasureBody).toMatch(/<rest\s*\/>/);
+  });
+
+  it("additive partwise output keeps OMR input parts plus generated harmony staves", () => {
+    const parsed: ParsedScore = {
+      key: { tonic: "C", mode: "major" },
+      melody: [{ pitch: "G5", beat: 0, duration: 4 }],
+      inputParts: [
+        { partId: "P1", name: "Bass", notes: [{ pitch: "C3", beat: 0, duration: 4 }] },
+        { partId: "P2", name: "Violin", notes: [{ pitch: "G5", beat: 0, duration: 4 }] },
+      ],
+      timeSignature: { beats: 4, beatType: 4 },
+      totalBeats: 4,
+      totalMeasures: 1,
+    };
+    const withChords = ensureChords(parsed);
+    const result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+    expect(result).not.toBeNull();
+    const xml = satbToMusicXML(
+      result!,
+      { Soprano: ["Flute"] },
+      withChords,
+      { additiveHarmonies: true, format: "partwise", version: "2.0" },
+    );
+    expect(xml).toContain("<score-partwise");
+    expect(xml).toContain('part id="P1"');
+    expect(xml).toContain('part id="P2"');
+    expect(xml).toContain('part id="P3"');
+    expect(xml).toContain("Bass");
+    expect(xml).toContain("Violin");
+    expect(xml).toContain("Flute");
   });
 
   it("satbToMusicXML preserves dotted melody durations when source timing is provided", () => {

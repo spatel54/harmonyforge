@@ -4,7 +4,7 @@ import { useScoreDisplayStore } from "./useScoreDisplayStore";
 
 describe("useScoreDisplayStore", () => {
   beforeEach(() => {
-    useScoreDisplayStore.setState({ showNoteNameLabels: false });
+    useScoreDisplayStore.setState({ showNoteNameLabels: false, showChordSymbols: true });
   });
 
   it("defaults note name labels off", () => {

@@ -163,40 +163,36 @@ export function mapIntakeFailure(result: Extract<IntakeResult, { ok: false }>): 
 }
 
 /**
- * Resolve a ParsedScore from either:
- *  - A single uploaded file (MusicXML / MXL / MIDI / PDF → OMR)
- *  - Pre-rasterized PDF page images (`pages`) which skip pdftoppm and feed oemer directly.
- *
- * When both are present, pre-rasterized pages take priority (they're already page-accurate).
+ * Resolve a ParsedScore from an uploaded file.
+ * When `pageImages` are provided with a PDF, those PNG/JPG pages are tried first (client pdfjs raster).
  */
-export function resolveParsedScore(
+export async function resolveParsedScore(
   file: EngineReadFile,
   pageImages: Buffer[],
   allowPdfOm: boolean,
-): { ok: true; parsed: ParsedScore } | EngineError {
-  if (pageImages.length > 0) {
-    if (!allowPdfOm) {
-      return {
-        ok: false,
-        status: 501,
-        error: "Image OMR is not supported on this route.",
-      };
-    }
-    const intake = intakeImagePagesToParsedScore(pageImages);
-    if (!intake.ok) return mapIntakeFailure(intake);
-    return { ok: true, parsed: intake.parsed };
+): Promise<{ ok: true; parsed: ParsedScore } | EngineError> {
+  const ext = (file.originalname.split(".").pop() ?? "").toLowerCase();
+  const isPdf =
+    allowPdfOm &&
+    pageImages.length > 0 &&
+    (file.buffer.subarray(0, 4).toString("latin1") === "%PDF" || ext === "pdf");
+
+  if (isPdf) {
+    const fromPages = intakeImagePagesToParsedScore(pageImages, {});
+    if (fromPages.ok) return { ok: true, parsed: fromPages.parsed };
   }
-  const intake = intakeFileToParsedScore(file.buffer, file.originalname, { allowPdfOm });
+
+  const intake = await intakeFileToParsedScore(file.buffer, file.originalname, { allowPdfOm });
   if (!intake.ok) return mapIntakeFailure(intake);
   return { ok: true, parsed: intake.parsed };
 }
 
-export function runGenerateFromFile(
+export async function runGenerateFromFile(
   file: EngineReadFile,
   config: GenerationConfig | null,
   pageImages: Buffer[] = [],
-): GenerateFromFileResult | EngineError {
-  const resolved = resolveParsedScore(file, pageImages, true);
+): Promise<GenerateFromFileResult | EngineError> {
+  const resolved = await resolveParsedScore(file, pageImages, true);
   if (!resolved.ok) return resolved;
   const parsed = resolved.parsed;
   const parsedForGen =
@@ -311,13 +307,18 @@ export interface PreviewResult {
   xml: string;
 }
 
-export function runToPreviewMusicXML(
+export async function runToPreviewMusicXML(
   file: EngineReadFile,
   pageImages: Buffer[] = [],
-): PreviewResult | EngineError {
-  const resolved = resolveParsedScore(file, pageImages, true);
+): Promise<PreviewResult | EngineError> {
+  const resolved = await resolveParsedScore(file, pageImages, true);
   if (!resolved.ok) return resolved;
-  return { ok: true, xml: parsedScoreToPartwiseMelodyMusicXML(resolved.parsed) };
+  const sourceXml = resolved.parsed.sourceMusicXml?.trim();
+  const xml =
+    sourceXml && sourceXml.length > 0
+      ? sourceXml
+      : parsedScoreToPartwiseMelodyMusicXML(resolved.parsed);
+  return { ok: true, xml };
 }
 
 export interface ValidateFromFileResult {
@@ -325,8 +326,12 @@ export interface ValidateFromFileResult {
   data: ReturnType<typeof validateSATBSequence>;
 }
 
-export function runValidateFromFile(file: EngineReadFile): ValidateFromFileResult | EngineError {
-  const intake = intakeFileToParsedScore(file.buffer, file.originalname, { allowPdfOm: false });
+export async function runValidateFromFile(
+  file: EngineReadFile,
+): Promise<ValidateFromFileResult | EngineError> {
+  const intake = await intakeFileToParsedScore(file.buffer, file.originalname, {
+    allowPdfOm: false,
+  });
   if (!intake.ok) return mapIntakeFailure(intake);
   const parsed = intake.parsed;
   const withChords = ensureChords(parsed, "major", "classical");
@@ -356,8 +361,12 @@ export interface ChordChartResult {
   text: string;
 }
 
-export function runExportChordChart(file: EngineReadFile): ChordChartResult | EngineError {
-  const intake = intakeFileToParsedScore(file.buffer, file.originalname, { allowPdfOm: false });
+export async function runExportChordChart(
+  file: EngineReadFile,
+): Promise<ChordChartResult | EngineError> {
+  const intake = await intakeFileToParsedScore(file.buffer, file.originalname, {
+    allowPdfOm: false,
+  });
   if (!intake.ok) return mapIntakeFailure(intake);
   const parsed = intake.parsed;
   const withChords = ensureChords(parsed, "major", "classical");

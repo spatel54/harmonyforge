@@ -29,3 +29,6 @@ Do not hallucinate CLI flags or terminal commands. Always check the `Makefile` a
 
 #### 5. ADR Enforcement
 Always check `@docs/adr/` for project laws. If the user suggests a "hack" that violates an Architectural Decision Record, flag it immediately.
+
+#### 6. MCP tools
+When a task matches an external integration or browser QA, **use MCP first** per `@.cursor/rules/mcp-tools.mdc`. Server list and credentials live in **`/Users/dvgenis/.cursor/mcp.json`** (user-level, not in this repo). Always read `mcps/<server>/tools/*.json` before `CallMcpTool`.

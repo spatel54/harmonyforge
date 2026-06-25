@@ -14,6 +14,7 @@ import { BrandTitle } from "@/components/atoms/BrandTitle";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { useUploadStore } from "@/store/useUploadStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
+import { isOmrIntakeExtension } from "@/lib/ui/intakeOverlayProgress";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
 
 /**
@@ -23,6 +24,8 @@ import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForEx
 export function HomeViewOnboarding() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [intakeComplete, setIntakeComplete] = React.useState(false);
+  const [slowIntake, setSlowIntake] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [showModal, setShowModal] = React.useState(false);
   const setFile = useUploadStore((s) => s.setFile);
@@ -41,9 +44,11 @@ export function HomeViewOnboarding() {
     if (!file) return;
     setUploadError(null);
     setFile(file);
-    setIsTransitioning(true);
-    const t0 = Date.now();
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    setIsTransitioning(true);
+    setIntakeComplete(false);
+    setSlowIntake(isOmrIntakeExtension(ext));
+    const t0 = Date.now();
     const needsServerPreview = needsEnginePreviewForExtension(ext);
     try {
       if (needsServerPreview) {
@@ -62,6 +67,7 @@ export function HomeViewOnboarding() {
         const xml = await res.text();
         setPreviewMusicXML(xml);
       }
+      setIntakeComplete(true);
       await awaitMinElapsedSince(t0, TRANSITION_MIN_VISIBLE_MS.parsing);
       router.push("/document");
     } catch (e) {
@@ -73,6 +79,8 @@ export function HomeViewOnboarding() {
       );
     } finally {
       setIsTransitioning(false);
+      setIntakeComplete(false);
+      setSlowIntake(false);
     }
   };
 
@@ -109,7 +117,12 @@ export function HomeViewOnboarding() {
         </main>
       </PlaygroundBackground>
 
-      <TransitionOverlay variant="parsing" visible={isTransitioning} />
+      <TransitionOverlay
+        variant="parsing"
+        visible={isTransitioning}
+        workComplete={intakeComplete}
+        slowIntake={slowIntake}
+      />
 
       {showModal && <OnboardingModal onDismiss={handleDismiss} />}
     </>

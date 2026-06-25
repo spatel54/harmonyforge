@@ -82,10 +82,21 @@ export interface LeadSheet {
   melody?: MelodyNote[];
 }
 
+/** One staff/part extracted from partwise MusicXML (OMR or upload). */
+export interface ParsedInputPart {
+  partId: string;
+  name: string;
+  notes: MelodyNote[];
+}
+
 /** Canonical format from file parsers (XML/MIDI) before solver */
 export interface ParsedScore {
   key: KeyContext;
   melody: MelodyNote[];
+  /** All parts when partwise XML has multiple staves (OMR PDF, etc.). */
+  inputParts?: ParsedInputPart[];
+  /** Sanitized partwise MusicXML from OMR export when available (multi-part preview). */
+  sourceMusicXml?: string;
   chords?: ChordSlot[];
   timeSignature?: {
     beats: number;

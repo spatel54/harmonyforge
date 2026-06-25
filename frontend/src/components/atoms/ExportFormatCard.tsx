@@ -21,12 +21,13 @@ export function ExportFormatCard({
 }: ExportFormatCardProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-col items-center justify-center gap-[8px] h-[88px] w-full rounded-[6px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-surface)]",
+        "hf-pressable flex flex-col items-center justify-center gap-2 h-[92px] w-full rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]",
         selected
-          ? "bg-[var(--hf-surface)] border-2 border-[var(--hf-surface)]"
-          : "bg-[var(--hf-panel-bg)] border border-[var(--hf-detail)] hover:bg-[rgba(var(--hf-surface-rgb),0.05)]",
+          ? "bg-[var(--hf-surface)] border-2 border-[var(--hf-surface)] shadow-[0_4px_14px_color-mix(in_srgb,var(--hf-surface)_28%,transparent)]"
+          : "bg-[color-mix(in_srgb,var(--hf-panel-bg)_96%,#fff)] border border-[color-mix(in_srgb,var(--hf-detail)_75%,transparent)] hover:border-[color-mix(in_srgb,var(--hf-accent)_45%,var(--hf-detail))] hover:bg-[color-mix(in_srgb,var(--hf-accent)_4%,var(--hf-panel-bg))]",
         className
       )}
     >

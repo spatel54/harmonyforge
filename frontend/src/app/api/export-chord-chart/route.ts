@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
 
-  const result = runExportChordChart(file);
+  const result = await runExportChordChart(file);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

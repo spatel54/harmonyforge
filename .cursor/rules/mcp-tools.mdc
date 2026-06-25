@@ -1,0 +1,50 @@
+---
+alwaysApply: true
+description: When and how to use MCP tools; server list and task routing for this workspace.
+globs: "**/*"
+---
+
+### MCP-first protocol
+
+**Prefer MCP tools** when a task matches an enabled server below. Do not guess parameters or skip schema checks.
+
+1. **Config (source of truth):** [`/Users/dvgenis/.cursor/mcp.json`](/Users/dvgenis/.cursor/mcp.json) — all user-level MCP servers and env vars live here. **Never** copy tokens or API keys from that file into chat, commits, or docs.
+2. **Tool schemas (required before every call):** Browse descriptors under the workspace MCP folder (server → `tools/*.json`, optional `INSTRUCTIONS.md` / `SERVER_METADATA.json`). Use `CallMcpTool` with the exact `server` id and `toolName` from those files.
+3. **Built-in IDE browser:** `cursor-ide-browser` is enabled for this project (see `mcps/cursor-ide-browser/`). Use it for HarmonyForge UI QA unless the user asks for Playwright scripts or CI-style automation.
+
+If an MCP call fails with auth errors, say which server failed and what the user should fix in `mcp.json` or the server’s auth flow — do not fall back silently to unrelated tools.
+
+### Enabled servers (from `mcp.json`)
+
+| Server id (`CallMcpTool.server`) | Use for |
+|----------------------------------|---------|
+| **`user-github`** | PRs, issues, reviews, checks, branch status, repo search, file contents on GitHub. Prefer over ad-hoc API curls when the user mentions GitHub. (`gh` CLI is still fine when the user rule says so.) |
+| **`cursor-ide-browser`** | Manual QA on `http://localhost:3000` — sandbox playback, export modal, document flow, coachmarks. Lock → navigate → snapshot → interact; prefer CDP/snapshot over blind retries. |
+| **`user-playwright`** | Repeatable browser automation, multi-step E2E, or when the user wants Playwright-driven flows (not the default for quick UI checks). |
+| **`user-brave-search`** | Live web lookup (APIs, library docs, Audiveris/OMR notes, error messages). Prefer over training-data guesses for version-specific facts. |
+| **`user-sequential-thinking`** | Multi-hypothesis debugging (playback cutoffs, race conditions, CI flakes) when several causes need ordered reasoning. |
+| **`user-memory-bank`** | Cross-session notes *outside* this repo’s `docs/progress.md` (personal prefs, ops runbooks). **HarmonyForge state stays in** `docs/plan.md` / `docs/progress.md`. |
+| **`user-notebooklm-mcp`** | Deep research against NotebookLM notebooks (papers, long PDFs already in a notebook). Auth: `notebooklm-mcp-auth` if tools fail. |
+| **`user-overleaf`** | Overleaf / LaTeX projects (papers, thesis). Check `mcps/user-overleaf/STATUS.md` if tools are missing. |
+| **`user-slack`** | Post or read Slack channels/threads when the user asks to notify the team or pull context from Slack. |
+| **`user-whatsapp`** | WhatsApp messaging only when explicitly requested. |
+| **`user-gemini`** | Gemini image/video generation or media analysis when the user asks (not for HarmonyForge score logic). |
+| **`plugin-sanity-Sanity`** | Sanity CMS (schemas, GROQ, Studio deploy). **Only** when editing or deploying Sanity — not for HarmonyForge Next.js app work. |
+
+### HarmonyForge task routing (quick)
+
+| Task | Prefer |
+|------|--------|
+| Sandbox / document / playground UI verification | `cursor-ide-browser` after `make dev` |
+| Playback, export modal, RiffScore regressions | `cursor-ide-browser` + codebase; optional `user-sequential-thinking` if intermittent |
+| PR create, CI failure, review comments | `user-github` |
+| “How does X work in production / upstream?” | `user-brave-search` |
+| Program plan / learnings / handover | `docs/plan.md`, `docs/progress.md` (not memory-bank) |
+| OpenAI / engine env, `make test`, `make lint` | Shell + Makefile — no MCP required |
+
+### Anti-patterns
+
+- Calling MCP without reading the tool JSON schema first.
+- Using `user-playwright` or `cursor-ide-browser` to work around missing MCP when the user did not want browser automation.
+- Putting secrets from `mcp.json` into the repo or assistant messages.
+- Using `plugin-sanity-Sanity` or `user-overleaf` for routine HarmonyForge frontend/engine tasks.

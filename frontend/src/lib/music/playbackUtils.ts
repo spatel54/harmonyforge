@@ -4,6 +4,7 @@
  */
 
 import type { EditableScore, Note } from "./scoreTypes";
+import { ensureStrictlyIncreasingPartTimes } from "./playbackPartSchedule";
 
 /** Duration type → beats (quarter = 1) */
 const DURATION_BEATS: Record<string, number> = {
@@ -98,15 +99,5 @@ export function scheduledNotesToSeconds(
     }))
     .sort((a, b) => a.time - b.time);
 
-  // Tone.Part requires strictly increasing time; add offset for simultaneous notes (chords)
-  const MIN_STEP = 0.001; // 1ms — Tone's scheduler resolution
-  let lastTime = -Infinity;
-  return raw.map((ev) => {
-    if (ev.time <= lastTime) {
-      lastTime += MIN_STEP;
-      return { ...ev, time: lastTime };
-    }
-    lastTime = ev.time;
-    return ev;
-  });
+  return ensureStrictlyIncreasingPartTimes(raw);
 }

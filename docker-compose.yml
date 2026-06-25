@@ -6,7 +6,7 @@ version: "3.9"
 #   cp .env.example .env.local
 #   docker compose up --build
 #
-# Browser → http://localhost:3000 (Next.js + engine + pdfalto + oemer all in one).
+# Browser → http://localhost:3000 (Next.js + engine + Audiveris OMR).
 
 services:
   harmonyforge:
@@ -27,9 +27,8 @@ services:
       HF_SOLVER_MAX_MS: "${HF_SOLVER_MAX_MS:-}"
       HF_SOLVER_MAX_NODES: "${HF_SOLVER_MAX_NODES:-}"
       HF_MAX_CHORD_SLOTS: "${HF_MAX_CHORD_SLOTS:-}"
-      OEMER_CHECKPOINT_DIR: /var/oemer
-    volumes:
-      - oemer-checkpoints:/var/oemer
+      AUDIVERIS_BIN: /app/audiveris/bin/Audiveris
+      TESSDATA_PREFIX: /app/tessdata
     healthcheck:
       test:
         - CMD
@@ -42,11 +41,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     restart: unless-stopped
-
-volumes:
-  oemer-checkpoints: {}
 
 networks:
   default:

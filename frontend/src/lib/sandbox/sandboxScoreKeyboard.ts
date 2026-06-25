@@ -9,6 +9,15 @@ import {
   scheduleNaturalDiatonicStep,
   scheduleTransposeNaturalLetters,
 } from "./sandboxScoreTranspose";
+import {
+  hasDeletableEditorSelection,
+  scheduleDeleteSelectionAsRests,
+} from "./deleteSelectionAsRests";
+import {
+  durationTypeFromToolId,
+  hasDurationEditableSelection,
+  scheduleSetNoteDurations,
+} from "./setNoteDurationOnSelection";
 
 const NOTE_DURATION_TOOLS = new Set([
   "duration-whole",
@@ -161,11 +170,16 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
     return;
   }
 
-  // —— Delete selection ——
+  // —— Delete selection (rest placeholders; block RiffScore event removal) ——
   if ((e.code === "Delete" || e.code === "Backspace") && !mod && !e.altKey) {
-    if (ctx.selection.length === 0) return;
+    const fallback = new Set(ctx.selection.map((s) => s.noteId));
+    if (!hasDeletableEditorSelection(session, fallback)) return;
     e.preventDefault();
-    ctx.handleToolSelect("edit-delete");
+    e.stopPropagation();
+    scheduleDeleteSelectionAsRests(session, fallback, () => {
+      ctx.clearSelection();
+      session?.editorDeselectAll();
+    });
     return;
   }
 
@@ -185,7 +199,17 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   if (!mod && !e.altKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
     e.preventDefault();
     const dir = e.code === "BracketLeft" ? (-1 as const) : (1 as const);
-    ctx.handleToolSelect(stepActiveDurationTool(ctx.activeTool, dir));
+    const nextTool = stepActiveDurationTool(ctx.activeTool, dir);
+    const fallback = new Set(ctx.selection.map((s) => s.noteId));
+    if (hasDurationEditableSelection(session, fallback)) {
+      const dur = durationTypeFromToolId(nextTool);
+      if (dur) {
+        scheduleSetNoteDurations(session, dur, fallback);
+        ctx.setActiveTool(nextTool);
+        return;
+      }
+    }
+    ctx.setActiveTool(nextTool);
     return;
   }
 

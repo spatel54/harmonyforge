@@ -2,6 +2,7 @@
  * Like scoreToScheduledNotes, but tags each event with the source part name for timbre mapping.
  */
 import type { EditableScore, Note } from "./scoreTypes";
+import { ensureStrictlyIncreasingPartTimes } from "./playbackPartSchedule";
 import { noteDurationInBeats, parseBeatsPerMeasure, type ScheduledNote } from "./playbackUtils";
 
 const PITCH_RE = /^[A-G](?:#{1,2}|b{1,2})?\d+$/;
@@ -65,16 +66,5 @@ export function scheduledPartNotesToSeconds(
       partName: e.partName,
     }))
     .sort((a, b) => a.time - b.time);
-  const MIN_STEP = 0.001;
-  let lastTime = -Infinity;
-  return raw.map((ev) => {
-    let t = ev.time;
-    if (t <= lastTime) {
-      lastTime += MIN_STEP;
-      t = lastTime;
-    } else {
-      lastTime = t;
-    }
-    return { ...ev, time: t };
-  });
+  return ensureStrictlyIncreasingPartTimes(raw);
 }

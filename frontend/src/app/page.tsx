@@ -16,7 +16,9 @@ import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
+import { isOmrIntakeExtension } from "@/lib/ui/intakeOverlayProgress";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
+import { rasterizePdf } from "@/hooks/useClientPdfPreview";
 import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 import { AlertTriangle } from "lucide-react";
 
@@ -28,6 +30,8 @@ import { AlertTriangle } from "lucide-react";
 export default function Home() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [intakeComplete, setIntakeComplete] = React.useState(false);
+  const [slowIntake, setSlowIntake] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const setFile = useUploadStore((s) => s.setFile);
@@ -42,17 +46,34 @@ export default function Home() {
     if (!file) return;
     setUploadError(null);
     setFile(file);
-    setIsTransitioning(true);
-    const t0 = Date.now();
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    setIsTransitioning(true);
+    setIntakeComplete(false);
+    setSlowIntake(isOmrIntakeExtension(ext));
+    const t0 = Date.now();
     const needsServerPreview = needsEnginePreviewForExtension(ext);
     try {
       if (needsServerPreview) {
         const formData = new FormData();
         formData.append("file", file);
+        if (ext === "pdf") {
+          try {
+            const buf = await file.arrayBuffer();
+            const pages = await rasterizePdf(buf, { maxPages: 8, scale: 2 });
+            for (const page of pages) {
+              formData.append(
+                "pages",
+                new File([page.png], `page-${page.index}.png`, { type: "image/png" }),
+              );
+            }
+          } catch {
+            // Server will rasterize the PDF if client preview fails.
+          }
+        }
         const res = await fetch(`/api/to-preview-musicxml`, {
           method: "POST",
           body: formData,
+          signal: AbortSignal.timeout(900_000),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -63,6 +84,7 @@ export default function Home() {
         const xml = await res.text();
         setPreviewMusicXML(xml);
       }
+      setIntakeComplete(true);
       await awaitMinElapsedSince(t0, TRANSITION_MIN_VISIBLE_MS.parsing);
       router.push("/document");
     } catch (e) {
@@ -74,6 +96,8 @@ export default function Home() {
       );
     } finally {
       setIsTransitioning(false);
+      setIntakeComplete(false);
+      setSlowIntake(false);
     }
   };
 
@@ -151,7 +175,12 @@ export default function Home() {
       </PlaygroundBackground>
 
       {/* Loading overlay — mounts over everything */}
-      <TransitionOverlay variant="parsing" visible={isTransitioning} />
+      <TransitionOverlay
+        variant="parsing"
+        visible={isTransitioning}
+        workComplete={intakeComplete}
+        slowIntake={slowIntake}
+      />
     </>
   );
 }

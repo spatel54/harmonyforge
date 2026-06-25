@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildIdMap,
+  editableScoreToRiffConfig,
   editableScoreToRsScore,
   hfNotePitchFromLiveRsScore,
   riffScoreToEditableScore,
@@ -84,9 +85,10 @@ describe("riffscoreAdapter", () => {
     expect(rs.chordTrack).toBeUndefined();
   });
 
-  it("omits chordTrack for 2 parts even when EditableScore has chords", () => {
+  it("embeds chordTrack when melody plus one harmony (2 parts)", () => {
     const rs = editableScoreToRsScore(twoPartsWithChords);
-    expect(rs.chordTrack).toBeUndefined();
+    expect(rs.chordTrack?.length).toBe(1);
+    expect(rs.chordTrack?.[0]?.symbol).toBe("Dm7");
   });
 
   it("embeds chordTrack on RsScore when there are 3+ parts and chords", () => {
@@ -97,7 +99,12 @@ describe("riffscoreAdapter", () => {
     expect(rs.chordTrack?.[1]?.symbol).toBe("F7");
   });
 
-  it("does not map chords from RiffScore or previous score when fewer than 3 parts", () => {
+  it("does not enable chord playback when chord UI is on", () => {
+    const config = editableScoreToRiffConfig(threePartsWithChords);
+    expect(config.chord?.playback?.enabled).toBe(false);
+  });
+
+  it("does not map chords from RiffScore or previous score when fewer than 2 parts", () => {
     const rs = editableScoreToRsScore(minimalOnePart);
     const hf = riffScoreToEditableScore(rs, new Map(), minimalOnePart.parts, minimalOnePart);
     expect(hf.bpm).toBe(96);

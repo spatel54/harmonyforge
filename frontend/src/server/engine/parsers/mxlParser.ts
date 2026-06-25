@@ -14,10 +14,8 @@ function getRootfilePath(containerXml: string): string | null {
   return alt ? alt[1] : null;
 }
 
-/**
- * Extract MusicXML from MXL buffer and parse to ParsedScore.
- */
-export function parseMXL(buffer: Buffer): ParsedScore | null {
+/** Extract raw MusicXML string from an MXL (ZIP) buffer. */
+export function extractMusicXmlFromMxlBuffer(buffer: Buffer): string | null {
   try {
     const zip = new AdmZip(buffer);
     const entries = zip.getEntries();
@@ -37,23 +35,26 @@ export function parseMXL(buffer: Buffer): ParsedScore | null {
       }
     }
 
-    let xmlContent: string | null = null;
     if (containerXml) {
       const rootPath = getRootfilePath(containerXml);
       if (rootPath) {
         const found = xmlEntries.find(
-          (e) => e.path === rootPath || e.path.endsWith(rootPath)
+          (e) => e.path === rootPath || e.path.endsWith(rootPath),
         );
-        xmlContent = found?.content ?? null;
+        if (found) return found.content;
       }
     }
-    if (!xmlContent && xmlEntries.length > 0) {
-      xmlContent = xmlEntries[0]!.content;
-    }
-    if (!xmlContent) return null;
-
-    return parseMusicXML(xmlContent);
+    return xmlEntries[0]?.content ?? null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Extract MusicXML from MXL buffer and parse to ParsedScore.
+ */
+export function parseMXL(buffer: Buffer): ParsedScore | null {
+  const xmlContent = extractMusicXmlFromMxlBuffer(buffer);
+  if (!xmlContent) return null;
+  return parseMusicXML(xmlContent);
 }

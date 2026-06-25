@@ -2,27 +2,20 @@
 # Single-process Next.js app (engine runs inside Next route handlers under src/server/engine/).
 
 .PHONY: install dev dev-clean test test-engine lint lint-frontend verify verify-strict build \
-        pdfalto docker-build docker-run preflight-omr
+        audiveris-setup audiveris-convert docker-build docker-run
 
-# Install Node + Python deps. Python is only needed for local PDF/OMR via oemer.
+# Install Node dependencies. For PDF → MusicXML locally, also run `make audiveris-setup`.
 install:
 	@cd frontend && npm install
-	@if [ -f requirements.txt ]; then \
-		python3 -m pip install -r requirements.txt && \
-		python3 -m pip install "oemer==0.1.8" --no-deps; \
-	fi
-	@echo "Install complete."
+	@echo "Install complete. For PDF intake run: make audiveris-setup"
 
-# Build the vendored pdfalto binary. Runs submodule init once; links with system xpdf/poppler.
-pdfalto:
-	@test -f miscellaneous/pdfalto/CMakeLists.txt || (echo "miscellaneous/pdfalto/CMakeLists.txt missing" && exit 1)
-	cd miscellaneous/pdfalto && git submodule update --init --recursive
-	cd miscellaneous/pdfalto && cmake . && $(MAKE)
+# First-run Audiveris: Java 25+, clone/build Audiveris, download Tesseract eng data.
+audiveris-setup:
+	@bash scripts/audiveris/setup.sh
 
-# Cache oemer ONNX checkpoints into a writable dir so first-use PDF OMR doesn’t spend
-# minutes downloading over HTTPS. Respects OEMER_CHECKPOINT_DIR when set.
-preflight-omr:
-	@bash frontend/scripts/preflight-omr.sh
+# Manual QA: convert PDFs in scripts/audiveris/input/ to MusicXML in output/.
+audiveris-convert:
+	@bash scripts/audiveris/convert.sh
 
 # Kill listeners on 3000/3001 and remove Next dev lock. Run before `make dev` if you see EADDRINUSE.
 dev-clean:
@@ -37,36 +30,28 @@ dev-clean:
 dev:
 	@cd frontend && npm run dev
 
-# Frontend-only alias kept for documentation consistency.
 dev-frontend: dev
 
-# Run tests: frontend Vitest covers both the UI and the engine (src/server/engine/**/*.test.ts).
 test:
 	@cd frontend && npm test
 
-# Backwards-compat alias: the engine CLI smoke test from docs/plan.md.
 test-engine:
 	@mkdir -p frontend/engine-cli-output
 	@cd frontend && npm run test-engine
 
-# Lint (ESLint) the whole Next app (includes engine under src/server/engine).
 lint:
 	@cd frontend && npm run lint
 
-# Alias preserved from the split-repo era.
 lint-frontend: lint
 
-# Full local gate: tests + lint + build.
 verify: test lint build
 
-# Stricter: everything above, zero warnings expected.
 verify-strict: verify
 
-# Next production build (also type-checks engine code under src/server/engine).
 build:
 	@cd frontend && npm run build
 
-# Build the self-hosted image bundling Next + pdfalto + Poppler + Python/oemer.
+# Self-hosted image bundling Next.js + Audiveris OMR.
 docker-build:
 	@docker build -f Dockerfile -t harmonyforge:latest .
 
@@ -74,5 +59,4 @@ docker-run:
 	@docker run --rm -it -p 3000:3000 \
 		-e OPENAI_API_KEY="$$OPENAI_API_KEY" \
 		-e OPENAI_MODEL="$${OPENAI_MODEL:-gpt-4o-mini}" \
-		-v harmonyforge-oemer:/var/oemer \
 		harmonyforge:latest

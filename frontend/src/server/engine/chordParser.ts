@@ -26,7 +26,7 @@ function tonicToPc(tonic: string): number {
 }
 
 /** Get scale degree (1–7) and quality from Roman numeral */
-function parseRoman(roman: string): {
+export function parseRoman(roman: string): {
   degree: number;
   accidental: number;
   quality: "major" | "minor" | "diminished" | "half-diminished" | "augmented";

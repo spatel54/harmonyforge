@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
 
-  const result = runValidateFromFile(file);
+  const result = await runValidateFromFile(file);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

@@ -63,6 +63,29 @@ describe("inferChords", () => {
   it("still returns a single default chord for empty melody (caller guard)", () => {
     expect(inferChords(minimalParsed({ melody: [] }))).toEqual([{ roman: "I", beat: 0 }]);
   });
+
+  it("weights vertical sonority from all input parts, not melody alone", () => {
+    const parsed = minimalParsed({
+      melody: [{ pitch: "G5", beat: 0, duration: 4 }],
+      inputParts: [
+        {
+          partId: "P1",
+          name: "Bass",
+          notes: [{ pitch: "C3", beat: 0, duration: 4 }],
+        },
+        {
+          partId: "P2",
+          name: "Violin",
+          notes: [{ pitch: "G5", beat: 0, duration: 4 }],
+        },
+      ],
+      totalBeats: 4,
+    });
+    const melodyOnly = inferChords({ ...parsed, inputParts: undefined });
+    const fromAllParts = inferChords(parsed);
+    expect(fromAllParts[0]!.roman).toBe("I");
+    expect(melodyOnly[0]!.roman).toBe(fromAllParts[0]!.roman);
+  });
 });
 
 describe("downsampleChordSlotsToMax", () => {

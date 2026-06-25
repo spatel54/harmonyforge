@@ -15,9 +15,19 @@ import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
 import {
   buildMeasurePlaybackSpans,
   clampContentX,
-  contentXToNearestMeasureStart,
+  contentXForMeasureQuant,
+  contentXForPlaybackTick,
+  contentXToMeasureQuant,
+  quantToBeatLabel,
+  type MeasurePlaybackSpan,
 } from "@/lib/music/playbackScrub";
-import { setPendingRiffScorePlayFrom } from "@/lib/music/riffscorePlaybackBridge";
+import { hfLogPlayback } from "@/lib/music/playbackDebugLog";
+import {
+  clearHfPlaybackPosition,
+  getHfPlaybackPositionTick,
+  setPendingRiffScorePlayFrom,
+} from "@/lib/music/riffscorePlaybackBridge";
+import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 
 /** Patched RiffScore (`patch-package`) listens for this so toolbar Play uses `MusicEditorAPI` scrub position. */
 const RIFFSCORE_CLEAR_PLAYBACK_ANCHOR = "riffscore-clear-playback-anchor";
@@ -54,19 +64,21 @@ export function PlaybackScrubOverlay({
   const draggingRef = useRef(false);
   const wasPlayingRef = useRef(false);
   const playingRef = useRef(false);
-  /** Previous frame’s SVG cursor X (content coords) — motion here means real playback even if `operation` events were missed. */
-  const prevDomCursorXRef = useRef<number | null>(null);
   /** While true, rAF must not copy the SVG cursor — it stays stale after seek-until-play. */
   const suppressDomSyncRef = useRef(false);
   const rafRef = useRef<number | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
   const contentXRef = useRef(0);
   /** After first placement, span changes reclamp this value (including legitimate x === 0). */
   const linePlacedRef = useRef(false);
   const [scrollW, setScrollW] = useState(800);
   /** Horizontal position in score content coordinates — state so `left` survives re-renders (refs can be null on early calls). */
   const [lineLeftPx, setLineLeftPx] = useState(0);
-  /** Measure index for aria-valuenow after scrub. */
-  const [ariaMeasureIndex, setAriaMeasureIndex] = useState(0);
+  const [scrubMeasureIndex, setScrubMeasureIndex] = useState(0);
+  const [scrubQuant, setScrubQuant] = useState(0);
+  const [dragLabel, setDragLabel] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   /** Maps wrapper-horizontal `lineLeftPx` to `left` inside `portalHost`: left_portal = lineLeftPx - portalXOffset. */
   const [portalXOffset, setPortalXOffset] = useState(0);
 
@@ -105,12 +117,41 @@ export function PlaybackScrubOverlay({
     [notePositions, measureCount, scrollW],
   );
 
-  const applyLineX = useCallback((contentX: number) => {
-    const v = clampContentX(contentX, spans);
-    contentXRef.current = v;
-    linePlacedRef.current = true;
-    setLineLeftPx(v);
-  }, [spans]);
+  const activeMeasureSpan = useMemo((): MeasurePlaybackSpan | undefined => {
+    return spans.find((s) => s.measureIndex === scrubMeasureIndex);
+  }, [spans, scrubMeasureIndex]);
+
+  const applyScrubPosition = useCallback(
+    (contentX: number) => {
+      const v = clampContentX(contentX, spans);
+      contentXRef.current = v;
+      linePlacedRef.current = true;
+      setLineLeftPx(v);
+      const { measureIndex, quant } = contentXToMeasureQuant(v, spans, score);
+      setScrubMeasureIndex(measureIndex);
+      setScrubQuant(quant);
+      if (draggingRef.current) {
+        setDragLabel(quantToBeatLabel(quant, score, measureIndex));
+      }
+    },
+    [spans, score],
+  );
+
+  const scrollPlayheadIntoView = useCallback(
+    (contentX: number) => {
+      const scroll = portalHost ?? containerRef.current;
+      if (!scroll) return;
+      const rect = scroll.getBoundingClientRect();
+      const lineInView = contentX - scroll.scrollLeft;
+      const margin = 48;
+      if (lineInView < margin) {
+        scroll.scrollLeft = Math.max(0, contentX - margin);
+      } else if (lineInView > rect.width - margin) {
+        scroll.scrollLeft = contentX - rect.width + margin;
+      }
+    },
+    [containerRef, portalHost],
+  );
 
   useEffect(() => {
     const api = apiRef.current;
@@ -120,15 +161,23 @@ export function PlaybackScrubOverlay({
       "operation",
       (r: { method?: string; ok?: boolean }) => {
         if (r.ok === false) return;
-        if (r.method === "play") playingRef.current = true;
+        if (r.method === "play") {
+          playingRef.current = true;
+          setIsPlaying(true);
+        }
         if (r.method === "pause" || r.method === "stop") {
           playingRef.current = false;
+          setIsPlaying(false);
+          clearHfPlaybackPosition();
         }
         if (r.method === "rewind") {
           const wasPlaying = Boolean(
             (r as { details?: { wasPlaying?: boolean } }).details?.wasPlaying,
           );
-          if (wasPlaying) playingRef.current = true;
+          if (wasPlaying) {
+            playingRef.current = true;
+            setIsPlaying(true);
+          }
         }
       },
     );
@@ -141,25 +190,51 @@ export function PlaybackScrubOverlay({
     if (!container || !isReady || spans.length === 0) return;
 
     const tick = () => {
-      if (!draggingRef.current) {
-        // Prefer the score SVG’s playhead — same element RiffScore animates during audio.
-        const g =
-          container.querySelector<SVGElement>(
-            "svg.riff-ScoreCanvas__svg [data-testid=\"playback-cursor\"]",
-          ) ?? container.querySelector("[data-testid=\"playback-cursor\"]");
-        if (g) {
-          const gRect = g.getBoundingClientRect();
-          const cRect = container.getBoundingClientRect();
-          // Viewport rects already reflect inner scroll; only add wrapper scrollLeft.
-          const cx =
-            gRect.left - cRect.left + container.scrollLeft + gRect.width / 2;
+      if (!draggingRef.current && !suppressDomSyncRef.current) {
+        const hfTick = playingRef.current
+          ? getHfPlaybackPositionTick()
+          : null;
 
-          if (!suppressDomSyncRef.current) {
-            // Always mirror the SVG playhead. Programmatic `api.play()` may not emit
-            // `operation: play`, and the old gate missed slow/sub-pixel motion.
-            applyLineX(cx);
+        if (hfTick) {
+          const elapsed =
+            (typeof performance !== "undefined"
+              ? performance.now()
+              : Date.now()) - hfTick.at;
+          const cx = contentXForPlaybackTick(
+            score,
+            spans,
+            hfTick.measureIndex,
+            hfTick.quant,
+            hfTick.durationSec,
+            elapsed / 1000,
+          );
+          applyScrubPosition(cx);
+          if (scrollRafRef.current == null) {
+            scrollRafRef.current = requestAnimationFrame(() => {
+              scrollRafRef.current = null;
+              scrollPlayheadIntoView(contentXRef.current);
+            });
           }
-          prevDomCursorXRef.current = cx;
+        } else {
+          const g =
+            container.querySelector<SVGElement>(
+              "svg.riff-ScoreCanvas__svg [data-testid=\"playback-cursor\"]",
+            ) ?? container.querySelector("[data-testid=\"playback-cursor\"]");
+          if (g) {
+            const gRect = g.getBoundingClientRect();
+            const cRect = container.getBoundingClientRect();
+            const cx =
+              gRect.left - cRect.left + container.scrollLeft + gRect.width / 2;
+            applyScrubPosition(cx);
+            if (playingRef.current) {
+              if (scrollRafRef.current == null) {
+                scrollRafRef.current = requestAnimationFrame(() => {
+                  scrollRafRef.current = null;
+                  scrollPlayheadIntoView(contentXRef.current);
+                });
+              }
+            }
+          }
         }
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -168,17 +243,18 @@ export function PlaybackScrubOverlay({
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
     };
-  }, [containerRef, isReady, spans, applyLineX]);
+  }, [containerRef, isReady, spans, score, applyScrubPosition, scrollPlayheadIntoView]);
 
   useLayoutEffect(() => {
     if (draggingRef.current || spans.length === 0) return;
     if (!linePlacedRef.current) {
-      applyLineX(spans[0]!.startX);
+      applyScrubPosition(spans[0]!.startX);
       return;
     }
-    applyLineX(clampContentX(contentXRef.current, spans));
-  }, [spans, applyLineX]);
+    applyScrubPosition(clampContentX(contentXRef.current, spans));
+  }, [spans, applyScrubPosition]);
 
   const seekTo = useCallback(
     async (
@@ -191,17 +267,35 @@ export function PlaybackScrubOverlay({
       if (!api) return;
       suppressDomSyncRef.current = true;
       try {
+        hfLogPlayback({
+          hypothesisId: "B",
+          location: "PlaybackScrubOverlay.tsx:seekTo",
+          message: "scrub seek play",
+          data: { measureIndex, quant, resume },
+        });
         await api.play(measureIndex, quant);
         if (!resume) api.pause();
-      } catch {
-        /* RiffScore / Tone may throw if not ready */
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Playback failed";
+        hfLogPlayback({
+          hypothesisId: "B",
+          location: "PlaybackScrubOverlay.tsx:seekTo",
+          message: "scrub seek failed",
+          data: {
+            measureIndex,
+            quant,
+            resume,
+            error: msg,
+          },
+        });
+        showSandboxToast(`Playback could not start: ${msg}`);
       } finally {
         suppressDomSyncRef.current = false;
-        applyLineX(targetContentX);
+        applyScrubPosition(targetContentX);
         clearRiffScoreInternalPlaybackAnchor();
       }
     },
-    [apiRef, applyLineX],
+    [apiRef, applyScrubPosition],
   );
 
   const clientToContentX = (clientX: number) => {
@@ -221,25 +315,26 @@ export function PlaybackScrubOverlay({
 
     wasPlayingRef.current = playingRef.current;
     draggingRef.current = true;
-    prevDomCursorXRef.current = null;
+    setIsDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
 
     if (wasPlayingRef.current) api?.pause();
 
     const cx = clampContentX(clientToContentX(e.clientX), spans);
-    applyLineX(cx);
+    applyScrubPosition(cx);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!draggingRef.current) return;
     const cx = clampContentX(clientToContentX(e.clientX), spans);
-    applyLineX(cx);
+    applyScrubPosition(cx);
   };
 
   const finishPointer = async (e: React.PointerEvent) => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
-    prevDomCursorXRef.current = null;
+    setIsDragging(false);
+    setDragLabel(null);
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
@@ -249,56 +344,109 @@ export function PlaybackScrubOverlay({
     if (spans.length === 0) return;
 
     const cx = clampContentX(clientToContentX(e.clientX), spans);
-    const { measureIndex, snapContentX } = contentXToNearestMeasureStart(
-      cx,
+    const { measureIndex, quant } = contentXToMeasureQuant(cx, spans, score);
+    const snapContentX = contentXForMeasureQuant(
+      measureIndex,
+      quant,
       spans,
       score,
     );
-    setAriaMeasureIndex(measureIndex);
-    setPendingRiffScorePlayFrom(measureIndex, 0);
-    applyLineX(snapContentX);
-    await seekTo(measureIndex, 0, wasPlayingRef.current, snapContentX);
+    setPendingRiffScorePlayFrom(measureIndex, quant);
+    applyScrubPosition(snapContentX);
+    await seekTo(measureIndex, quant, wasPlayingRef.current, snapContentX);
   };
 
   if (!isReady || measureCount <= 0 || !portalHost) return null;
 
   const lineLeftInHost = lineLeftPx - portalXOffset;
+  const ariaText = quantToBeatLabel(scrubQuant, score, scrubMeasureIndex);
+  const measureBandLeft =
+    activeMeasureSpan != null ? activeMeasureSpan.startX - portalXOffset : lineLeftInHost;
+  const measureBandWidth =
+    activeMeasureSpan != null
+      ? Math.max(activeMeasureSpan.endX - activeMeasureSpan.startX, 1)
+      : 0;
 
   const scrub = (
     <div
-      className="pointer-events-none overflow-visible"
+      className="pointer-events-none overflow-visible hf-playback-scrub-root"
       style={{
         position: "absolute",
-        left: lineLeftInHost,
+        left: 0,
         top: 0,
+        right: 0,
         bottom: 8,
-        width: 0,
         zIndex: 10,
       }}
     >
-      <div
-        role="slider"
-        aria-valuemin={0}
-        aria-valuemax={Math.max(0, measureCount - 1)}
-        aria-valuenow={Math.min(
-          Math.max(0, measureCount - 1),
-          ariaMeasureIndex,
-        )}
-        aria-label={`Playback scrub — release to snap to a bar and set where Play starts; ${measureCount} measures`}
-        className="pointer-events-auto absolute left-0 top-0 bottom-0 w-7 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none flex flex-col items-center"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={finishPointer}
-        onPointerCancel={finishPointer}
-      >
+      {(isDragging || isPlaying) && activeMeasureSpan != null && (
         <div
-          className="w-[3px] h-full min-h-[100px] rounded-full shrink-0"
+          className="absolute top-0 bottom-0 pointer-events-none hf-playback-measure-band"
           style={{
-            backgroundColor: "var(--hf-accent, #ffb300)",
-            boxShadow:
-              "0 0 0 1px rgba(0,0,0,0.2), 0 0 10px color-mix(in srgb, var(--hf-accent, #ffb300) 45%, transparent)",
+            left: measureBandLeft,
+            width: measureBandWidth,
           }}
         />
+      )}
+      <div
+        className="pointer-events-none overflow-visible"
+        style={{
+          position: "absolute",
+          left: lineLeftInHost,
+          top: 0,
+          bottom: 0,
+          width: 0,
+        }}
+      >
+        <div
+          role="slider"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, measureCount - 1)}
+          aria-valuenow={Math.min(
+            Math.max(0, measureCount - 1),
+            scrubMeasureIndex,
+          )}
+          aria-valuetext={ariaText}
+          aria-label={`Playback scrub — drag to set start position; ${measureCount} measures`}
+          className="pointer-events-auto absolute left-0 top-0 bottom-0 w-8 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none flex flex-col items-center"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={finishPointer}
+          onPointerCancel={finishPointer}
+        >
+          <div
+            className="hf-playback-scrub-cap shrink-0"
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderTop: "8px solid var(--hf-accent, #ffb300)",
+              filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))",
+            }}
+          />
+          <div
+            className="w-[3px] flex-1 min-h-[80px] rounded-full shrink-0"
+            style={{
+              backgroundColor: "var(--hf-accent, #ffb300)",
+              boxShadow:
+                "0 0 0 1px rgba(0,0,0,0.2), 0 0 10px color-mix(in srgb, var(--hf-accent, #ffb300) 45%, transparent)",
+            }}
+          />
+        </div>
+        {dragLabel != null && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-full mb-1 px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap pointer-events-none hf-playback-scrub-pill"
+            style={{
+              backgroundColor: "var(--hf-bg)",
+              color: "var(--hf-text-primary)",
+              border: "1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 55%, transparent)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+            }}
+          >
+            {dragLabel}
+          </div>
+        )}
       </div>
     </div>
   );

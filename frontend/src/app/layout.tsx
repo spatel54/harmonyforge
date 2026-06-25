@@ -5,6 +5,7 @@ import {
   IBM_Plex_Mono,
 } from "next/font/google";
 import "./globals.css";
+import "@/lib/music/harmonyforgePlaybackGuards";
 import { buildRootMetadata } from "@/lib/siteMeta";
 import { ThemeProvider } from "@/components/atoms/ThemeProvider";
 import { StudySessionProvider } from "@/components/study/StudySessionProvider";

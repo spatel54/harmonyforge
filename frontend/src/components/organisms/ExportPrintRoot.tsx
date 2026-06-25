@@ -1,30 +1,46 @@
 "use client";
 
-import React from "react";
-import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
-import type { EditableScore } from "@/lib/music/scoreTypes";
+import React, { forwardRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import {
+  PrintableScore,
+  type PrintableScoreHandle,
+} from "@/components/score/PrintableScore";
+import { HARMONYFORGE_EXPORT_ATTRIBUTION } from "@/lib/sandbox/exportBranding";
+
+export type { PrintableScoreHandle };
 
 export interface ExportPrintRootProps {
-  score: EditableScore | null;
+  xml: string | null;
+  /** Reserved for future OSMD work-title metadata. */
+  filename?: string | null;
 }
 
 /**
- * Hidden-by-default root dedicated to print output.
+ * Hidden-by-default root dedicated to print output (OSMD engraving).
  *
- * When `document.body` has the class `hf-printing-score`, global CSS hides
- * every child of <body> except this root — so `window.print()` yields a clean
- * score page without palette, toolbar, bars strip, or inspector chrome.
- *
- * In non-print viewports this container is visually hidden via
- * `@media not print { display: none }` in `globals.css`.
+ * Portaled to `document.body` so print CSS can hide every sibling while keeping
+ * this root visible. When `body.hf-printing-score` is set, `window.print()`
+ * yields a clean score page without palette, toolbar, or inspector chrome.
  */
-export function ExportPrintRoot({ score }: ExportPrintRootProps) {
-  if (!score) return null;
-  return (
-    <div className="hf-print-root" aria-hidden="true">
-      <div className="hf-print-root__score">
-        <RiffScoreEditor score={score} className="w-full" presentation />
-      </div>
-    </div>
-  );
-}
+export const ExportPrintRoot = forwardRef<PrintableScoreHandle, ExportPrintRootProps>(
+  function ExportPrintRoot({ xml }, ref) {
+    const mounted = useSyncExternalStore(
+      () => () => {},
+      () => true,
+      () => false,
+    );
+
+    if (!xml || !mounted) return null;
+
+    return createPortal(
+      <div className="hf-print-root" aria-hidden="true">
+        <div className="hf-print-root__score">
+          <PrintableScore ref={ref} xml={xml} />
+        </div>
+        <p className="hf-export-attribution">{HARMONYFORGE_EXPORT_ATTRIBUTION}</p>
+      </div>,
+      document.body,
+    );
+  },
+);

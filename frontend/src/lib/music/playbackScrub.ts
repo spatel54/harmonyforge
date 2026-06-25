@@ -96,6 +96,63 @@ function measureQuantInSpan(
   return { measureIndex, quant };
 }
 
+/** Map RiffScore measure + quant back to horizontal content X for the scrub overlay. */
+/** Seconds per RiffScore quant (16 quants per quarter) at the score BPM. */
+export function secondsPerQuantForScore(score: EditableScore): number {
+  const bpm = score.bpm ?? 120;
+  return 60 / bpm / 16;
+}
+
+/**
+ * Horizontal playhead X during an active note/rest segment, advancing by elapsed time.
+ */
+export function contentXForPlaybackTick(
+  score: EditableScore,
+  spans: MeasurePlaybackSpan[],
+  measureIndex: number,
+  quant: number,
+  segmentDurationSec: number,
+  elapsedSecSinceTick: number,
+): number {
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const spq = secondsPerQuantForScore(score);
+  const quantAdvance =
+    segmentDurationSec > 0 && spq > 0
+      ? Math.floor(elapsedSecSinceTick / spq)
+      : 0;
+  const quantNow = Math.min(
+    quant + Math.max(0, quantAdvance),
+    Math.max(0, maxQ - 1),
+  );
+  return contentXForMeasureQuant(measureIndex, quantNow, spans, score);
+}
+
+export function contentXForMeasureQuant(
+  measureIndex: number,
+  quant: number,
+  spans: MeasurePlaybackSpan[],
+  score: EditableScore,
+): number {
+  const span = spans.find((s) => s.measureIndex === measureIndex);
+  if (!span) return clampContentX(0, spans);
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const t = maxQ <= 0 ? 0 : Math.min(1, Math.max(0, quant / maxQ));
+  const width = Math.max(span.endX - span.startX, 1);
+  return clampContentX(span.startX + t * width, spans);
+}
+
+/** Human-readable beat index within a measure (1-based quarter beats for 4/4). */
+export function quantToBeatLabel(
+  quant: number,
+  score: EditableScore,
+  measureIndex: number,
+): string {
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  const quantsPerQuarter = Math.max(1, Math.floor(maxQ / 4));
+  const beat = Math.min(4, Math.floor(quant / quantsPerQuarter) + 1);
+  return `Bar ${measureIndex + 1} · beat ${beat}`;
+}
+
 export function contentXToMeasureQuant(
   contentX: number,
   spans: MeasurePlaybackSpan[],

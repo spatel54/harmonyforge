@@ -66,14 +66,14 @@ const STEPS: StepDef[] = [
     step: 5,
     route: "/sandbox",
     title: "Export your score",
-    body: "When you are ready, click Export to open the export dialog and choose your output format.",
+    body: "Click Export in the header when you are ready. The dialog shows a PDF-style preview on the left—the same engraving you get when you print.",
     caretSide: "top",
   },
   {
     step: 6,
     route: "/sandbox",
     title: "Choose your format",
-    body: "Select from MusicXML, MIDI, PDF, PNG, JSON, audio, or a full ZIP archive. Pick the format that fits your workflow, then hit Export to download.",
+    body: "Pick MusicXML for other notation apps, MIDI or WAV for your DAW, or PDF to open the print dialog and save. Then hit Export to download.",
     caretSide: "right",
   },
 ];

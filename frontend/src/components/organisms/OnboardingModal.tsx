@@ -35,7 +35,7 @@ const SLIDES = [
     gradientFrom: "#FDF5E6",
     gradientTo: "#D9CBCA",
     heading: "Take it with you",
-    body: "MusicXML, MIDI, PNG, print, and more. Lessons, DAW, stage, or archive.",
+    body: "MusicXML, MIDI, WAV, or PDF—print from the sandbox when you are ready to share or archive your arrangement.",
     cta: "Get started",
     ctaStyle: "accent" as const,
   },

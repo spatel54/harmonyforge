@@ -27,9 +27,10 @@ describe("formatLearnerLetterName", () => {
     expect(formatLearnerLetterName("   ")).toBe("");
   });
 
-  it("falls back for non-standard strings", () => {
+  it("parses letter-only and OSMD-style pitch strings", () => {
     expect(formatLearnerLetterName("C")).toBe("C");
     expect(formatLearnerLetterName("F#")).toBe("F#");
-    expect(formatLearnerLetterName("weird")).toBe("weird");
+    expect(formatLearnerLetterName("G4.")).toBe("G");
+    expect(formatLearnerLetterName("weird")).toBe("");
   });
 });

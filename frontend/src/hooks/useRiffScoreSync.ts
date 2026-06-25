@@ -50,7 +50,9 @@ export function useRiffScoreSync(
   apiRef: React.RefObject<MusicEditorAPI | null>,
   score: EditableScore | null,
   getPitchGroupNoteIds?: () => Set<string>,
+  options?: { showChordTrack?: boolean },
 ): UseRiffScoreSyncReturn {
+  const showChordTrack = options?.showChordTrack !== false;
   const isPushingRef = useRef(false);
   const hfToRsRef = useRef<IdMap>(new Map());
   const rsToHfRef = useRef<IdMap>(new Map());
@@ -62,7 +64,7 @@ export function useRiffScoreSync(
 
     isPushingRef.current = true;
     try {
-      const rsScore = editableScoreToRsScore(score);
+      const rsScore = editableScoreToRsScore(score, { showChordTrack });
       api.loadScore(rsScore);
 
       // Rebuild ID map after load
@@ -76,7 +78,7 @@ export function useRiffScoreSync(
         isPushingRef.current = false;
       });
     }
-  }, [apiRef, score]);
+  }, [apiRef, score, showChordTrack]);
 
   const getRsToHf = useCallback(() => rsToHfRef.current, []);
 

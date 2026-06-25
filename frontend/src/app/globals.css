@@ -816,6 +816,18 @@ a.hf-pressable:active {
   }
 }
 
+/* Playback scrub overlay — measure band + pill */
+.hf-playback-measure-band {
+  background: color-mix(in srgb, var(--hf-accent, #ffb300) 12%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 35%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 35%, transparent);
+  pointer-events: none;
+}
+
+.hf-playback-scrub-pill {
+  z-index: 12;
+}
+
 /* ─────────────────────────────────────────────────────────────
    .pen File Token Aliases — exact names from HarmonyForge.pen
    Maps $sonata-* / $nocturne-* design variables to CSS vars so
@@ -1024,21 +1036,64 @@ a.hf-pressable:active {
   position: fixed;
   left: -10000px;
   top: 0;
-  width: 1000px;
-  max-width: 1000px;
+  width: 1120px;
+  max-width: 1120px;
   pointer-events: none;
   z-index: -1;
+}
+
+/* On-screen layout pass while OSMD renders, before print preview opens. */
+.hf-print-root--rendering {
+  left: 0 !important;
+  visibility: hidden;
 }
 .hf-print-root__score {
   width: 100%;
   background: white;
   color: black;
-  padding: 12px;
+  padding: 8px;
+}
+
+.hf-print-root__score svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.hf-export-attribution {
+  margin: 0;
+  padding: 10px 0 2px;
+  text-align: center;
+  font-family: var(--font-inter, Inter, sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(45, 24, 23, 0.42);
+}
+
+/* Export modal — OSMD PDF preview (same renderer as print). */
+.hf-export-osmd-preview {
+  -webkit-overflow-scrolling: touch;
+}
+.hf-export-osmd-preview svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.hf-osmd-letter-labels .hf-osmd-letter-label {
+  font-family: ui-monospace, "IBM Plex Mono", monospace;
+  font-weight: 600;
+  fill: #2d1817;
+  stroke: #f8f3ea;
+  stroke-width: 2.5px;
+  paint-order: stroke fill;
+  pointer-events: none;
 }
 
 @media print {
   @page {
-    margin: 0.4in;
+    /* Slightly inside typical 0.5in office margins; still safe for home printers. */
+    margin: 0.35in;
     size: auto;
   }
 
@@ -1068,12 +1123,8 @@ a.hf-pressable:active {
   }
 
   /* New print pipeline — only the ExportPrintRoot renders. */
-  body.hf-printing-score > * {
+  body.hf-printing-score > *:not(.hf-print-root) {
     display: none !important;
-  }
-  body.hf-printing-score .hf-print-root,
-  body.hf-printing-score .hf-print-root * {
-    display: revert !important;
   }
   body.hf-printing-score .hf-print-root {
     display: block !important;
@@ -1082,7 +1133,32 @@ a.hf-pressable:active {
     top: auto !important;
     width: 100% !important;
     max-width: none !important;
+    visibility: visible !important;
     pointer-events: auto !important;
     z-index: auto !important;
+  }
+  body.hf-printing-score .hf-print-root svg {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  body.hf-printing-score .hf-osmd-letter-labels .hf-osmd-letter-label {
+    fill: #1a1a1a !important;
+    stroke: #fff !important;
+    stroke-width: 2px !important;
+  }
+
+  body.hf-printing-score .hf-export-attribution {
+    display: block !important;
+    position: fixed;
+    bottom: 0.12in;
+    left: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    font-size: 9pt;
+    color: rgba(0, 0, 0, 0.38);
+    z-index: 1;
   }
 }

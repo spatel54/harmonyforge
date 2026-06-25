@@ -6,6 +6,14 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Sandbox playback reliability (2026-06-04)](#wl-sandbox-playback-reliability-2026-06-04) — **RiffScore timeline time-first sort**; **ESM `index.mjs` parity** with monotonic Tone.Part scheduling; **`playbackPartSchedule` / `playbackDebugLog` bridges**; scrub/play **toasts** — **`make test` 376**
+- [Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm) — **Photo PDF** server raster + client **`pages[]`**; **chord placement/detect** fixes; **no chord playback**; **Export modal** Letter Names + Chords live preview; **`@napi-rs/canvas`** Next bundling fix — **`make test` 373** — **current:** E2E PDF upload QA after **`make dev-clean && make dev`**
+- [Work log — Sandbox chord symbols ≥2 parts (2026-06-04)](#wl-sandbox-chord-symbols-2026-06-04) — **Engine `<harmony>` on generate**; **parse + RiffScore chord track** (display-only, no playback); **Refresh chord symbols**; gate **`parts.length >= 2`** (melody + harmony)
+- [Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04) — **PDF preview = OSMD print**; formats **PDF / MusicXML / WAV / MIDI**; **HarmonyForge** branding; **letter names** on PDF preview + print when toggle on; print margins + **final barline**; metronome gain + playhead through **rests** — **`make test` 338** — **resolved:** OSMD label placement; **open:** PDF OMR quality, viola/tenor manual QA, toolbar **`Octave ↓`**
+- [Work log — Duration change: rest split + neighbor absorption (2026-06-03)](#wl-duration-change-rests-2026-06-03) — **`setNoteDurations`** shorten/lengthen; **`setNoteDurationOnSelection`**; RS **`setDuration`** intercept; **`[` / `]`** on selection — **`make test` 312**
+- [Work log — Delete → rest placeholders + beat-accurate playback scrub (2026-06-03)](#wl-rest-delete-beat-scrub-2026-06-03) — **`deleteSelectionAsRests`** central path; block RiffScore **`DeleteEventCommand`** (capture keys + undo intercept); scrub releases at **measure + quant** with drag label + measure band — **`make test` 307**
+- [Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03) — **RiffScore alto/tenor layout patch restored** in **`patches/riffscore+1.0.0-alpha.9.patch`** (`getOffsetForPitch` / `getPitchForOffset`); sandbox viola noteheads should match **OSMD PDF/Print**; **`origin`** → **`spatel54/harmonyforge`** — **open:** manual viola/tenor QA after **`rm -rf .next`**
+- [Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03) — **Audiveris-only** PDF → MusicXML; **OSMD** print/PDF; **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed); honest Playground progress bar; **`make test` 304** — **open:** PDF OMR quality QA on real scans; **RiffScore measure-gutter selection** after Audiveris import (fixed **`Target event not found`**, re-verify in browser)
 - [Work log — Accidentals, RiffScore adapter, Theory Inspector lay UX (2026-04-27)](#wl-accidentals-inspector-lay-ux-2026-04-27) — **`hfNoteToRsEvent`** splits **letter+octave** vs **`accidental`** for RiffScore; sandbox **sharp/flat** path **flush → live score → Salamander preview**; Inspector **Stylist options** **`details`** + chat seed **`Try other harmony ideas`** → **`requestSuggestion`**; Explanation tab **lay copy** — **open:** manual QA (dense scores, multi-select, touch); **program watch:** toolbar **`Octave ↓`** ([Iteration 7 follow-up](progress.md#wl-iteration-7-followup-2026-04-25-pm))
 - [Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy (2026-04-27)](#wl-sandbox-naturals-llm-audit-2026-04-27) — **keyboard ↑/↓** = **diatonic white-key steps** + **natural-only** stored pitches; **⌘/Ctrl+↑/↓** = octave then **natural letters**; **Salamander** pitch preview matches RiffScore clicks; **`getServerOpenAIEnv`** **swaps** mistaken **`OPENAI_API_KEY` ↔ `OPENAI_MODEL`** + **`configHint`** in Theory Inspector; **SATB audit** chat line = short **red vs blue** explanation — **open:** manual QA (arrows, preview, **Octave ↓**); confirm **Vercel** env on **Preview** + redeploy
 - [Work log — Sandbox editor reliability & UX trim (2026-04-27)](#wl-sandbox-reliability-2026-04-27) — **flush-aware transpose** (**`useScoreStore.getState().score`** after RS flush); **toolbar ↔ palette parity** via **`onToolbarAction` → `handleToolSelect`** (returns **`true`**, no double **`applyOnSelection`**); chromatic **↑/↓** + pitch toolbar **`getTransposeTargetNoteIds`**; score-only print; **Advanced** Document hidden; **`make verify`** **281** tests — **open:** manual QA; **watch:** toolbar **`Octave ↓`** after unified path (Iteration 7 residual — re-verify in browser)
@@ -49,6 +57,399 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-sandbox-playback-reliability-2026-06-04"></a>
+
+## Work log — Sandbox playback reliability (2026-06-04)
+
+### End goal
+
+Dense **multi-part** scores (16ths, simultaneous chord attacks) must **play through reliably** in the sandbox — no early cutoff, silent transport, or missing attacks when using toolbar Play, Space, or scrub play.
+
+### Learnings (hypotheses → fixes)
+
+| Id | Hypothesis | Fix |
+|----|------------|-----|
+| **A** | `createTimeline` sorted `rawEvents` by **pitch before time**, scrambling note order before `Tone.Part` | **Time-first** `rawEvents.sort` in patched RiffScore; [`createTimelineSort.ts`](../frontend/src/lib/music/createTimelineSort.ts) + Vitest |
+| **B** | **`index.mjs`** lacked `eventsRaw` / monotonic shim / trigger logging present in **`index.js`** | Parity in patch: monotonic bridge + `events.sort` before `Tone.Part` |
+| **C** | Simultaneous attacks need strictly increasing Part times | [`playbackPartSchedule.ts`](../frontend/src/lib/music/playbackPartSchedule.ts) → `__HF_ENSURE_MONOTONIC_PART_TIMES` |
+| **D** | Failures were silent in scrub/toolbar | [`showSandboxToast`](../frontend/src/lib/sandbox/sandboxToast.ts) + dev [`playbackDebugLog.ts`](../frontend/src/lib/music/playbackDebugLog.ts) |
+| **E** | `triggerAttackRelease` throws on bad pitch/time | try/catch in patch (logged when dev bridge on) |
+
+### Files
+
+- [`frontend/patches/riffscore+1.0.0-alpha.9.patch`](../frontend/patches/riffscore+1.0.0-alpha.9.patch) — timeline sort + schedule hardening (regen via `npx patch-package riffscore`)
+- [`harmonyforgePlaybackGuards.ts`](../frontend/src/lib/music/harmonyforgePlaybackGuards.ts), [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx)
+
+### Refinement sweep (pre-push, 2026-06-04)
+
+| Fix | Detail |
+|-----|--------|
+| **ESM chord guard** | `playChordVoicingPreview` + guarded call sites added to **`index.mjs`** (was **index.js** only — Next **`import`** path). |
+| **Bridge boot** | [`harmonyforgePlaybackGuards.ts`](../frontend/src/lib/music/harmonyforgePlaybackGuards.ts) now installs **position** bridge at app boot (idempotent with `RiffScoreEditor`). |
+| **DRY scheduling** | [`playbackUtils.ts`](../frontend/src/lib/music/playbackUtils.ts) reuses [`ensureStrictlyIncreasingPartTimes`](../frontend/src/lib/music/playbackPartSchedule.ts). |
+| **Tests** | [`playbackDebugLog.test.ts`](../frontend/src/lib/music/playbackDebugLog.test.ts), [`harmonyforgePlaybackGuards.test.ts`](../frontend/src/lib/music/harmonyforgePlaybackGuards.test.ts). |
+| **Dev log throttle** | `hfLogPlayback` POST capped at 250ms to avoid dev-server noise. |
+
+**Pre-push gate:** `cd frontend && npm install && make test` (expect **383** Vitest). **Manual QA** matrix below still required in browser.
+
+### Open
+
+- Manual QA matrix: 4-part 16ths, simultaneous chord, scrub mid-bar, rest-only pickup, rapid Play/Pause/Play, chord symbol click/nav **silent** (no voicing preview).
+
+<a id="wl-pdf-intake-chords-export-2026-06-04-pm"></a>
+
+## Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)
+
+### End goal
+
+1. **Playground PDF upload** (including phone **photo PDFs** like `JPEG image.pdf`) should complete **`POST /api/to-preview-musicxml`** without hanging or opaque **500** errors, then flow to Document → Generate → Sandbox like symbolic files.
+2. **Chord symbols** on multi-part scores should match **vertical harmony** and **measure downbeats** (e.g. missing **C** on m2 downbeat; **Em** not **F** when melody+cello spell B–E–G).
+3. **Chord symbols are notation-only** — no chord voicing preview on Play, symbol click, or keyboard navigation.
+4. **Export modal** should expose the same **Letter Names** and **Chords** toggles as the sandbox header, and **PDF preview must update** when toggles change before download/print.
+5. **Operators** should see **accurate** error hints (canvas install vs Audiveris vs OMR quality), not a generic Audiveris footer when the API never reached OMR.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **Photo / scan PDFs** | Heuristic **`isLikelyRasterImagePdf`** ([`pdfRasterHeuristic.ts`](../frontend/src/server/engine/parsers/pdfRasterHeuristic.ts)) → **raster-first** OMR path in [`audiverisPipeline.ts`](../frontend/src/server/engine/parsers/audiverisPipeline.ts); native Audiveris PDF as fallback. |
+| **Server raster** | [`pdfServerRaster.ts`](../frontend/src/server/engine/parsers/pdfServerRaster.ts) — **pdfjs-dist** + **`@napi-rs/canvas`** in Node (~400–500ms for one-page fixture); **lazy `import()`** so API routes load without canvas unless raster runs. |
+| **Client raster** | Playground [`page.tsx`](../frontend/src/app/page.tsx) — **`rasterizePdf`** → append **`pages`** PNGs to FormData; [`resolveParsedScore`](../frontend/src/server/engine/runtime.ts) tries **`intakeImagePagesToParsedScore`** on those buffers **before** re-parsing the PDF. |
+| **Async intake** | [`intakeFileToParsedScore`](../frontend/src/server/engine/parsers/fileIntake.ts), [`resolveParsedScore`](../frontend/src/server/engine/runtime.ts), preview/generate API routes **`await`** PDF pipeline; upload **`AbortSignal.timeout(900_000)`** (15 min). |
+| **Next.js native modules** | [`next.config.ts`](../frontend/next.config.ts) **`serverExternalPackages`**: **`@napi-rs/canvas`**, **`pdfjs-dist`** — Turbopack must not bundle Skia **`.node`** binaries. |
+| **Chord placement** | [`measureLengthBeats()`](../frontend/src/lib/music/scoreUtils.ts) — notated bar length vs time signature **max**; used in [`chordPlacement.ts`](../frontend/src/lib/music/chordPlacement.ts) and [`parseHarmonyFromMusicXml.ts`](../frontend/src/lib/music/parseHarmonyFromMusicXml.ts). |
+| **Chord detect** | [`detectSymbolFromPcs`](../frontend/src/lib/music/chordSymbolDetect.ts) — prefer simpler triads over extensions; [`ensureChordsOnMeasureDownbeats`](../frontend/src/lib/music/chordPlacement.ts) keeps existing downbeat symbol when detect fails. |
+| **Chord playback off** | [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) **`__HF_DISABLE_CHORD_PLAYBACK`**; [`harmonyforgePlaybackGuards.ts`](../frontend/src/lib/music/harmonyforgePlaybackGuards.ts) in layout; [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts) **`chord.playback.enabled: false`**; riffscore **`patch-package`** guards on schedule/preview paths (regenerate patch if drift). |
+| **Export toggles** | Shared [`ScoreDisplayToggles.tsx`](../frontend/src/components/molecules/ScoreDisplayToggles.tsx) in sandbox header + [`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx); modal uses **`scoreToBrandedExportMusicXML`** for preview state and **`scoreToExportMusicXML`** + [`musicXmlForExportDisplay`](../frontend/src/lib/music/musicXmlExportDisplay.ts) at export/print time so **Chords off** strips `<harmony>` without losing data for re-toggle. |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| Photo PDF heuristic + server raster | `pdfRasterHeuristic.ts`, `pdfServerRaster.ts`, `pdfServerRaster.test.ts` (fixture one-page photo PDF). |
+| Audiveris pipeline | `tryAudiverisOnPdfBuffer` async; raster-first for image PDFs; `tryAudiverisOnPngBuffers` for PNG page list. |
+| Client + server pages | Playground sends **`pages`**; `resolveParsedScore` prefers client PNGs for PDF; server raster fallback. |
+| Intake tests | `fileIntake.test.ts` — all `await intake(...)` cases use **`async`** callbacks (**373** tests green). |
+| Chord timeline | `measureLengthBeats` fixes downbeat slots on partial notated measures (e.g. 3-beat m1 in 4/4). |
+| Chord detect / downbeats | Triad tie-break; downbeat symbol preservation when vertical detect fails. |
+| Export modal toggles | Letter Names + Chords in export header; OSMD preview re-renders on toggle; chord strip only at export when off. |
+| Chord playback disabled | Global guard + adapter + riffscore patch intent (verify patch applied after `npm install`). |
+| Canvas / Next fix | `serverExternalPackages` + lazy raster import; `intakeErrorHints` distinguishes **500/canvas** vs Audiveris. |
+| Dependency | **`@napi-rs/canvas`** in [`frontend/package.json`](../frontend/package.json). |
+
+### Verification
+
+- **`make test`** → **373** Vitest (includes `pdfServerRaster.test.ts`, `fileIntake`, chord placement/detect tests).
+- **`POST /api/to-preview-musicxml`** with no file → **400** (route loads; was **500** when canvas failed at import).
+- **Node:** `require('@napi-rs/canvas')` works from `frontend/` when optional platform package installed.
+- **Manual (open):** **`make dev-clean && make dev`** → upload **`JPEG image.pdf`** (or user photo PDF) → wait for OMR (minutes); confirm Document preview XML; Generate → Sandbox chord symbols QA.
+- **Audiveris:** Local binary at **`scripts/audiveris/vendor/audiveris/app/build/install/app/bin/Audiveris`** after **`make audiveris-setup`** (Java 25+).
+
+### Current failure / open work
+
+| Status | Item |
+|--------|------|
+| **Fixed (code)** | **Preview failed: 500** caused by **`@napi-rs/canvas`** native module not resolving under Next/Turbopack — **not** missing Audiveris. UI wrongly appended Audiveris hints for any PDF error including bare **`Preview failed: 500`**. |
+| **Operator action** | After pulling: **`make install`** (or `cd frontend && npm install`), **`make dev-clean && make dev`** ( **`next.config.ts`** change requires restart). |
+| **Open (E2E)** | Confirm full **photo PDF → MusicXML → Sandbox** on a real upload; first OMR can take **several minutes**; quality depends on scan/photo clarity. |
+| **Open (product)** | **PDF OMR accuracy** on arbitrary scans — wiring done; wrong/missing notes are Audiveris limits ([§1.9q-open](plan.md)). |
+| **Open (patch)** | Regenerate **`patches/riffscore+1.0.0-alpha.9.patch`** if chord-playback guards were edited only in `node_modules` — run **`npx patch-package riffscore`** after manual QA. |
+| **Unchanged** | Toolbar **`Octave ↓`**; viola/tenor manual QA; Vercel = no Java OMR. |
+
+### Learnings
+
+- **Misleading 500:** When the dev server log shows **`Cannot find module './skia.darwin-arm64.node'`** or **`@napi-rs/canvas-darwin-universal`**, fix **Next external packages** + **lazy import** — do not send users to **`make audiveris-setup`** alone.
+- **Photo PDFs:** Embedded single large **FlateDecode/JPEG** image → **raster → PNG → Audiveris image OMR** is faster and more reliable than native PDF batch on Audiveris.
+- **Client `pages[]`:** Re-enabled as **first** OMR path for PDF uploads (supersedes 2026-06-03 note that `pages[]` was preview-only for OMR).
+- **Measure length:** Chord symbols keyed to **full time-signature measure length**, not only summed note durations in sparse bars.
+- **Export XML:** Opening export with chord-stripped XML prevented **Chords on** from restoring harmony in preview — modal now keeps full XML for preview state.
+
+<a id="last-updated-2026-06-04-pm-pdf-chords"></a>
+
+### Last updated (2026-06-04 PM — PDF intake, chords, export toggles, canvas 500)
+
+- **Narrative:** **[Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm)**.
+- **Tests:** **`make test` → 373**.
+- **Current failure:** **E2E manual QA** on photo PDF upload after dev restart; **OMR quality** on real scans; optional **riffscore patch** regen for chord-playback guards.
+
+<a id="wl-sandbox-chord-symbols-2026-06-04"></a>
+
+## Work log — Sandbox chord symbols (≥2 parts) (2026-06-04)
+
+### Learnings
+
+- **Gating:** `shouldShowChordNotation` → **`parts.length >= 2`** (melody + at least one harmony). Single-part scores stay chord-free.
+- **Placement:** Engine uses `ChordSlot.beat` (inference/solver). Import uses MusicXML element order. Refresh uses [`chordPlacement.ts`](frontend/src/lib/music/chordPlacement.ts) — symbols only when the **vertical pitch-class set** changes (note onsets + releases), not every passing onset.
+- **Measure timeline (2026-06-04 PM):** [`measureLengthBeats()`](../frontend/src/lib/music/scoreUtils.ts) — max(notated length, time signature) so downbeats align in sparse bars (e.g. 3-beat m1 + 4/4).
+- **Detect tie-break (2026-06-04 PM):** [`detectSymbolFromPcs`](../frontend/src/lib/music/chordSymbolDetect.ts) prefers simpler triads; downbeat slot keeps prior symbol when detect fails.
+- **Playback:** RiffScore `chord.playback.enabled: false` + HF guards — symbols are **written/detected only**, not auditioned on Play / click / nav.
+- **Authoritative path:** engine Romans → `<harmony>` on **P1** when **≥2 output parts**.
+
+### Open
+
+- Manual QA: generate melody + 2 instruments → symbols visible; **Chords** refresh after edits; no extra chord piano on playback.
+
+<a id="wl-export-osmd-learners-2026-06-04"></a>
+
+## Work log — Export modal polish + OSMD learner letter names (2026-06-04)
+
+### End goal
+
+1. **Export modal** should match **print/PDF output**: left pane shows the same **OSMD** engraving users get from **Print** or **Save as PDF**, not a RiffScore screenshot.
+2. **Export formats** should be the four formats we ship: **PDF**, **MusicXML**, **WAV**, **MIDI** (drop PNG and other legacy modal options from the primary UX).
+3. **Learner letter names** (sandbox **Letter Names** toggle) should appear on **PDF preview and print only** — small labels **just above** each notehead — without changing MusicXML/MIDI/WAV downloads or the RiffScore editing canvas export path.
+4. **Playback polish:** Louder **metronome** clicks; orange **playhead** advances through **rests** and pickup silence, not only when RiffScore moves the SVG cursor.
+5. **Product polish:** Tighter **print margins**, correct **final barline** on last measure, **HarmonyForge** attribution in exports, aligned **Cancel** in export modal, updated **onboarding/coachmark** copy for new formats.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **PDF preview** | [`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx) calls [`renderOsmdExportScore()`](../frontend/src/lib/music/osmdExportRender.ts) with the same rules as [`PrintableScore.tsx`](../frontend/src/components/score/PrintableScore.tsx) (`osmdExportRenderOptionsForPdf`, [`osmdPrintLayout.ts`](../frontend/src/lib/music/osmdPrintLayout.ts)). |
+| **Export formats** | [`exportFormats.ts`](../frontend/src/lib/sandbox/exportFormats.ts) — `SANDBOX_EXPORT_FORMATS` = pdf, xml, wav, midi; [`exportFormats.test.ts`](../frontend/src/lib/sandbox/exportFormats.test.ts). |
+| **Letter labels (PDF/print)** | Walk OSMD **`graphic.MeasureList`** → match each graphical note to **`.vf-notehead`** ([`resolveNoteheadElement`](../frontend/src/lib/music/osmdLearnerLabels.ts)); append SVG `<text>` in the **VexFlow note group** parent (local coords + CTM top-edge), not root-SVG coordinates (avoids stem-flip / staff drift). Baseline **`hanging`** with `y = noteheadTop − gap − fontSize` (avoid **`text-after-edge`** — inconsistent across browsers). |
+| **Label format** | [`formatLearnerLetterName()`](../frontend/src/lib/music/learnerPitchLabel.ts) — letter + accidental only; strip OSMD quirks (e.g. trailing `.` on pitch strings). |
+| **MusicXML engraving** | [`effectiveMeasureBarline()`](../frontend/src/lib/music/scoreToMusicXML.ts) — proper **final barline** on last measure; existing beams + metronome from 2026-06-03 tranche. |
+| **Branding** | [`exportBranding.ts`](../frontend/src/lib/sandbox/exportBranding.ts) — MusicXML `<identification>`, MIDI text meta, WAV ISFT chunk, print footer **from HarmonyForge**. |
+| **Playhead + metronome** | [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + riffscore patch **`__HF_ON_PLAYBACK_POSITION`**; [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts); [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx); [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) gain/timbre. |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| OSMD PDF preview | Export modal left pane = OSMD; toggle **Letter Names** re-renders via `showLetterNames` in render options. |
+| Formats trimmed | PNG (and validate-harmony UI) removed from export modal; **PDF / MusicXML / WAV / MIDI** only. |
+| OSMD learner labels | [`osmdLearnerLabels.ts`](../frontend/src/lib/music/osmdLearnerLabels.ts) — collect placements from OSMD graphic tree; SVG labels in note parent groups; CSS [`.hf-osmd-letter-label`](../frontend/src/app/globals.css) (8px user units, light stroke halo). |
+| Label placement iterations | Fixed empty **`.vf-stavenote`** selector; rejected HTML overlay + root-SVG CTM (labels floated far above/below staff); fixed **`text-after-edge`** browser bugs; **shipped** parent-local anchors + visual top of notehead. |
+| Print / layout | [`osmdPrintLayout.ts`](../frontend/src/lib/music/osmdPrintLayout.ts) ~4mm margins; print CSS `@page` **0.35in**; final barline in partwise XML. |
+| Export UX | [`ExportOptionsPane.tsx`](../frontend/src/components/molecules/ExportOptionsPane.tsx) Cancel vertical alignment; [`CoachmarkOverlay.tsx`](../frontend/src/components/organisms/CoachmarkOverlay.tsx) + onboarding copy for formats. |
+| Playback | Metronome **-8 / -12 dB** downbeat/beat; HF-driven scrub position during transport through rests. |
+| Tests | **`make test` → 338** Vitest — `osmdLearnerLabels.test.ts`, `learnerPitchLabel.test.ts`, `exportFormats.test.ts`, `exportBranding.test.ts`, `playbackMetronome.test.ts`, `playbackPositionBridge.test.ts`, `playbackScrub.test.ts`, etc. |
+
+### Verification
+
+- Toggle **Letter Names** in sandbox → open **Export** → PDF preview shows labels **just above** noteheads on all staves (viola/alto, stem-up/down, beamed runs).
+- **Print / Save as PDF** matches preview layout; MusicXML/MIDI/WAV downloads have **no** letter overlay.
+- Play score with metronome: downbeats audibly stronger; drag playhead into a rest → **Play** → audio and orange line advance through silence.
+
+### Current failure / open work
+
+| Status | Item |
+|--------|------|
+| **Resolved (2026-06-04)** | OSMD **letter name** misplacement (floating above staff, labels above and below same notes, inconsistent gaps) — root cause was root-SVG CTM + **`text-after-edge`**; fix = **parent-local** SVG text + **`hanging`** offset. |
+| **Open (product)** | **PDF OMR recognition quality** on real scans (e.g. imported Chinese lead sheets) — Audiveris wiring is done; accuracy is the gap ([§1.9q-open](plan.md)). |
+| **Open (QA)** | **Viola / alto–tenor** sandbox noteheads vs OSMD PDF after **`rm -rf .next`** ([2026-06-03 PM work log](#wl-viola-sandbox-export-parity-2026-06-03)). |
+| **Open (program)** | Toolbar **`Octave ↓`** intermittent for some users ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)). |
+
+### Learnings (2026-06-04)
+
+- **OSMD DOM:** VexFlow 1.9 / OSMD expose **`.vf-note`** groups and **`.vf-notehead`** glyphs — not **`.vf-stavenote`** for head bounds.
+- **SVG text baselines:** Do not rely on **`dominant-baseline: text-after-edge`** for vertical alignment; browsers disagree (labels can render far from the anchor).
+- **Transforms:** Letter labels must live in the **same coordinate system as the note** (append to stavenote / notehead parent), mapping notehead top through **`getCTM()`** into that parent.
+- **Scope split:** Sandbox **RiffScore** overlay ([`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx)) remains the editing-time learner UI; **OSMD** path is **PDF preview + print only** when the user enables **Letter Names**.
+
+<a id="last-updated-2026-06-04-export-learners"></a>
+
+### Last updated (2026-06-04 — Export modal + OSMD learner letter names)
+
+- **Narrative:** **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**.
+- **Tests:** **`make test` → 338** Vitest passing.
+- **Current failure:** **None** for letter-name placement (user-verified **perfect**). **Still open:** PDF **OMR quality**, viola/tenor **manual QA**, toolbar **`Octave ↓`**.
+
+<a id="wl-duration-change-rests-2026-06-03"></a>
+
+## Work log — Duration change: rest split + neighbor absorption (2026-06-03)
+
+### End goal
+
+MuseScore-style **duration changes** on selected notes in `/sandbox`: **shorten** fills the original rhythmic slot with the new note plus **uniform rests** (half → quarter → quarter note + quarter rest); **lengthen** **absorbs** forward then backward rests/pitched neighbors; all entry points (palette **1–6**, **`[` / `]`** with selection, RiffScore toolbar **`setDuration`**) run the same HarmonyForge path so the canvas never shows timeline holes or silent overflow.
+
+### Shipped
+
+| Area | Files |
+|------|--------|
+| Lengthen / shorten | [`scoreUtils.ts`](../frontend/src/lib/music/scoreUtils.ts) — `consumeUnitsFromSlice`, `lengthenNoteInMeasure`, `setNoteDurations` |
+| Central apply | [`setNoteDurationOnSelection.ts`](../frontend/src/lib/sandbox/setNoteDurationOnSelection.ts) — flush + `applySetNoteDurations`, `scheduleSetNoteDurations`, `applySetNoteDurationsFromRs` |
+| Sandbox | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts) |
+| RS intercept | [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — **`setDuration`**: `api.undo()` then HF duration apply |
+| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts) — `describe("setNoteDurations")` |
+
+### Verification
+
+- `make test` → **312** Vitest (frontend).
+- Manual: 4/4 half → **4** → quarter + quarter rest; half → **3** → eighth + 3 eighth rests; eighth + 3 eighth rests → **4** → quarter + 2 eighth rests; RiffScore toolbar duration matches palette; **`[` / `]`** with selection changes note duration (no selection → active tool only).
+- **Fix (same day):** RS **`setDuration`** intercept now **snapshots note ids before `undo()`**; duration edits use **`getDurationTargetNoteIds`** (excludes stale multi-select pitch group) so lengthening one beamed eighth (e.g. **G**) can absorb the preceding **B** eighth into a quarter.
+
+<a id="wl-rest-delete-beat-scrub-2026-06-03"></a>
+
+## Work log — Delete → rest placeholders + beat-accurate playback scrub (2026-06-03)
+
+### End goal
+
+1. **Delete never leaves a blank beat** in `/sandbox` — selected notes become **same-duration rests** (MuseScore/Noteflight), not RiffScore timeline holes.
+2. **Playback scrub** starts at the **beat** where the user releases the orange playhead, not only at measure start.
+3. **Playback through rests (2026-06-03 follow-up):** RiffScore patch — start offset from **measure + quant** (not first note); timeline includes **rest** segments so pickup/anacrusis silence plays before the first pitch and the orange playhead advances through rests.
+4. **Metronome clicks (2026-06-03):** [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — quarter-note clicks on Tone.Transport at score **BPM** (accented downbeats per time signature); wired via riffscore patch + `installPlaybackMetronomeBridge()` in `RiffScoreEditor`.
+5. **Metronome + playhead polish (2026-06-04):** Metronome gain **-8 / -12 dB** (`METRONOME_DOWNBEAT_DB`, `METRONOME_BEAT_DB`), stronger downbeat timbre; orange scrub line driven by [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) + [`contentXForPlaybackTick`](../frontend/src/lib/music/playbackScrub.ts) during transport (advances through **rests**, not only when RiffScore SVG cursor moves). Full export + OSMD letter-label narrative: **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **`make test`:** **338** Vitest (was **323** before export/label tests).
+
+### Root cause (delete)
+
+- HarmonyForge **`deleteNotesAsRests`** was wired for **`useScoreStore.deleteSelection`**, but **Delete/Backspace** only ran when **Zustand `selection` was non-empty**; RiffScore’s native **`DeleteEventCommand`** still **spliced events** when HF selection was empty or delete bypassed capture.
+- **`edit-delete`** did not **flush** or use **`getTransposeTargetNoteIds()`** before deleting.
+
+### Shipped
+
+| Area | Files |
+|------|--------|
+| Central delete | [`frontend/src/lib/sandbox/deleteSelectionAsRests.ts`](../frontend/src/lib/sandbox/deleteSelectionAsRests.ts) — `scheduleDeleteSelectionAsRests`, `applyDeleteSelectionAsRests`, `hasDeletableEditorSelection` |
+| Sandbox wiring | [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx), [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts) — capture-phase Delete with **`stopPropagation`** |
+| RS intercept | [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — on **`deleteSelected`**: **`api.undo()`** then HF rest delete |
+| Beat scrub | [`PlaybackScrubOverlay.tsx`](../frontend/src/components/score/PlaybackScrubOverlay.tsx), [`playbackScrub.ts`](../frontend/src/lib/music/playbackScrub.ts) — `contentXForMeasureQuant`, `contentXForPlaybackTick`, drag pill, triangle cap, measure band, auto-scroll while playing |
+| Playhead bridge | [`playbackPositionBridge.ts`](../frontend/src/lib/music/playbackPositionBridge.ts) — `__HF_ON_PLAYBACK_POSITION` / `__HF_CLEAR_PLAYBACK_POSITION` in riffscore patch |
+| Metronome | [`playbackMetronome.ts`](../frontend/src/lib/music/playbackMetronome.ts) — louder clicks (`METRONOME_DOWNBEAT_DB` / `METRONOME_BEAT_DB`) |
+| Tests | [`scoreUtils.test.ts`](../frontend/src/lib/music/scoreUtils.test.ts), [`playbackScrub.test.ts`](../frontend/src/lib/music/playbackScrub.test.ts), [`playbackPositionBridge.test.ts`](../frontend/src/lib/music/playbackPositionBridge.test.ts), [`playbackMetronome.test.ts`](../frontend/src/lib/music/playbackMetronome.test.ts) |
+
+### Verification
+
+- `make test` → **338** Vitest (frontend) after 2026-06-04 export/label tranche.
+- Manual: delete middle note in 4/4 → **rest placeholder**, no empty spacing; drag playhead to beat 2 → Play → audio starts mid-bar; score with **leading rests** → orange line **moves through silence** with metronome; downbeats **audibly stronger** than weak beats at default volume.
+
+<a id="wl-viola-sandbox-export-parity-2026-06-03"></a>
+
+## Work log — Viola sandbox vs export parity + git remote (2026-06-03 PM)
+
+### End goal
+
+1. **Sandbox canvas parity:** For **alto** and **tenor C-clef** staves (notably generated **Viola**), **RiffScore** in `/sandbox` must show the **same written pitches and vertical placement** as **PDF/Print export** (OSMD via **`scoreToPartwiseMusicXML`**). Users should not see **E/G** on the wrong lines in the editor while the print preview shows **C4 on the middle line** and **E4 on line 4** (MusicXML alto clef).
+2. **Contributor push path:** Collaborators with write access must **`git push`** to **[`spatel54/harmonyforge`](https://github.com/spatel54/harmonyforge)** without remote or auth misconfiguration.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **Symptom** | Reported mismatch: sandbox **Viola** staff showed wrong noteheads/learner labels; **Export → PDF/Print** (OSMD) showed correct engraving for the same score. |
+| **Dual render paths** | **Sandbox + Export modal preview** → **RiffScore** (`editableScoreToRsScore`, clef on each staff). **PDF/Print** → flush → **`scoreToPartwiseMusicXML`** → **OpenSheetMusicDisplay** (clef-aware MusicXML). HF Zustand / MusicXML pitches were already correct; defect was **RiffScore vertical layout** on C-clefs. |
+| **Root cause** | **`getOffsetForPitch`** in upstream **`riffscore@1.0.0-alpha.9`** hits the **treble `PITCH_TO_OFFSET`** table for common pitches (**C4**, **E4**, **G4**, …) even when **`clef === "alto"`** or **`"tenor"`**, so noteheads use **treble Y geometry** under an **alto C-clef** symbol. **`getPitchForOffset`** always inverts via **`Y_TO_PITCH`** (treble map) for non-bass clefs. |
+| **Doc vs patch drift** | **[Sandbox & export polish (2026-04-23)](#wl-sandbox-ux-polish-2026-04-23)** and **`plan.md`** already described the fix, but **`frontend/patches/riffscore+1.0.0-alpha.9.patch`** (June 2026) contained **toolbar / playback / Salamander** hunks only — **not** the alto/tenor layout change. Treat “documented” ≠ “patched” until **`grep getOffsetForPitch`** in the patch file. |
+| **Fix** | Patch **`node_modules/riffscore/dist/index.js`** and **`index.mjs`**: for **`alto`** / **`tenor`**, **`getOffsetForPitch`** always uses the **`CLEF_REFERENCE`** diatonic formula (skip treble lookup); **`getPitchForOffset`** inverts with **`movePitchVisual(ref.pitch, stepsFromRef)`**. Regenerate patch via **`npx patch-package riffscore`**. After pull: **`cd frontend && rm -rf .next && npm install`**. |
+| **Git remote** | **`origin`** must be **`https://github.com/spatel54/harmonyforge.git`**. A stray **`dvjgenis/harmonyforge`** remote yields **Repository not found**; **403** means the GitHub user lacks **collaborator write** on **`spatel54/harmonyforge`** (invite + accept, then re-auth as the invited account). |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| **Git push triage** | **`git remote -v`** showed **`origin`** briefly pointed at non-existent **`dvjgenis/harmonyforge`**; restored **`spatel54/harmonyforge`**; **`git push`** succeeded (**`main`**, commit *pdf input and export*). |
+| **Reproduce report** | User screenshots: sandbox **Viola** eighths labeled/placed as **E** / **G**; OSMD PDF preview **C4** (middle line) + **E4** (line 4) — classic **treble-offset-on-alto-staff** symptom. |
+| **Code audit** | Confirmed **`hfClefToRs`** maps **`part.clef === "alto"`** → RiffScore **`alto`** staff; **`scoreToPartwiseMusicXML`** emits **`<clef><sign>C</sign><line>3</line></clef>`** for viola. Bug isolated to RiffScore **`positioning.ts`** bundle in **`dist/*.js`**. |
+| **Patch applied** | Alto/tenor branches added to **`getOffsetForPitch`** and **`getPitchForOffset`** in **`index.js`** + **`index.mjs`**. |
+| **`patch-package`** | **`frontend/patches/riffscore+1.0.0-alpha.9.patch`** regenerated (layout hunks now present alongside existing Salamander / toolbar / playback changes). |
+| **Tests** | **`make test`** → **304** Vitest passing (no new failures). |
+
+### Verification
+
+- **`make test`** — **304** passing.
+- **Manual (required):** Generate or load a score with **Viola** (alto clef) + compare **Sandbox** vs **Export → PDF/Print**; learner labels above noteheads should match OSMD (e.g. **C4** on middle line, **E4** on line 4). Restart dev after patch: **`cd frontend && rm -rf .next && make dev`**.
+
+### Current failure / open work
+
+- **Browser QA not closed:** Spot-check **viola**, **tenor C-clef**, and **multi-staff** ensembles (Melody + Viola + Cello) after clearing **`.next`** — confirm noteheads **and** learner letter labels align with OSMD export.
+- **Export modal left pane:** Still **RiffScore `presentation`** ([`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx)); should match sandbox once patch is loaded — **PDF/Print** was the reference “correct” surface before this fix.
+- **Unchanged program gaps:** PDF **OMR recognition quality**; **RiffScore measure-gutter** after Audiveris import; toolbar **`Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)); **Vercel** PDF = raster-only (no Java OMR).
+
+### Learnings (2026-06-03 PM)
+
+- **Sandbox ≠ PDF is a diagnostic:** When OSMD export looks right but RiffScore canvas wrong, suspect **editor layout** (clef-specific offsets), not the SATB engine or **`scoreToMusicXML`** serialization.
+- **Patch-package regression:** Re-run **`grep getOffsetForPitch`** (or **`alto`**) on **`frontend/patches/riffscore+*.patch`** after any RiffScore patch refresh — the April 2026 narrative assumed layout hunks that were never committed.
+- **Git remotes:** **`Repository not found`** on push usually means wrong **`origin` URL**; **403** means wrong GitHub account or missing collaborator invite on the upstream org/user repo.
+
+<a id="wl-export-audiveris-2026-06-03"></a>
+
+## Work log — OSMD export + Audiveris PDF intake (2026-06-03)
+
+### End goal
+
+1. **PDF → MusicXML** on Playground, Document, and Generate must use **Audiveris** (same batch workflow as [`scripts/audiveris/convert.sh`](../scripts/audiveris/convert.sh)), replacing **pdfalto + oemer**.
+2. **Sandbox PDF/Print export** must render **engraved notation** via **OpenSheetMusicDisplay**, not RiffScore chrome, with a seamless Export modal → print dialog flow.
+3. Uploaded PDFs should behave like native MusicXML in **Configure** and **Sandbox** once intake succeeds.
+
+### Approach
+
+| Area | Decision |
+|------|----------|
+| **OMR** | New [`audiverisPipeline.ts`](../frontend/src/server/engine/parsers/audiverisPipeline.ts): import PDF → `.omr` → export `.xml`/`.mxl` → `parseMusicXML` / `parseMXL`; multi-file merge via [`mergeParsedScores.ts`](../frontend/src/server/engine/parsers/mergeParsedScores.ts). |
+| **Intake routing** | **2026-06-03:** client **`pages[]`** was preview-only. **2026-06-04 PM:** [`resolveParsedScore`](../frontend/src/server/engine/runtime.ts) tries **client `pages[]` PNGs first** for PDF, then **`intakeFileToParsedScore`** on the file buffer (server raster fallback for photo PDFs). |
+| **Export** | [`ExportPrintRoot.tsx`](../frontend/src/components/organisms/ExportPrintRoot.tsx) `forwardRef` → [`PrintableScore.tsx`](../frontend/src/components/score/PrintableScore.tsx) + **`opensheetmusicdisplay`**; flush → **`scoreToPartwiseMusicXML`** → **`printWhenReady`**. |
+| **Ops** | **`scripts/audiveris/`** (`setup.sh`, `convert.sh`, `paths.sh`); **`make audiveris-setup`**, **`make audiveris-convert`**; Docker multi-stage **Java 25 + Audiveris**; removed **oemer/pdfalto/preflight-omr** and deleted **`approach_source_audiveris/`**. |
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| Audiveris pipeline | `audiverisPipeline.ts` + rewired `fileIntake.ts` (pdfalto/oemer removed). |
+| Document / Generate | PDF posts **file only** to `/api/to-preview-musicxml` and `/api/generate-from-file`. |
+| OSMD export | `opensheetmusicdisplay` dep; `ExportPrintRoot` wraps `PrintableScore`; print CSS + tempo overlay. |
+| Docker / Makefile | Audiveris builder stage; `audiveris-setup` → `scripts/audiveris/setup.sh`; oemer volume removed from compose. |
+| Tests | **`make test` → 304** (was 298); `fileIntake.test.ts`, `intakeErrorHints.test.ts`, `scoreToMusicXML` (beams + metronome), `intakeOverlayProgress.test.ts`. |
+| Docs | `plan.md` §**1.9q**; `deployment.md`; this work log. |
+
+### Follow-up session (2026-06-03 — polish & hardening)
+
+Same tranche, after initial ship. Goal: make PDF intake and OSMD export **production-credible** and remove the reference folder once behavior matched [`scripts/audiveris/convert.sh`](../scripts/audiveris/convert.sh).
+
+| Step | Outcome |
+|------|---------|
+| **Blank PDF export** | Removed premature `hf-printing-score` cleanup in `printScoreOnly` `finally` (class dropped as soon as print dialog opened → blank preview). Portaled **`ExportPrintRoot`** to `document.body`; print CSS uses `> *:not(.hf-print-root)`. |
+| **Tempo overlap** | Dropped HTML tempo overlay; **`scoreToPartwiseMusicXML`** emits `<metronome>` (+ `<sound tempo>`) on measure 1 when `score.bpm` set. |
+| **Eighth-note engraving** | Added MusicXML `<beam>` generation in **`scoreToPartwiseMusicXML`** (beat-boundary groups) so OSMD renders standard beaming instead of flagged singles. |
+| **Java 25 on macOS** | **`audiverisPipeline.ts`** auto-detects Homebrew **`openjdk@25`** (`JAVA_HOME` + `PATH`); preflight before spawn; clearer **`intakeErrorHints`** when macOS `/usr/bin/java` stub runs. |
+| **Audiveris audit** | Pipeline aligned with reference: two-phase batch, DOCTYPE strip, prefer **`.mxl`** over phase-1 **`.xml`**, split timeout per phase; **`POST /api/to-preview-musicxml`** **`maxDuration`** **900s** (matches **`DEFAULT_AUDIVERIS_MS`**). |
+| **Tooling consolidation** | Moved scripts to **`scripts/audiveris/`**; **`setup.sh`** migrates legacy build from deleted **`approach_source_audiveris/`**; **`make audiveris-setup`** / **`make audiveris-convert`** updated. |
+| **Honest loading bar** | **`TransitionOverlay`**: PDF/image OMR uses asymptotic progress capped at **90%** until server returns; **`workComplete`** → **100%**; copy mentions multi-minute PDF recognition. Wired on **`/`** and **`/onboarding`**. |
+| **RiffScore measure select** | **`selectEventsInMeasureOnStaff`** reads event count from **`api.getScore()`** (not HF `measure.notes.length`); ignore benign **`EVENT_NOT_FOUND`** on error channel — fixes **`Target event not found`** after Audiveris import. |
+
+### Verification
+
+- `cd frontend && npm test` — **304** passing.
+- Manual: **`make audiveris-setup`** (Java 25+) → upload PDF on Playground (progress bar stays &lt; 100% until OMR finishes) → Document → Generate → Sandbox; Export → PDF shows OSMD engraving (beamed eighths, tempo above staff).
+
+### Current failure / open work
+
+- **PDF OMR quality (product):** Audiveris runs locally after Java setup, but **recognition accuracy** on real scans (e.g. **`月亮代表我的心`**) still needs human QA — wrong pitches, missing measures, or empty melody are OMR limits, not wiring bugs.
+- **Vercel** cannot run Java OMR — PDF uploads show **raster preview** + actionable **501** on MusicXML intake unless user self-hosts Docker.
+- **RiffScore post-import UX:** Measure-gutter **`Target event not found`** addressed in code; **re-verify in browser** after PDF → Sandbox (HF vs RS event count drift on dense/multi-voice scores).
+- **Earlier fixes (this tranche):** Blank print preview, tempo overlay on part names, unbeamed eighths, misleading 100% loader, missing Java on PATH — **shipped**.
+
+### Learnings (2026-06-03)
+
+- **Audiveris batch contract:** Phase 1 import must use **`useCompression=false`** on `.omr`; phase 2 export uses **`useCompression=true`** for `.mxl`. Prefer exported **`.mxl`** over phase-1 **`.xml`** (often incomplete).
+- **Java on macOS:** Homebrew **`openjdk@25`** is keg-only — pipeline must set **`JAVA_HOME`** / **`PATH`** before spawn; macOS **`/usr/bin/java`** stub yields misleading failures without preflight.
+- **Client `pages[]` (updated 2026-06-04 PM):** Playground **`rasterizePdf`** → **`pages`** in FormData; server **`intakeImagePagesToParsedScore`** runs **before** PDF-buffer OMR. Server **`pdfServerRaster.ts`** rasterizes photo PDFs when client pages absent or fail.
+- **Server raster deps:** **`@napi-rs/canvas`** must be installed and listed in **`serverExternalPackages`** — otherwise Next returns **500** at route load (misread as “install Audiveris”).
+- **OSMD print:** Tempo belongs in **MusicXML** (`<metronome>`), not HTML overlay — HTML sits in the wrong layer and overlaps part labels.
+- **HF ↔ RiffScore event count:** After OMR import, **`measure.notes.length`** in HF may not match RiffScore's live event list — measure-gutter selection must use **`api.getScore()`** event count.
+- **Slow OMR UX:** Asymptotic progress capped at **90%** until fetch completes; first PDF can take **several minutes** — copy should say so.
+
+### Dev environment
+
+- One-time: **`make audiveris-setup`** (Java 25+, builds Audiveris under **`scripts/audiveris/vendor/`**).
+- Dev server: **`make dev`** → http://localhost:3000.
+- QA convert: **`make audiveris-convert FILE=path/to/score.pdf`**.
+- API timeout: **`POST /api/to-preview-musicxml`** **`maxDuration=900`** (matches **`DEFAULT_AUDIVERIS_MS`**).
+
+<a id="last-updated-2026-06-03-audiveris-export"></a>
+
+### Last updated (2026-06-03 PM — viola sandbox vs export parity)
+
+- **Narrative (end goal · approach · steps · open work):** **[Work log — Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)** — restored **RiffScore alto/tenor `getOffsetForPitch` / `getPitchForOffset`** in **`patches/riffscore+1.0.0-alpha.9.patch`**; **`origin`** → **`spatel54/harmonyforge`**.
+- **Tests:** **`make test`** → **304** Vitest passing.
+- **Current failure:** **Manual browser QA** on viola/tenor staves after **`rm -rf .next`**; broader gaps unchanged (**PDF OMR quality**, measure-gutter re-verify, **`Octave ↓`**).
+
+### Last updated (2026-06-03 — OSMD export + Audiveris PDF intake)
+
+- **Narrative (end goal · approach · steps · open work):** **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)** — Audiveris-only PDF → MusicXML; OSMD print/PDF export; tooling consolidated under **`scripts/audiveris/`**; honest Playground loader; RiffScore measure-gutter fix after import.
+- **Tests:** **`make test`** → **304** Vitest passing (includes beams, metronome, intake overlay progress, **`fileIntake`**, **`intakeErrorHints`**).
+- **Current failure:** **PDF OMR recognition quality** on real scans (product gap, not wiring); **re-verify** measure-gutter selection in browser after PDF → Sandbox.
 
 <a id="last-updated-2026-04-27-accidentals-inspector"></a>
 
@@ -375,19 +776,21 @@ Shipped from **[Iteration6.txt](Iteration6.txt)** / study feedback: **pedal bass
 | **Export modal** | Paper background **`#F8F3EA`**, **`presentation` → LIGHT**, PNG uses same paper (not system dark). |
 | **Multi-select** | **`mapRiffSelectedNotesToHFSelections`**, **`onEditorSelectionChange`**, **`editorSelectAll` / `editorDeselectAll`**, ⌘A / Esc parity. |
 | **Viola / alto clef (adapter)** | **`riffscoreAdapter.ts`** — **`hfClefToRs`** staff-clef interpretation; **`riffscoreAdapter.test.ts`** — *maps viola alto C-clef to RiffScore alto staff*. |
-| **Viola / alto & tenor (RiffScore layout)** | **`patches/riffscore+1.0.0-alpha.9.patch`** — **`getOffsetForPitch`** / **`getPitchForOffset`** in **`dist/index.js`** and **`dist/index.mjs`** so **alto/tenor** staves use **C-clef geometry**, not the treble offset table. |
+| **Viola / alto & tenor (RiffScore layout)** | **`patches/riffscore+1.0.0-alpha.9.patch`** — **`getOffsetForPitch`** / **`getPitchForOffset`** in **`dist/index.js`** and **`dist/index.mjs`** so **alto/tenor** staves use **C-clef geometry**, not the treble offset table. **Regression (2026-06-03):** patch had **lost** these hunks (toolbar-only patch); **re-shipped** same day — see **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**. |
 | **CJS / ESM parity + `pendingClefChange`** | Same patch — **`Toolbar`** accepts **`toolbarPlugins = []`** and renders plugin row; **`ScoreEditorContent`** / **`RiffScoreInner`** pass **`config.ui.toolbarPlugins`** on **`index.js`** as well as **`index.mjs`**; **`ScoreProvider`** uses **`SetSingleStaffCommand`** when collapsing grand staff (no dialog state). |
 
 ### Current failure / what we are working on now
 
+- **Recently addressed (2026-06-03 PM):**
+  - **Sandbox viola ≠ OSMD PDF** — **MusicXML + HF + OSMD** were correct; **RiffScore** used **treble Y-offsets** on **alto/tenor** staves because the **layout hunks were missing** from the live **`patch-package`** file (documented in April, not applied until June). **Fixed** — see **[Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)**.
 - **Recently addressed (2026-04-23 late):**
-  - **“Wrong notes” on generated viola** — **MusicXML + HF** were already correct; **RiffScore** placed pitches using **treble Y-offsets** on **alto/tenor** staves. **Fixed** in **`patches/riffscore+1.0.0-alpha.9.patch`** (see **Approach §7** above).
+  - **“Wrong notes” on generated viola** — same root cause; **first fix narrative** in **Approach §7** above (patch content must be verified after every RiffScore refresh).
   - **`ReferenceError: pendingClefChange is not defined`** (stack often pointed at **`RiffScoreEditor`** / dynamic **`RiffScore`** mount) — caused by **removed** React state while a **stale Turbopack chunk** or **CJS `index.js`** path did not match the patched **`index.mjs`**. **Mitigation:** **`toolbarPlugins`** parity on **`dist/index.js`**, full **`patch-package`** regenerate, and **`cd frontend && rm -rf .next && npm install`** after pulling.
 - **Still open — validation and edge cases (non-blocking):**
   - **Dense notation & chords** — rest hit order, ghost pitch vs RiffScore’s own preview, chord-heavy layouts.
   - **Theory Inspector overlay** — **`noteInspectionEnabled`** disables the ghost by design; confirm **native RiffScore selection** vs **HF overlay** do not **drift** during multi-select or inspector-driven focus.
   - **Touch / tablet** — **no hover**; rest → note still relies on **select + A–G** (and related paths); optional future **long-press** or explicit control if study feedback requires it.
-  - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch.
+  - **Spot-check** — multi-staff scores with **viola**, **tenor C-clef**, or other **alto/tenor** layouts after the layout patch (**re-opened 2026-06-03** — patch hunks restored; needs browser pass after **`rm -rf .next`**).
 - **Lint (carryover from 2026-04-22):** **`@next/next/no-img-element`**, unused **`_e`** in **`RiffScoreEditor`** **`handleKeyDown`** — warnings only unless CI is tightened.
 
 ---
@@ -609,7 +1012,7 @@ This section is the **handover-friendly summary**: end goal, approach, what has 
 | **Sandbox parity — palettes, rest repitch, clean export (2026-04-20)** | MuseScore/Noteflight-style **palette panel** (F9); **rest → note re-pitch** (`restsToNotes`, A–G on selected rest); **export/print score-only** (`ExportPrintRoot`, `presentation` RiffScore, `body.hf-printing-score`); Document **PDF preview** posts `pages[]` to `/api/to-preview-musicxml`; Vitest **`rasterizePdf`** tests — [work log](#wl-palettes-repitch-2026-04-20). |
 | **Document UX — chord gating, playback, pedagogy, tooltips (2026-04-20)** | **Chord track gated** to 3+ parts; Document **audio unlock** + floating **play**; **Glass Box** + **(i)** copy; **tooltip width** fix — [work log](#wl-document-ux-2026-04-20). |
 | **Ensemble Builder UI (2026-04-21)** | **Collapsible** Glass Box pedagogy; **always-visible** algorithms-vs-AI + Theory Inspector sentence under the heading; **Sound & style** + **Instruments (SATB)** section cards; concise classical-scope line — [work log](#wl-ensemble-builder-ui-2026-04-21). |
-| **Learner note names + classical-only scope + bar-regenerate removal (2026-04-20)** | Optional **letter+accidental** labels **above** noteheads (exports stay clean); RiffScore **testid → HF id** mapping + rest-aware walks; **toolbar clip** + z-order vs FAB/palette; **Genre / infer-chords** UI removed with **classical disclaimer**; **forced classical** on generate API; **sandbox bar regeneration** removed — [scope work log](#wl-learner-notes-scope-2026-04-20), [label refinement](#wl-learner-pitch-labels-refine-2026-04-20). |
+| **Learner note names + classical-only scope + bar-regenerate removal (2026-04-20)** | Optional **letter+accidental** labels **above** noteheads in sandbox; **(2026-06-04)** same toggle adds labels on **OSMD PDF preview + print** only — [export work log](#wl-export-osmd-learners-2026-06-04); RiffScore **testid → HF id** mapping + rest-aware walks; **toolbar clip** + z-order vs FAB/palette; **Genre / infer-chords** UI removed with **classical disclaimer**; **forced classical** on generate API; **sandbox bar regeneration** removed — [scope work log](#wl-learner-notes-scope-2026-04-20), [label refinement](#wl-learner-pitch-labels-refine-2026-04-20). |
 | **MVP polish + Inspector bundle (2026-04-22)** | Pickup + infer-chords Advanced; **`localStorage`** generation config; progression window FACTs; Inspector tabs/tags/chat layout; sandbox reset + onboarding key; VoiceDropdown groups; engine **`pickupBeats`**; lint hook fix — [narrative](#program-narrative-2026-04-22), [work log](#wl-mvp-phase-ship-2026-04-22). |
 | **Sandbox score UX — rest hover + hotkeys (2026-04-22 late)** | **Hover** rest → ghost pitch from staff Y; **click** replaces with rest’s **duration/dots**; **paste/insert** replace rest; **ConfigurationBackFAB**, **StepBar** labels, reset re-hydrate — [work log](#wl-sandbox-score-ux-2026-04-22). |
 
@@ -939,7 +1342,7 @@ Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged 
 
 ### End goal (this thread)
 
-1. **Learner affordance:** Beginners (or anyone mapping staff to pitch names) can toggle **pitch help** on the score **without** polluting export/print previews. *(Initial implementation used scientific pitch with octave; **refinement** switched to **letter + accidental** only — see **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**.)*
+1. **Learner affordance:** Beginners can toggle **pitch help** on the **sandbox (RiffScore)** score. **(2026-06-04)** When the same toggle is on, **PDF preview and print (OSMD)** also show letter labels above noteheads; **MusicXML / MIDI / WAV** downloads stay unlabeled — see **[Work log — Export modal + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. *(Initial implementation used scientific pitch with octave; **refinement** switched to **letter + accidental** only — see **[Work log — Learner pitch labels refinement…](#wl-learner-pitch-labels-refine-2026-04-20)**.)*
 2. **Product honesty:** The app **defaults** to **basic classical-style** harmony generation; **do not** imply jazz/pop or “infer over file chords” until those paths are reliable and tested.
 3. **Scope control:** Remove the **localized bar regeneration** experiment from Sandbox so the surface area matches the **single-pass Document → Generate** flow.
 
@@ -1020,7 +1423,7 @@ Bring the Sandbox to **MuseScore / Noteflight** parity along three axes flagged 
 
 ### Current failure / focus (what we are working on *next*)
 
-**No open engineering failure** for learner labels at this snapshot. **Product “current failure”** remains **Iteration 3** framing in **[Iteration3.txt](Iteration3.txt)** — progression-aware **Theory Inspector**, voicing/expressiveness gaps, genre fidelity when multi-style generation returns — **not** blocked by this overlay work. Run **`make verify`** before release as the full gate.
+**Sandbox RiffScore labels:** No open engineering failure at the 2026-04-20 snapshot. **OSMD export labels (2026-06-04):** Placement bugs (floating / above+below staff) **resolved** — see **[Work log — Export modal + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **Product “current failure”** remains **Iteration 3** framing in **[Iteration3.txt](Iteration3.txt)** and **PDF OMR quality** — not blocked by learner overlay work. Run **`make verify`** before release as the full gate.
 
 ---
 
@@ -1878,9 +2281,9 @@ Raise **shipping quality** and **honest UX** without claiming a single sprint �
 - **Contributors** can run **`make verify`** (test + lint + build) and optionally **`make verify-strict`** (adds frontend ESLint); frontend lint is **green with warnings** rather than silently skipped.
 - **Theory Inspector** sends **up-to-date score FACT lines** when the user chats after editing; **idea actions** resolve ambiguous staff names more safely when the model omits exact `noteId`s.
 - **Backlog** (multi-clef / transposition / JSON deltas) stays **explicitly scoped** (ADR) rather than half-implemented.
-- **Backend** intake keeps **regression tests** (e.g. namespaced MusicXML, MXL sniff); **oemer** has a **documented reproducible path** (Docker reference + README).
+- **Backend** intake keeps **regression tests** (e.g. namespaced MusicXML, MXL sniff); **Audiveris** has a **documented reproducible path** (Docker + **`make audiveris-setup`** — see **[deployment.md](deployment.md)**).
 
-The open epic that **still defines “done” for file intake** is **[plan.md §1.9m](plan.md)** — production-reliable **PDF → MusicXML** (oemer/checkpoints/infra), not another frontend-only tweak.
+The open epic that **still defines “done” for file intake** is **[plan.md §1.9q](plan.md)** — production-credible **PDF → MusicXML** via **Audiveris** (accuracy QA on real scans), not another frontend-only tweak. *(§1.9m/oemer superseded 2026-06-03.)*
 
 ### Approach
 
@@ -1906,7 +2309,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 | **Theory Inspector** | `useTheoryInspector.ts`: **`sendMessage`** rebuilds measure/part FACTs and note evidence from flushed Zustand score; **`patchSelectedNoteInsight`** preserves AI fields; **`buildLiveNoteExplainInsight`** deduplicates explain vs send paths. |
 | **Idea actions** | `ideaActionResolve.ts`: longest matching part name in `summary`; **`ideaActionResolve.test.ts`** (Violin vs Violin II; duplicate-name null). |
 | **Engine** | `fileIntake.test.ts`: namespaced MusicXML `.musicxml` + ZIP sniff; **2026-04-07:** MIDI/`.txt`/`.mxml`/extensionless + `musicXmlMarkers.ts` + `midiParser` `createRequire`. |
-| **Ops / OMR** | `backend/docker/oemer-omr.Dockerfile`; README + deployment cross-links. |
+| **Ops / OMR** | **`scripts/audiveris/`** + root **`Dockerfile`** (Java 25 + Audiveris); superseded **`oemer-omr.Dockerfile`** — see **[deployment.md](deployment.md)** and **[Audiveris work log](#wl-export-audiveris-2026-06-03)**. |
 | **Symbolic intake (frontend)** | `needsEnginePreviewForExtension`, `isProbablyZipBytes`, `musicXmlMarkers`, `intakeErrorHints`; Document preview API for mislabeled ZIP; **`readMelodyXml`** prefers **`storePreviewXml`**. |
 | **Sandbox exports (2026-04-13)** | **`liveScoreExport.ts`**, **`scoreToMidi.ts`**, **`pitchMidi.ts`**, **`scoreToWav.ts`**, **`html-to-image`**, **`fflate`**; sandbox **`openExportModal`** + print CSS; Vitest **`scoreToMidi.test.ts`**. |
 
@@ -1914,7 +2317,9 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ### Current failure / what we are working on now
 
-**Primary engineering risk (unchanged):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
+> **Superseded (2026-06-03):** PDF OMR backend is now **Audiveris** (**[plan §1.9q](plan.md)**, **[work log](#wl-export-audiveris-2026-06-03)**). The **oemer/pdfalto** risks below are **historical** (April 2026). **Current primary gap:** OMR **recognition accuracy** on real PDF scans + manual QA of post-import Sandbox UX — see **[Current Focus](#current-focus)**.
+
+**Primary engineering risk (historical — April 2026):** **[1.9m PDF → MusicXML](plan.md)** — **oemer** stability (Python 3.10–12, ONNX checkpoints, first-run download, `OEMER_BIN`), plus **pdfalto** and **Poppler** on the host. Arbitrary engraved or scanned PDFs still **often fail** preview/generate; the app now **says so clearly** and points to docs, but **OMR itself** is the remaining multi-day/infra problem.
 
 **Build / TypeScript (resolved 2026-04-18):** **`riffscoreAdapter.ts`** uses a **narrow cast** on the `ui` config so **`toolbarPlugins`** (patch-package) satisfies `tsc`; **`make build`** / **`npm run build`** stay green. **Long-term:** module augmentation if upstream **`RiffScoreConfig`** exposes the field.
 
@@ -1932,6 +2337,14 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
+**2026-06-04 PM session (PDF photo intake · chord fixes · export toggles · canvas 500):** End goal, approach, steps, and **open work** — **[Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm)**. **Shipped:** photo-PDF heuristic + server raster; client **`pages[]`** first for PDF OMR; async intake; chord **measureLengthBeats** + detect tie-break; export modal **Letter Names / Chords** live OSMD preview; **`serverExternalPackages`** for **`@napi-rs/canvas`**. **Fixed:** misleading **Preview failed: 500** (canvas native module, not Audiveris). **`make test`:** **373**. **Open:** E2E upload QA after **`make dev-clean && make dev`**; OMR **quality** on real scans; regen **riffscore** patch if chord-playback guards only in `node_modules`.
+
+**2026-06-04 session (export modal · OSMD learner letter names · playback polish):** End goal, approach, completed steps, and **open work** — **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **Shipped:** Export modal **OSMD PDF preview** (same path as print); formats **PDF / MusicXML / WAV / MIDI**; **HarmonyForge** export branding; **letter names** on PDF preview + print when **Letter Names** on (SVG in VexFlow note groups); tighter print margins + **final barline**; louder metronome + playhead through **rests**. **Resolved:** OSMD label misplacement (parent-local coords, avoid `text-after-edge`). **`make test`:** **338**. **Open:** PDF **OMR quality**; viola/tenor **manual QA**; toolbar **`Octave ↓`**.
+
+**2026-06-03 PM session (viola sandbox vs export · git remote):** End goal, approach, completed steps, and **open work** — **[Work log — Viola sandbox vs export parity (2026-06-03 PM)](#wl-viola-sandbox-export-parity-2026-06-03)**. **Shipped:** RiffScore **`getOffsetForPitch` / `getPitchForOffset`** alto/tenor fix restored in **`patches/riffscore+1.0.0-alpha.9.patch`**; **`origin`** corrected to **`spatel54/harmonyforge`**. **Open:** **Manual QA** — viola/tenor noteheads and learner labels vs OSMD PDF after **`cd frontend && rm -rf .next && make dev`**.
+
+**2026-06-03 session (OSMD export · Audiveris PDF intake · polish):** End goal, approach, completed steps, and **open work** — **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)**. **Shipped:** Audiveris-only OMR, OSMD print/PDF, Java 25 auto-detection, honest Playground loader, MusicXML beaming/metronome, **`scripts/audiveris/`** ( **`approach_source_audiveris/`** deleted). **Open:** PDF **recognition quality** on real scans; **re-verify** measure-gutter selection after PDF import (**`Target event not found`** fix in **`RiffScoreEditor`**).
+
 **2026-04-27 session (naturals keyboard · LLM env · audit UX):** End goal, approach, completed steps, and **open failures** are summarized in **[Work log — Sandbox naturals keyboard, LLM env recovery, lay audit copy](#wl-sandbox-naturals-llm-audit-2026-04-27)** — especially **manual QA** on **toolbar `Octave ↓`** ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)) and **Vercel Preview** env + **redeploy** after **`OPENAI_*`** changes.
 
 **Narrative for the 2026-04 refinement pass:** [Holistic refinement program](#holistic-refinement-2026-04) (end goal, approach, completed steps, **current failure**).
@@ -1941,7 +2354,7 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 **Docs / ops (2026-04-07):** Onboarding and deploy guidance are now in-repo (README set + **[deployment.md](deployment.md)**). **Next operational step** for production is to **execute** that playbook (backend URL → Vercel env → `CORS_ORIGIN`), not more prose. If `node_modules/` was ever fully tracked, run **`git rm -r --cached node_modules`** once, then **`git add node_modules/README.md .gitignore`** and commit.
 
 **Active work / blockers:**
-1. **PDF → MusicXML (unresolved OMR)** — Stabilize **oemer** (venv Python 3.11/3.12, checkpoints, `OEMER_BIN`) or choose an alternate path; see **Multi-format intake & PDF → Document preview**, **`requirements.txt`**, and optional reference image **`backend/docker/oemer-omr.Dockerfile`**. Preview/generate wiring exists; **melody extraction from arbitrary PDF** does not yet meet “it just works.”
+1. **PDF → MusicXML (Audiveris OMR)** — **Wiring shipped (2026-06-03); photo-PDF path (2026-06-04 PM):** client **`pages[]`** + server **`pdfServerRaster`** + raster-first Audiveris — see **[work log — PDF intake 2026-06-04 PM](#wl-pdf-intake-chords-export-2026-06-04-pm)**. **If Playground shows `Preview failed: 500` with no Audiveris stderr:** restart dev after **`make install`** — likely **`@napi-rs/canvas`** / **`serverExternalPackages`**, not missing Audiveris. **Remaining gap:** OMR **accuracy** on arbitrary PDFs. Local: **`make audiveris-setup`** (Java 25+). Vercel: raster preview only — **[deployment.md](deployment.md)**.
 2. **RiffScore sample URLs** — **Mitigated (2026-04-06):** `patch-package` points the built-in piano sampler at **Tone.js Salamander** (`https://tonejs.github.io/audio/salamander/`) instead of missing `/audio/piano/*.mp3`.
 3. **OpenAI in dev / deploy** — **`OPENAI_API_KEY`** = **`sk-…`** secret only; **`OPENAI_MODEL`** = model id (e.g. **`gpt-4o-mini`**). If **swapped**, OpenAI **401** echoes the model name as the “key”; app **`getServerOpenAIEnv()`** can **recover** when one env looks like **`sk-…`** and the other like **`gpt-…`**. **`GET /api/theory-inspector`** returns **`hasApiKey`**, **`configHint`** (optional). Local: **`frontend/.env.local`** + **`make dev`**. Production: **[deployment.md](deployment.md)** — **Preview** vs **Production** env, **redeploy** after edits. See **[Work log — naturals / LLM / audit](#wl-sandbox-naturals-llm-audit-2026-04-27)**.
 4. **Turbopack / monorepo env** — **`frontend/next.config.ts`** loads env via `loadEnvConfig(appDir)` so `.env.local` applies without `turbopack.root` (which broke Tailwind `@import`). Residual lockfile warnings are acceptable until Next documents a single-root strategy that preserves CSS resolution.
@@ -2329,6 +2742,14 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 
 ## Learnings
 
+### Sandbox playback reliability (2026-06-04)
+
+Full narrative: **[Work log — Sandbox playback reliability (2026-06-04)](#wl-sandbox-playback-reliability-2026-06-04)**.
+
+- **Next.js / RiffScore:** the app imports **`riffscore` ESM (`index.mjs`)** — patch hunks must stay in sync with **`index.js`**; drift caused missing monotonic Part scheduling on the path users actually hit.
+- **Timeline sort:** pitch-primary sort breaks temporal order on a single staff (e.g. E4 at beat 0 sorted after C4 at beat 1); monotonic micro-offsets cannot fully repair that — sort **by time first**.
+- **Tone.Part:** after monotonic shim, **`events.sort((a,b) => a.time - b.time)`** before constructing the Part.
+
 ### Tactile Sandbox exports (2026-04-13)
 - **Live score contract:** RiffScore edits are lazy-synced; always **`flushToZustand`** (via **`getLiveScoreAfterFlush`**) before reading **`useScoreStore`** for toolbar copy/save/print, export modal snapshot, and **`handleExport`**.
 - **Formats:** Client-side **`scoreToMidiBuffer`** (SMF type 1, meta tempo + one track per part), **`html-to-image`** PNG of export preview pane, **`fflate`** ZIP (MusicXML + MIDI + JSON + server chord-chart text), **`scoreToWavBuffer`** (**`Tone.Offline`** + PCM16 WAV). PDF remains **`window.print()`** with **`.hf-sandbox-print-target`** / **`.hf-print-hide`** print CSS.
@@ -2471,11 +2892,18 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-**Immediate (2026-04 — see Consolidated status):**
-1. **PDF→MusicXML (oemer)** — Pin **Python 3.11/3.12 venv**, `make install`, prefetch or manually install **oemer checkpoints**, set **`OEMER_BIN`**; or spike alternate OMR (**1.9m** in `@plan.md`).
-2. **RiffScore playback samples** — Serve or proxy `/audio/piano/*.mp3` (or disable built-in sampler UX) so piano playback is not 404/no-op.
+**Immediate (2026-06 — see [Audiveris work log](#wl-export-audiveris-2026-06-03) + [Viola parity work log](#wl-viola-sandbox-export-parity-2026-06-03)):**
+1. **Viola / alto–tenor sandbox QA** — After **`rm -rf .next`**, generate or load **Melody + Viola + Cello** (or similar); confirm **Sandbox** noteheads and learner labels match **Export → PDF/Print** (OSMD). See **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**.
+2. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
+3. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
+4. **OSMD export QA** — Export → PDF/Print: beamed eighths, tempo placement, no blank preview page.
+5. **Vercel vs Docker** — Confirm PDF on Vercel shows raster + actionable 501; self-hosted Docker path runs full Audiveris pipeline — **[deployment.md](deployment.md)**.
+
+**Still relevant (2026-04 backlog):**
+1. ~~**PDF→MusicXML (oemer)**~~ — **Superseded by Audiveris (2026-06-03)** — see **`scripts/audiveris/`** and **[work log](#wl-export-audiveris-2026-06-03)**.
+2. **RiffScore playback samples** — **Mitigated:** Salamander CDN via **`patch-package`**.
 3. **LLM in dev** — `OPENAI_API_KEY` in `frontend/.env.local`; restart `make dev`; confirm `GET /api/theory-inspector` → `hasApiKey: true`.
-4. **Turbopack / lockfiles** — Resolve multi-lockfile warning (e.g. `turbopack.root` or single-lockfile layout).
+4. **Toolbar `Octave ↓`** — Re-verify in browser ([Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm)).
 
 **Deferred:** JSON-based score deltas for backend sync (Theory Inspector integration).
 
@@ -2508,10 +2936,19 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-04, refreshed 2026-04-20):**
+**Handover template (2026-06, refreshed 2026-06-03):**
+- **Canonical summary:** **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)** — end goal, approach, shipped steps, **current failure** (OMR quality QA + RiffScore re-verify).
+- **End goal:** (1) **PDF → MusicXML** via **Audiveris** on Playground/Document/Generate. (2) **Sandbox PDF/Print export** via **OSMD** (engraved notation, no app chrome). (3) Honest UX during multi-minute OMR. (4) Tooling under **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed).
+- **Approach:** **`audiverisPipeline.ts`** two-phase batch (import → `.omr` → export `.mxl`/`.xml`); client PDF raster = preview-only; **`ExportPrintRoot`** + **`PrintableScore`** + **`scoreToPartwiseMusicXML`** (beams, metronome); **`TransitionOverlay`** caps at 90% until server returns; Java 25 preflight + Homebrew **`JAVA_HOME`** auto-detect.
+- **Shipped this tranche:** Blank print fix, tempo in MusicXML, eighth-note beaming, Java 25 PATH, pipeline audit (prefer MXL, split timeout, 900s API), scripts migration, honest loader, RiffScore measure-gutter fix. **`make test`:** **304**.
+- **Current failure / open work:** (1) **PDF OMR recognition accuracy** on real scans — wiring works; quality needs human QA. (2) **Vercel** — no Java/Audiveris (raster + 501). (3) **Re-verify** measure-gutter selection after PDF import in browser.
+- **Key files:** `frontend/src/server/engine/parsers/audiverisPipeline.ts`, `fileIntake.ts`, `mergeParsedScores.ts`, `ExportPrintRoot.tsx`, `PrintableScore.tsx`, `scoreToMusicXML.ts`, `TransitionOverlay.tsx`, `intakeOverlayProgress.ts`, `RiffScoreEditor.tsx`, `scripts/audiveris/*`, root `Dockerfile`, `Makefile`.
+- **Run:** **`make audiveris-setup`** (once) → **`make dev`** → http://localhost:3000. Docker: **`make docker-build && make docker-run`**. QA: **`make audiveris-convert FILE=…`**.
+
+**Older handover (2026-04-20):**
 - **Canonical summary:** **[Program narrative — where we are (2026-04-20)](#program-narrative-2026-04-20)** — end goal, approach, shipped work (including repo hygiene), **current focus** (deploy / study / residual risks — not one blocking bug).
 - **End goal:** Upload → Document (preview + config) → Generate → Sandbox with editable score, **multi-format export from the live canvas**, and reliable playback where configured. Engine **adds** harmonies (melody + selected instruments), not replacement. **Glass Box product framing:** harmony generation = deterministic engine; **Theory Inspector** = LLM explain/critique/suggest — see **`GlassBoxPedagogyCallout`** + [work log](#wl-glass-box-pedagogy-2026-04-19). **PDF/MXL/MIDI:** server preview XML before Document when not raw `.xml` (see `to-preview-musicxml`).
 - **Approach:** `EditableScore` in Zustand + **RiffScore** sync (`riffscoreAdapter`, `useRiffScoreSync`, `normalizeScoreRests`); **`flushToZustand`** before any export/copy/save/read of store score (**`getLiveScoreAfterFlush`**). **`patch-package`** on `riffscore` for `ui.toolbarPlugins` + playback scrub (`riffscoreAdapter` narrow `ui` cast for `tsc`). **Exports:** client MIDI/PNG/WAV/ZIP + server chord-chart + print CSS — see **[Work log — Tactile Sandbox exports (2026-04-13)](#wl-sandbox-exports-2026-04-13)**. Theory Inspector: deterministic engine + taxonomy context; optional OpenAI via `frontend/.env.local`. **Intake:** `frontend/src/server/engine/parsers/fileIntake.ts` + **`previewMusicXML`** store for Document preview parity. **Recent study-driven pass:** [Iteration 1+2 refinement](#wl-study-refinement-2026-04-18).
-- **Current status / focus:** (1) **PDF OMR** — product path **shipped**; Vercel vs Docker trade-offs in **[plan §1.9m](plan.md)** and [deployment.md](deployment.md). (2) **`riffscoreAdapter` / `toolbarPlugins`:** narrow cast — watch upstream types. (3) Piano samples — see [public/audio/piano/README.md](../frontend/public/audio/piano/README.md). (4) LLM — optional `OPENAI_API_KEY`. (5) **Tutor** — residual model variance; mitigated by FACT blocks. (6) Lint — optional hook-warning cleanup. (7) Legacy paragraphs in this file may mention `:8000` / `backend/` — use **[Program narrative (2026-04-20)](#program-narrative-2026-04-20)**.
-- **Key files:** `frontend/src/server/engine/parsers/fileIntake.ts`, `frontend/src/server/engine/satbToMusicXML.ts`, `frontend/src/app/api/*/route.ts`, `frontend/src/app/page.tsx`, `document/page.tsx`, `useUploadStore.ts`, `sandbox/page.tsx`, `liveScoreExport.ts`, `scoreToMidi.ts`, `scoreToWav.ts`, `RiffScoreEditor.tsx`, `useRiffScoreSync`, `riffscoreAdapter.ts`, root `requirements.txt`, `frontend/package.json`.
-- **Run:** `make dev-clean && make dev` → http://localhost:3000 (single process). `make test-engine` for CLI. **`make docker-build`** / **`make install`** for full PDF OMR; **`make pdfalto`** when vendored pdfalto sources exist under `miscellaneous/pdfalto/`.
+- **Current status / focus:** (1) **PDF OMR** — **Audiveris path shipped (2026-06-03)** — see **[work log](#wl-export-audiveris-2026-06-03)** and **[plan §1.9q](plan.md)**. (2) **`riffscoreAdapter` / `toolbarPlugins`:** narrow cast — watch upstream types. (3) Piano samples — Salamander CDN via patch. (4) LLM — optional `OPENAI_API_KEY`. (5) **Tutor** — residual model variance; mitigated by FACT blocks. (6) Lint — optional hook-warning cleanup.
+- **Key files:** `frontend/src/server/engine/parsers/fileIntake.ts`, `audiverisPipeline.ts`, `frontend/src/server/engine/satbToMusicXML.ts`, `frontend/src/app/api/*/route.ts`, `ExportPrintRoot.tsx`, `PrintableScore.tsx`, `sandbox/page.tsx`, `RiffScoreEditor.tsx`, `scripts/audiveris/*`, root `Dockerfile`, `Makefile`.
+- **Run:** `make dev-clean && make dev` → http://localhost:3000. **`make audiveris-setup`** for local PDF OMR. **`make docker-build`** for self-hosted full stack.

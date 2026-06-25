@@ -10,9 +10,8 @@ import { VolumeSlider } from "@/components/molecules/VolumeSlider";
 import { useDestinationVolume } from "@/hooks/useDestinationVolume";
 
 import { Download, Keyboard, RotateCcw } from "lucide-react";
-import { HoverTooltip } from "@/components/atoms/HoverTooltip";
 import { ActionTooltip } from "@/components/atoms/ActionTooltip";
-import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
+import { ScoreDisplayToggles } from "@/components/molecules/ScoreDisplayToggles";
 
 export interface SandboxHeaderProps extends React.HTMLAttributes<HTMLElement> {
   onExportClick?: () => void;
@@ -21,6 +20,8 @@ export interface SandboxHeaderProps extends React.HTMLAttributes<HTMLElement> {
   showResetWorkspace?: boolean;
   /** Open sandbox keyboard shortcuts reference */
   onHotkeysClick?: () => void;
+  /** When true, show the chord-symbol visibility toggle (melody + two harmony parts). */
+  showChordSymbolsToggle?: boolean;
 }
 
 /**
@@ -37,13 +38,13 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
       onResetWorkspaceClick,
       showResetWorkspace = false,
       onHotkeysClick,
+      showChordSymbolsToggle = false,
       ...props
     },
     ref,
   ) => {
     const { volumeDb, setVolumeDb } = useDestinationVolume();
-    const showNoteNameLabels = useScoreDisplayStore((s) => s.showNoteNameLabels);
-    const setShowNoteNameLabels = useScoreDisplayStore((s) => s.setShowNoteNameLabels);
+
     return (
       <header
         ref={ref}
@@ -70,24 +71,7 @@ export const SandboxHeader = React.forwardRef<HTMLElement, SandboxHeaderProps>(
 
         {/* Right controls — Node 9zJvZ */}
         <div className="flex items-center gap-2 md:gap-3">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0 rounded-md px-1.5 py-0.5 -mx-1.5 -my-0.5 transition-colors hover:bg-[color-mix(in_srgb,var(--hf-surface)_10%,transparent)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--hf-accent)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[var(--hf-bg)]">
-            <input
-              type="checkbox"
-              className="rounded border-[var(--hf-detail)] size-3.5 accent-[var(--hf-surface)] transition-transform active:scale-90"
-              checked={showNoteNameLabels}
-              onChange={(e) => setShowNoteNameLabels(e.target.checked)}
-              aria-label="Show letter names above each notehead"
-            />
-            <span className="font-mono text-[10px] md:text-[11px] font-medium hidden sm:inline" style={{ color: "var(--hf-text-primary)" }}>
-              Letter Names
-            </span>
-            <HoverTooltip
-              ariaLabel="About letter names"
-              content={
-                "When on, each pitch shows as letter and accidental (C, F#, Bb) just above the notehead. Useful while learning the staff. Turn off for a clean score or when you read fluently."
-              }
-            />
-          </label>
+          <ScoreDisplayToggles showChordSymbolsToggle={showChordSymbolsToggle} />
           <div className="w-px h-4 shrink-0 bg-[var(--hf-detail)] opacity-50" />
           <VolumeSlider volumeDb={volumeDb} onVolumeDbChange={setVolumeDb} />
           <div className="w-px h-4 bg-[var(--hf-detail)] opacity-50" />

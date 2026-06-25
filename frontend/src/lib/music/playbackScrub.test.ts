@@ -3,9 +3,13 @@ import type { EditableScore, NotePosition } from "./scoreTypes";
 import {
   buildMeasurePlaybackSpans,
   clampContentX,
+  contentXForMeasureQuant,
+  contentXForPlaybackTick,
   contentXToMeasureQuant,
   contentXToNearestMeasureStart,
+  quantToBeatLabel,
   riffQuantsForMeasure,
+  secondsPerQuantForScore,
 } from "./playbackScrub";
 
 const minimalScore: EditableScore = {
@@ -111,5 +115,57 @@ describe("clampContentX", () => {
     const spans = buildMeasurePlaybackSpans([pos(0, 50)], 1, 200);
     expect(clampContentX(-100, spans)).toBe(spans[0]!.startX);
     expect(clampContentX(9999, spans)).toBe(spans[0]!.endX);
+  });
+});
+
+describe("contentXForPlaybackTick", () => {
+  it("matches contentXForMeasureQuant at segment start", () => {
+    const spans = buildMeasurePlaybackSpans([pos(0, 0), pos(0, 200)], 1, 400);
+    const x0 = contentXForMeasureQuant(0, 0, spans, minimalScore);
+    const tick = contentXForPlaybackTick(
+      minimalScore,
+      spans,
+      0,
+      0,
+      1,
+      0,
+    );
+    expect(tick).toBe(x0);
+  });
+
+  it("advances horizontally through a half-bar rest segment", () => {
+    const score: EditableScore = { ...minimalScore, bpm: 120 };
+    const spans = buildMeasurePlaybackSpans([pos(0, 0), pos(0, 200)], 1, 400);
+    const spq = secondsPerQuantForScore(score);
+    const halfBarSec = 32 * spq;
+    const xStart = contentXForPlaybackTick(score, spans, 0, 0, halfBarSec, 0);
+    const xMid = contentXForPlaybackTick(
+      score,
+      spans,
+      0,
+      0,
+      halfBarSec,
+      halfBarSec / 2,
+    );
+    expect(xMid).toBeGreaterThan(xStart);
+  });
+});
+
+describe("contentXForMeasureQuant", () => {
+  it("round-trips mid-measure quant with contentXToMeasureQuant", () => {
+    const spans = buildMeasurePlaybackSpans([pos(0, 80), pos(0, 200)], 1, 400);
+    const mid = (spans[0]!.startX + spans[0]!.endX) / 2;
+    const { measureIndex, quant } = contentXToMeasureQuant(mid, spans, minimalScore);
+    const x = contentXForMeasureQuant(measureIndex, quant, spans, minimalScore);
+    const back = contentXToMeasureQuant(x, spans, minimalScore);
+    expect(back.measureIndex).toBe(measureIndex);
+    expect(back.quant).toBe(quant);
+  });
+});
+
+describe("quantToBeatLabel", () => {
+  it("formats bar and beat for 4/4", () => {
+    expect(quantToBeatLabel(0, minimalScore, 0)).toBe("Bar 1 · beat 1");
+    expect(quantToBeatLabel(16, minimalScore, 0)).toBe("Bar 1 · beat 2");
   });
 });

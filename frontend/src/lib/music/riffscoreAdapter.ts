@@ -3,6 +3,8 @@
  * and RiffScore's Score/Staff/Measure/ScoreEvent model.
  */
 
+import { finalizeChordTrack } from "./chordSymbolDetect";
+import { normalizeLeadSheetChordSymbol } from "./chordSymbolFormat";
 import type { EditableScore, DurationType, Note as HfNote, Part, Measure as HfMeasure } from "./scoreTypes";
 import { getNoteById } from "./scoreUtils";
 import type { ReactNode } from "react";
@@ -45,13 +47,15 @@ export function rsDurationToHf(d: string): DurationType {
   return RS_TO_HF_DURATION[d] ?? "q";
 }
 
+/** Melody plus at least one harmony stave (≥2 parts). */
+export const MIN_PARTS_FOR_CHORD_NOTATION = 2;
+
 /**
- * Chord track / letter symbols are only meaningful when there are enough parts
- * (melody + two harmony) to justify harmonic annotation — matches RiffScore UX
- * (avoids a misleading default “Cm7” hover on 1–2 staves).
+ * Chord symbols when melody + harmony are present (≥2 parts).
+ * Display only — chord playback is disabled in RiffScore config.
  */
 export function shouldShowChordNotation(score: EditableScore): boolean {
-  return score.parts.length >= 3;
+  return score.parts.length >= MIN_PARTS_FOR_CHORD_NOTATION;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,9 +257,14 @@ function hfPartToRsStaff(part: Part): RsStaff {
 /**
  * Convert an EditableScore into a RiffScoreConfig for loading into the RiffScore component.
  */
+export type RiffScoreChordOptions = {
+  /** When false, omit chord UI and chord track (symbols may remain on EditableScore). */
+  showChordTrack?: boolean;
+};
+
 export function editableScoreToRiffConfig(
   score: EditableScore,
-  options?: {
+  options?: RiffScoreChordOptions & {
     theme?: "DARK" | "LIGHT";
     scale?: number;
     /** Defaults to `true`. When `false`, score is display/playback only (no note editing or typing on canvas). */
@@ -312,10 +321,18 @@ export function editableScoreToRiffConfig(
     },
   };
 
-  if (shouldShowChordNotation(score)) {
+  const showChordTrack = options?.showChordTrack !== false;
+  const chordPlaybackOff = { enabled: false as const, velocity: 0 };
+  if (showChordTrack && shouldShowChordNotation(score)) {
     base.chord = {
       display: { notation: "letter", useSymbols: true },
-      playback: { enabled: true, velocity: 52 },
+      playback: chordPlaybackOff,
+    };
+  } else if ((score.chords?.length ?? 0) > 0) {
+    // Symbols may be hidden; still forbid RiffScore chord audition defaults.
+    base.chord = {
+      display: { notation: "letter", useSymbols: true },
+      playback: chordPlaybackOff,
     };
   }
 
@@ -325,7 +342,10 @@ export function editableScoreToRiffConfig(
 /**
  * Convert an EditableScore into a RiffScore Score object for loadScore() API.
  */
-export function editableScoreToRsScore(score: EditableScore): RsScore {
+export function editableScoreToRsScore(
+  score: EditableScore,
+  options?: RiffScoreChordOptions,
+): RsScore {
   const firstMeasure = score.parts[0]?.measures[0];
   const rs: RsScore = {
     title: "",
@@ -334,11 +354,13 @@ export function editableScoreToRsScore(score: EditableScore): RsScore {
     bpm: score.bpm ?? 120,
     staves: score.parts.map(hfPartToRsStaff),
   };
-  if (shouldShowChordNotation(score) && score.chords?.length) {
-    rs.chordTrack = score.chords.map((c) => ({
+  const showChordTrack = options?.showChordTrack !== false;
+  if (showChordTrack && shouldShowChordNotation(score) && score.chords?.length) {
+    const chords = finalizeChordTrack(score, score.chords);
+    rs.chordTrack = chords.map((c) => ({
       id: c.id,
       quant: c.quant,
-      symbol: c.symbol,
+      symbol: normalizeLeadSheetChordSymbol(c.symbol),
     }));
   }
   return rs;
@@ -453,7 +475,7 @@ export function riffScoreToEditableScore(
     next.chords = rsScore.chordTrack.map((c) => ({
       id: c.id,
       quant: c.quant,
-      symbol: c.symbol,
+      symbol: normalizeLeadSheetChordSymbol(c.symbol),
     }));
   } else if (shouldShowChordNotation(next) && previousScore?.chords?.length) {
     next.chords = previousScore.chords.map((c) => ({ ...c }));

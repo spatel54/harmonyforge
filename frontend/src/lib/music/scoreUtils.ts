@@ -86,6 +86,24 @@ export function parseMeasureBeats(timeSignature?: string): number {
   return (num * 4) / den;
 }
 
+/**
+ * Bar length on the global beat timeline (quarter-note beats).
+ * At least the time signature per measure; longer when notation exceeds that cap.
+ * Aligns chord quants with RiffScore (64 quants per 4/4 measure).
+ */
+export function measureLengthBeats(score: EditableScore, measureIndex: number): number {
+  const ts = effectiveMeasureTimeSignature(score, measureIndex);
+  const nominal = parseMeasureBeats(ts);
+  let maxNotated = 0;
+  for (const part of score.parts) {
+    const measure = part.measures[measureIndex];
+    if (!measure) continue;
+    const len = measure.notes.reduce((acc, n) => acc + noteBeats(n), 0);
+    maxNotated = Math.max(maxNotated, len);
+  }
+  return Math.max(maxNotated, nominal);
+}
+
 /** Time signature string for column `measureIndex` (cascades to previous measures, then 4/4). */
 export function effectiveMeasureTimeSignature(score: EditableScore, measureIndex: number): string {
   const ref = score.parts[0];
@@ -559,18 +577,244 @@ export function extractNotes(score: EditableScore, noteIds: Set<string>): Note[]
   return notes;
 }
 
-/** Set duration on notes by ID */
-export function setNoteDurations(score: EditableScore, noteIds: Set<string>, duration: DurationType): EditableScore {
+function makeUniformDurationRests(duration: DurationType, count: number): Note[] {
+  const rests: Note[] = [];
+  for (let i = 0; i < count; i++) {
+    rests.push({
+      id: generateId("n"),
+      pitch: "B4",
+      duration,
+      isRest: true,
+    });
+  }
+  return rests;
+}
+
+function measureUsedUnitsBeforeIndex(measure: Measure, noteIdx: number): number {
+  let used = 0;
+  for (let i = 0; i < noteIdx; i++) {
+    used += beatsToUnits(noteBeats(measure.notes[i]!));
+  }
+  return used;
+}
+
+function noteUnitsForDuration(duration: DurationType, dots = 0): number {
+  return beatsToUnits(noteBeats({ id: "x", pitch: "C4", duration, dots }));
+}
+
+/** Largest standard duration whose undotted span fits within `maxUnits`. */
+function bestDurationWithinUnits(maxUnits: number): DurationType {
+  const order: DurationType[] = ["w", "h", "q", "8", "16", "32"];
+  let best: DurationType = "32";
+  for (const d of order) {
+    const u = noteUnitsForDuration(d, 0);
+    if (u <= maxUnits) best = d;
+  }
+  return best;
+}
+
+type ConsumeDirection = "forward" | "backward";
+
+/**
+ * Remove `unitsNeeded` rhythmic units from neighbors of `anchorIdx` (rests removed
+ * or shrunk; pitched notes split via {@link splitNoteForBarline}).
+ */
+function consumeUnitsFromSlice(
+  measure: Measure,
+  anchorIdx: number,
+  unitsNeeded: number,
+  direction: ConsumeDirection,
+): number {
+  if (unitsNeeded <= 0) return 0;
+
+  let consumed = 0;
+  const notes = measure.notes;
+
+  if (direction === "forward") {
+    const j = anchorIdx + 1;
+    while (j < notes.length && consumed < unitsNeeded) {
+      const cell = notes[j]!;
+      const cellUnits = beatsToUnits(noteBeats(cell));
+      const need = unitsNeeded - consumed;
+
+      if (cellUnits <= need + 1e-6) {
+        notes.splice(j, 1);
+        consumed += cellUnits;
+        continue;
+      }
+
+      if (cell.isRest) {
+        const remainder = cellUnits - need;
+        const cursor = measureUsedUnitsBeforeIndex(measure, j);
+        notes.splice(j, 1, ...makeBeatAwareRestNotes(cursor, remainder));
+        consumed += need;
+        break;
+      }
+
+      const { second } = splitNoteForBarline(cell, need);
+      notes.splice(j, 1, ...second);
+      consumed += need;
+      break;
+    }
+    return consumed;
+  }
+
+  let j = anchorIdx - 1;
+  while (j >= 0 && consumed < unitsNeeded) {
+    const cell = notes[j]!;
+    const cellUnits = beatsToUnits(noteBeats(cell));
+    const need = unitsNeeded - consumed;
+
+    if (cellUnits <= need + 1e-6) {
+      notes.splice(j, 1);
+      consumed += cellUnits;
+      j--;
+      continue;
+    }
+
+    if (cell.isRest) {
+      const remainder = cellUnits - need;
+      const cursor = measureUsedUnitsBeforeIndex(measure, j);
+      notes.splice(j, 1, ...makeBeatAwareRestNotes(cursor, remainder));
+      consumed += need;
+      break;
+    }
+
+    const { first } = splitNoteForBarline(cell, cellUnits - need);
+    notes.splice(j, 1, ...first);
+    consumed += need;
+    break;
+  }
+
+  return consumed;
+}
+
+/**
+ * Grow one event by absorbing forward then backward rests/notes. Returns whether
+ * the requested `duration` was fully applied (false = capped to largest fit).
+ */
+function lengthenNoteInMeasure(
+  measure: Measure,
+  noteIdx: number,
+  duration: DurationType,
+): boolean {
+  const note = measure.notes[noteIdx]!;
+  const oldUnits = beatsToUnits(noteBeats(note));
+  const newUnits = beatsToUnits(
+    noteBeats({
+      id: note.id,
+      pitch: note.pitch,
+      duration,
+      dots: note.dots ?? 0,
+    }),
+  );
+
+  if (newUnits <= oldUnits) return false;
+
+  let unitsNeeded = newUnits - oldUnits;
+  unitsNeeded -= consumeUnitsFromSlice(measure, noteIdx, unitsNeeded, "forward");
+  if (unitsNeeded > 0) {
+    unitsNeeded -= consumeUnitsFromSlice(measure, noteIdx, unitsNeeded, "backward");
+  }
+
+  if (unitsNeeded <= 0) {
+    note.duration = duration;
+    return true;
+  }
+
+  const achievableUnits = newUnits - unitsNeeded;
+  if (achievableUnits <= oldUnits) return false;
+
+  note.duration = bestDurationWithinUnits(achievableUnits);
+  if (note.dots && noteUnitsForDuration(note.duration, 1) > achievableUnits) {
+    note.dots = 0;
+  }
+  return false;
+}
+
+/**
+ * Set duration on selected notes. When the new duration is **shorter** than the
+ * event's current span (including dots), split the original slot into one note at
+ * the new duration plus rests of that same duration (e.g. half → quarter → quarter
+ * note + quarter rest; half → eighth → eighth + three eighth rests).
+ * When **longer**, absorb neighboring rests/notes forward then backward.
+ */
+export function setNoteDurations(
+  score: EditableScore,
+  noteIds: Set<string>,
+  duration: DurationType,
+): EditableScore {
+  if (noteIds.size === 0) return score;
+
   const next = cloneScore(score);
-  for (const part of next.parts) {
-    for (const measure of part.measures) {
-      for (const note of measure.notes) {
-        if (noteIds.has(note.id)) {
-          note.duration = duration;
+  const targets: Array<{ partIdx: number; measureIdx: number; noteIdx: number }> = [];
+
+  for (let pIdx = 0; pIdx < next.parts.length; pIdx++) {
+    const part = next.parts[pIdx]!;
+    for (let mIdx = 0; mIdx < part.measures.length; mIdx++) {
+      const measure = part.measures[mIdx]!;
+      for (let nIdx = 0; nIdx < measure.notes.length; nIdx++) {
+        if (noteIds.has(measure.notes[nIdx]!.id)) {
+          targets.push({ partIdx: pIdx, measureIdx: mIdx, noteIdx: nIdx });
         }
       }
     }
   }
+
+  targets.sort((a, b) => {
+    if (a.partIdx !== b.partIdx) return b.partIdx - a.partIdx;
+    if (a.measureIdx !== b.measureIdx) return b.measureIdx - a.measureIdx;
+    return b.noteIdx - a.noteIdx;
+  });
+
+  for (const { partIdx, measureIdx, noteIdx } of targets) {
+    const measure = next.parts[partIdx]!.measures[measureIdx]!;
+    const note = measure.notes[noteIdx]!;
+    const oldUnits = beatsToUnits(noteBeats(note));
+    const newSlotUnits = beatsToUnits(
+      noteBeats({ id: note.id, pitch: note.pitch, duration, dots: 0 }),
+    );
+
+    if (newSlotUnits <= 0) {
+      note.duration = duration;
+      continue;
+    }
+
+    if (newSlotUnits > oldUnits) {
+      lengthenNoteInMeasure(measure, noteIdx, duration);
+      continue;
+    }
+
+    if (newSlotUnits === oldUnits) {
+      note.duration = duration;
+      continue;
+    }
+
+    note.duration = duration;
+
+    if (oldUnits % newSlotUnits === 0) {
+      const restCount = oldUnits / newSlotUnits - 1;
+      if (!note.isRest) note.dots = 0;
+      if (restCount > 0) {
+        measure.notes.splice(noteIdx + 1, 0, ...makeUniformDurationRests(duration, restCount));
+      }
+      continue;
+    }
+
+    const firstUnits = beatsToUnits(noteBeats(note));
+    const restUnits = Math.max(0, oldUnits - firstUnits);
+    const cursorUnits = measureUsedUnitsBeforeIndex(measure, noteIdx) + firstUnits;
+    const uniformRests = Math.floor(restUnits / newSlotUnits);
+    const tailUnits = restUnits % newSlotUnits;
+    const inserts = [
+      ...makeUniformDurationRests(duration, uniformRests),
+      ...(tailUnits > 0 ? makeBeatAwareRestNotes(cursorUnits, tailUnits) : []),
+    ];
+    if (inserts.length > 0) {
+      measure.notes.splice(noteIdx + 1, 0, ...inserts);
+    }
+  }
+
   return next;
 }
 

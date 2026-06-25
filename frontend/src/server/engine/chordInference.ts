@@ -85,6 +85,26 @@ function getMelodySlice(melody: MelodyNote[], startBeat: number, endBeat: number
   });
 }
 
+function getWindowPitchClassesFromParsed(
+  parsed: ParsedScore,
+  startBeat: number,
+  endBeat: number,
+): Set<number> {
+  const parts = parsed.inputParts;
+  if (parts && parts.length > 1) {
+    const pcs = new Set<number>();
+    for (const part of parts) {
+      for (const note of getMelodySlice(part.notes, startBeat, endBeat)) {
+        pcs.add(pitchToPc(note.pitch));
+      }
+    }
+    if (pcs.size > 0) return pcs;
+  }
+  return new Set(
+    getMelodySlice(parsed.melody, startBeat, endBeat).map((note) => pitchToPc(note.pitch)),
+  );
+}
+
 function getChordStepSize(parsed: ParsedScore): number {
   const beatsPerMeasure = parsed.timeSignature?.beats ?? 4;
   if (beatsPerMeasure >= 4) return 2;
@@ -154,9 +174,7 @@ export function inferChords(
     const endBeat = Math.min(beat + beatsPerChord, lastBeat || beat + beatsPerChord);
     const activeNote = getActiveMelodyNote(melody, beat);
     const activePc = activeNote ? pitchToPc(activeNote.pitch) : undefined;
-    const windowPitchClasses = new Set(
-      getMelodySlice(melody, beat, endBeat).map((note) => pitchToPc(note.pitch))
-    );
+    const windowPitchClasses = getWindowPitchClassesFromParsed(parsed, beat, endBeat);
 
     const ranked = candidates
       .map((roman) => {
