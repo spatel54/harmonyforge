@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 import type { EditableScore } from "@/lib/music/scoreTypes";
+import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import type { MusicEditorAPI } from "riffscore";
 import { getPlaybackDestinationDb } from "@/hooks/usePlayback";
 
@@ -29,6 +30,8 @@ export interface ScorePreviewPanelProps extends React.HTMLAttributes<HTMLDivElem
   pdfPreviewCaption?: string;
   /** Optional one-line rhythm / ensemble hint (e.g. harmony motion choice). */
   rhythmSummary?: string;
+  /** Live editor session so Generate can flush melody edits. */
+  onSessionReady?: (session: RiffScoreSessionHandles) => void;
 }
 
 function buildPreviewTags(score: EditableScore): string[] {
@@ -45,7 +48,8 @@ function buildPreviewTags(score: EditableScore): string[] {
 }
 
 /**
- * ScorePreviewPanel — Document step: read-only preview (no editing toolbar) plus optional audio.
+ * ScorePreviewPanel — Document step: editable melody preview plus optional audio.
+ * Generate Harmonies uses the live staff, not the original upload.
  */
 export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPanelProps>(
   (
@@ -57,6 +61,7 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
       pdfPreviewUrl,
       pdfPreviewCaption,
       rhythmSummary,
+      onSessionReady,
       className,
       ...props
     },
@@ -154,6 +159,14 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
           >
             Score preview
           </p>
+          {score ? (
+            <p
+              className="font-mono text-[10px] font-normal leading-snug text-center px-3 m-0 mt-1"
+              style={{ color: "var(--hf-text-secondary)" }}
+            >
+              You can edit this uploaded melody on the staff. Generate Harmonies uses your latest notes, not the original file.
+            </p>
+          ) : null}
           <h2
             className="font-brand text-[22px] font-normal leading-none text-center"
             style={{ color: "var(--hf-text-primary)" }}
@@ -243,11 +256,11 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
 
         <div
           className={cn(
-            "flex-1 min-h-[280px] w-full rounded-[8px] relative isolate overflow-hidden",
+            "flex-1 min-h-[280px] w-full rounded-[8px] relative isolate overflow-auto",
             "border border-[var(--hf-detail)] score-canvas-container",
           )}
-          aria-label="Score preview, read-only"
-          role="img"
+          aria-label="Score preview — edit your uploaded melody before generating"
+          role="region"
         >
           {score ? (
             <>
@@ -255,9 +268,12 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
               <RiffScoreEditor
                 score={score}
                 className="relative z-0 w-full h-full min-h-[280px]"
-                presentation
+                enableScoreEditing
+                hideNativeNotationStrip={false}
+                includeHarmonyforgeToolbarPlugins={false}
+                persistScoreToStore={false}
                 showNoteNameLabels={showNoteNameLabels}
-                allowNoteNameLabelsInPresentation
+                onSessionReady={onSessionReady}
                 onEditorApiReady={handleApiReady}
                 onRiffInstanceId={setRiffInstanceId}
               />

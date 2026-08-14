@@ -6,6 +6,10 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)](#wl-session-2026-08-14) — **end goal / approach / steps / current failure** for this tranche — **`make test` 409** — **current failure:** Configure edits → Generate/Sandbox **not yet confirmed in the browser**
+- [Work log — Document live melody → generate (2026-08-14)](#wl-document-live-melody-2026-08-14) — Configure staff **editable**; Generate uses **edited notes** when they differ from intake; hint copy on preview + CTA — **open:** manual `/document` QA
+- [Work log — PDF intake + file I/O hardening (2026-08-14)](#wl-pdf-io-2026-08-14) — **OMR preflight** + **`GET /api/health` `omr.ready`**; **`make dev`** exports **`AUDIVERIS_BIN`**; Playground **setup banner**; honest **`intakeErrorHints`** (no false canvas hint on successful raster); upload **900s** parity; **`downloadBlob`** hardening — **open:** E2E PDF OMR on real scan
+- [Work log — Note palette popover (2026-08-14)](#wl-note-palette-popover-2026-08-14) — **Docked palettes default open**; **0–3 persisted sections** on note-selection popover; native RiffScore notation strip **hidden**; hanging ties **suppressed** — **open:** manual sandbox QA
 - [Work log — Sandbox playback reliability (2026-06-04)](#wl-sandbox-playback-reliability-2026-06-04) — **RiffScore timeline time-first sort**; **ESM `index.mjs` parity** with monotonic Tone.Part scheduling; **`playbackPartSchedule` / `playbackDebugLog` bridges**; scrub/play **toasts** — **`make test` 376**
 - [Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm) — **Photo PDF** server raster + client **`pages[]`**; **chord placement/detect** fixes; **no chord playback**; **Export modal** Letter Names + Chords live preview; **`@napi-rs/canvas`** Next bundling fix — **`make test` 373** — **current:** E2E PDF upload QA after **`make dev-clean && make dev`**
 - [Work log — Sandbox chord symbols ≥2 parts (2026-06-04)](#wl-sandbox-chord-symbols-2026-06-04) — **Engine `<harmony>` on generate**; **parse + RiffScore chord track** (display-only, no playback); **Refresh chord symbols**; gate **`parts.length >= 2`** (melody + harmony)
@@ -57,6 +61,159 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-session-2026-08-14"></a>
+
+## Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)
+
+Canonical handover for this tranche. Detail lives in the three child logs below.
+
+### End goal
+
+A musician can **upload a piece, fix the recognized melody on Configure, then generate SATB from those notes**, and keep editing in Sandbox with MuseScore/Noteflight-style palettes. Local **PDF → MusicXML** must work after one-time Audiveris setup and fail honestly when OMR is missing.
+
+### Approach
+
+1. **Intake:** `make dev` exports Audiveris env; skip OMR when the binary/Java is missing; do not blame `@napi-rs/canvas` after a successful raster.
+2. **Sandbox notation:** Keep the **full docked palette catalog**; add a **0–3 section note-selection popover**; hide RiffScore’s duplicate duration/accidental/tie strip; do not draw hanging teal ties.
+3. **Configure → Generate:** Make Document preview a real editor that **does not write `useScoreStore`**. On Generate, serialize **live sounding notes** only when they differ from intake; otherwise keep the original preview XML / file (OMR fidelity).
+4. **Copy:** Tell users the staff is editable and that Generate uses the latest notes.
+
+### Steps done so far
+
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | **PDF I/O** | Audiveris **5.9.0** pin; **`make dev`** sources **`scripts/audiveris/paths.sh`**; OMR **preflight**; **`GET /api/health` `omr.ready`**; Playground banner; honest **`intakeErrorHints`**; **900s** upload timeout; **`downloadBlob`** hardening — [child log](#wl-pdf-io-2026-08-14) |
+| 2 | **Note palettes** | Dock **default open** (F9 toggles); persisted **0–3** popover sections; side-panel **On note** checkboxes; popover **scroll** when three sections overflow — [child log](#wl-note-palette-popover-2026-08-14) |
+| 3 | **Duplicate toolbar + phantom tie** | Sandbox hides native notation strip (`riffscore-hf-wrapper--no-notation-strip`); Barlines palette **add/delete bar**; **`hfNoteEmitsRsTied`** + **`dropHangingHfTieStarts`**; palette Tie pairs next same-pitch note |
+| 4 | **Document live melody** | Preview **editable**; Generate **`readLiveScore()`** → [`resolveMelodyXmlForGeneration`](../frontend/src/lib/music/resolveMelodyXmlForGeneration.ts); hint on preview + Generate CTA — [child log](#wl-document-live-melody-2026-08-14) |
+
+**Gate:** **`make test` 409** passing; **`make lint`** 0 errors (existing warnings only).
+
+### Current failure
+
+**Configure staff edits are not yet confirmed to land in Generate / Sandbox in the running app.** Code no longer posts the original upload when sounding notes changed, but we have **not** done the browser check: change a pitch or duration on `/document` → **Generate Harmonies** → sandbox **melody** matches the edit. Until that QA passes, treat this as the active failure.
+
+**Also open (not blocking the same path):**
+
+- Sandbox palette / popover / F9 / print / no hanging tie — [palette QA](#wl-note-palette-popover-2026-08-14)
+- Real-scan PDF E2E after **`make audiveris-setup`** + **`make dev`** — [PDF I/O](#wl-pdf-io-2026-08-14)
+
+### Learnings
+
+- Document must **not** `replaceScoreFromEditor` into **`useScoreStore`** (that store is the sandbox SATB score).
+- Always preferring live `scoreToPartwiseMusicXML` would drop OMR-fidelity preview XML on unedited uploads; compare **sounding-note fingerprints** and ignore rest padding.
+- RiffScore draws a teal tie whenever `tied` is true with no same-pitch partner — suppress at the adapter, do not “fix” it in CSS.
+
+<a id="wl-document-live-melody-2026-08-14"></a>
+
+## Work log — Document live melody → generate (2026-08-14)
+
+### End goal
+
+Users can **edit the uploaded melody on Configure** (`/document`) before **Generate Harmonies**. Those staff edits must be the melody the engine (and reviewer sandbox) receives — not the original file.
+
+### Approach
+
+- Enable Document RiffScore editing with the **native** notation strip (Document has no side palettes).
+- Do **not** persist Document pulls into **`useScoreStore`**.
+- On Generate / reviewer continue: **`readLiveScore()`** → MusicXML when sounding notes differ from intake; else original **`previewMusicXML`** / **`File`**.
+
+### Root cause (user report)
+
+1. [`ScorePreviewPanel`](../frontend/src/components/organisms/ScorePreviewPanel.tsx) mounted RiffScore in **`presentation`** (read-only).
+2. [`document/page.tsx`](../frontend/src/app/document/page.tsx) **`handleGenerate`** posted **`storePreviewXml`** or the original **`File`**, never the live editor score.
+
+### Steps done so far
+
+| Piece | Behavior |
+|-------|----------|
+| Document RiffScore | **`enableScoreEditing`**, native notation strip visible, **no** HF sandbox toolbar plugins, **`persistScoreToStore={false}`** (does not overwrite sandbox Zustand) |
+| Generate | [`readLiveScore()`](../frontend/src/context/RiffScoreSessionContext.tsx) → [`resolveMelodyXmlForGeneration`](../frontend/src/lib/music/resolveMelodyXmlForGeneration.ts) → FormData MusicXML when **sounding notes** differ from intake; otherwise original preview XML / file (OMR fidelity) |
+| Copy | Preview: *You can edit this uploaded melody on the staff…*; Generate CTA: *Staff edits on the left are the melody Generate Harmonies uses.* |
+| Tests | [`resolveMelodyXmlForGeneration.test.ts`](../frontend/src/lib/music/resolveMelodyXmlForGeneration.test.ts) — live vs baseline vs rest-padding |
+
+### Current failure
+
+**Not browser-verified.** Change a pitch/duration on `/document` with `make dev` running → Generate → confirm sandbox **melody** matches. Until then this user report is still open.
+
+<a id="wl-note-palette-popover-2026-08-14"></a>
+
+## Work log — Note palette popover (2026-08-14)
+
+### End goal
+
+Keep the **full notation palette catalog** docked beside the score (MuseScore / Noteflight parity), and add a **selection-anchored popover** with up to **three user-chosen palette sections** so common symbols are one click away without hunting the side panel.
+
+### Product rules (shipped)
+
+| Rule | Implementation |
+|------|----------------|
+| Side panel stays the full catalog | [`SandboxPalettePanel.tsx`](../frontend/src/components/organisms/SandboxPalettePanel.tsx) unchanged symbol set; **default open** in edit mode; **F9** toggles |
+| Popover on note selection | [`NotePalettePopover.tsx`](../frontend/src/components/molecules/NotePalettePopover.tsx) in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) when `selection.length > 0` |
+| **0–3 sections**, under 3 OK | [`useNotePalettePopoverStore.ts`](../frontend/src/store/useNotePalettePopoverStore.ts) + [`clampPopoverSectionIds`](../frontend/src/lib/palettes/paletteRegistry.ts); default **Accidentals / Articulations / Dynamics** |
+| Persist until user changes | `localStorage` key **`harmonyforge-note-palette-popover`** |
+| Same tool dispatch | Popover + side panel → **`onPaletteSymbolDrop` → `handleToolSelect`** |
+| Print hide | **`hf-print-hide`** on popover + dock |
+| No duplicate top palette | Native RiffScore **second toolbar row** (durations / accidentals / tie / tuplets) hidden; those tools live in the dock + popover |
+| No hanging phantom ties | [`hfNoteEmitsRsTied`](../frontend/src/lib/music/riffscoreAdapter.ts) only draws a tie when the next sounding note is the same pitch |
+
+### Files
+
+- [`paletteRegistry.ts`](../frontend/src/lib/palettes/paletteRegistry.ts) — `PALETTE_SECTION_IDS`, `clampPopoverSectionIds`, `getPaletteSectionById`; Barlines **add/delete bar**
+- [`useNotePalettePopoverStore.ts`](../frontend/src/store/useNotePalettePopoverStore.ts) — persisted `sectionIds`, `toggleSection`
+- [`NotePalettePopover.tsx`](../frontend/src/components/molecules/NotePalettePopover.tsx) — anchored popover, gear picker, outer **`overflow-y-auto`**
+- [`SandboxPalettePanel.tsx`](../frontend/src/components/organisms/SandboxPalettePanel.tsx) — per-section **On note** checkbox + hint
+- [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) — `isPaletteOpen` default **`true`**; Tie pairs next same-pitch note
+- [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts) — **`hfNoteEmitsRsTied`**, **`dropHangingHfTieStarts`**
+- Vitest: [`paletteRegistry.test.ts`](../frontend/src/lib/palettes/paletteRegistry.test.ts), [`useNotePalettePopoverStore.test.ts`](../frontend/src/store/useNotePalettePopoverStore.test.ts), [`NotePalettePopover.test.ts`](../frontend/src/components/molecules/NotePalettePopover.test.ts), [`riffscoreAdapter.test.ts`](../frontend/src/lib/music/riffscoreAdapter.test.ts)
+
+### Manual QA (open)
+
+- Sandbox → palettes visible on load; click note → default 3 sections; toggle to 1 → reload → still 1
+- **F9** hides dock; popover still works when a note is selected
+- Theory Inspector float (`z-[100]`) stays above popover (`z-[40]`)
+- Print / PDF export: popover not visible
+- Top RiffScore bar shows playback / transpose / export — **not** duration/accidental/tie glyphs
+- Selecting a note does **not** draw a teal tie unless Tie was applied to a same-pitch pair
+- Popover scrolls when 3 sections + picker exceed the canvas
+
+<a id="wl-pdf-io-2026-08-14"></a>
+
+## Work log — PDF intake + file I/O hardening (2026-08-14)
+
+### End goal
+
+Local **PDF → MusicXML** must work after one-time setup; missing Audiveris must **fail fast** with honest errors (not a false `@napi-rs/canvas` hint when raster succeeded); upload/export paths must be consistent and reliable.
+
+### Root cause (user report)
+
+501 on Playground PDF upload: **`audiveris: binary not found`** after successful **`pdf-raster: rendered …`**. UI appended canvas install hint because **`intakeErrorHints`** matched any `pdf-raster:` substring. **`make dev`** did not export **`AUDIVERIS_BIN`** / **`JAVA_HOME`** even after **`make audiveris-setup`**.
+
+### Steps completed
+
+| Step | Outcome |
+|------|---------|
+| **`make audiveris-setup`** | Java 25 + Audiveris **5.9.0** (stable tag; **`development`** branch batch OMR broken on Java 25 — `Application is not launched`) built under **`scripts/audiveris/vendor/`**; tessdata installed. |
+| **`Makefile` `dev`** | Sources **`scripts/audiveris/paths.sh`** so Next inherits **`AUDIVERIS_BIN`**, **`TESSDATA_PREFIX`**, **`JAVA_HOME`**. |
+| **`paths.sh`** | **`export AUDIVERIS_BIN`**. |
+| **OMR preflight** | [`getOmrStatus` / `preflightAudiverisForOm`](../frontend/src/server/engine/parsers/audiverisPipeline.ts) — skip raster/batch when binary or Java missing. |
+| **`GET /api/health`** | Returns **`omr: { audiveris, java, ready }`**. |
+| **Playground banner** | Non-blocking warning when **`omr.ready === false`**. |
+| **`intakeErrorHints`** | Success raster lines no longer trigger canvas hint; troubleshooting anchor **`#wl-pdf-io-2026-08-14`**. |
+| **Upload parity** | **`HomeViewOnboarding`** + Document PDF re-fetch: client **`pages[]`**, **900s** timeout. |
+| **`downloadBlob`** | Append to DOM + delayed **`revokeObjectURL`**; reused in sandbox + RiffScore toolbar XML. |
+
+### Verification
+
+- **`make test` → 387** Vitest.
+- **`make lint` → 0 errors** (existing warnings only).
+- After **`make dev-clean && make dev`**: **`GET /api/health`** should show **`omr.ready: true`** when Audiveris is built.
+
+### Open
+
+- Manual E2E: upload real photo PDF → Document → Generate → Sandbox; export **PDF / MusicXML / WAV / MIDI**.
+- OMR **accuracy** on arbitrary scans (Audiveris limits unchanged).
 
 <a id="wl-sandbox-playback-reliability-2026-06-04"></a>
 
@@ -2337,6 +2494,8 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
+**2026-08-14 session (PDF I/O · palettes · Document live melody):** End goal, approach, steps, and **current failure** — **[Work log — Session 2026-08-14](#wl-session-2026-08-14)**. **Shipped:** Audiveris env on **`make dev`** + OMR preflight / **`omr.ready`**; docked palettes + note popover; Document staff editable; Generate serializes live sounding notes when they differ from intake. **`make test`:** **409**. **Current failure:** Configure pitch/duration edit → Generate → sandbox melody **not yet confirmed in the browser**.
+
 **2026-06-04 PM session (PDF photo intake · chord fixes · export toggles · canvas 500):** End goal, approach, steps, and **open work** — **[Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm)**. **Shipped:** photo-PDF heuristic + server raster; client **`pages[]`** first for PDF OMR; async intake; chord **measureLengthBeats** + detect tie-break; export modal **Letter Names / Chords** live OSMD preview; **`serverExternalPackages`** for **`@napi-rs/canvas`**. **Fixed:** misleading **Preview failed: 500** (canvas native module, not Audiveris). **`make test`:** **373**. **Open:** E2E upload QA after **`make dev-clean && make dev`**; OMR **quality** on real scans; regen **riffscore** patch if chord-playback guards only in `node_modules`.
 
 **2026-06-04 session (export modal · OSMD learner letter names · playback polish):** End goal, approach, completed steps, and **open work** — **[Work log — Export modal polish + OSMD learner letter names (2026-06-04)](#wl-export-osmd-learners-2026-06-04)**. **Shipped:** Export modal **OSMD PDF preview** (same path as print); formats **PDF / MusicXML / WAV / MIDI**; **HarmonyForge** export branding; **letter names** on PDF preview + print when **Letter Names** on (SVG in VexFlow note groups); tighter print margins + **final barline**; louder metronome + playhead through **rests**. **Resolved:** OSMD label misplacement (parent-local coords, avoid `text-after-edge`). **`make test`:** **338**. **Open:** PDF **OMR quality**; viola/tenor **manual QA**; toolbar **`Octave ↓`**.
@@ -2354,12 +2513,13 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 **Docs / ops (2026-04-07):** Onboarding and deploy guidance are now in-repo (README set + **[deployment.md](deployment.md)**). **Next operational step** for production is to **execute** that playbook (backend URL → Vercel env → `CORS_ORIGIN`), not more prose. If `node_modules/` was ever fully tracked, run **`git rm -r --cached node_modules`** once, then **`git add node_modules/README.md .gitignore`** and commit.
 
 **Active work / blockers:**
-1. **PDF → MusicXML (Audiveris OMR)** — **Wiring shipped (2026-06-03); photo-PDF path (2026-06-04 PM):** client **`pages[]`** + server **`pdfServerRaster`** + raster-first Audiveris — see **[work log — PDF intake 2026-06-04 PM](#wl-pdf-intake-chords-export-2026-06-04-pm)**. **If Playground shows `Preview failed: 500` with no Audiveris stderr:** restart dev after **`make install`** — likely **`@napi-rs/canvas`** / **`serverExternalPackages`**, not missing Audiveris. **Remaining gap:** OMR **accuracy** on arbitrary PDFs. Local: **`make audiveris-setup`** (Java 25+). Vercel: raster preview only — **[deployment.md](deployment.md)**.
-2. **RiffScore sample URLs** — **Mitigated (2026-04-06):** `patch-package` points the built-in piano sampler at **Tone.js Salamander** (`https://tonejs.github.io/audio/salamander/`) instead of missing `/audio/piano/*.mp3`.
-3. **OpenAI in dev / deploy** — **`OPENAI_API_KEY`** = **`sk-…`** secret only; **`OPENAI_MODEL`** = model id (e.g. **`gpt-4o-mini`**). If **swapped**, OpenAI **401** echoes the model name as the “key”; app **`getServerOpenAIEnv()`** can **recover** when one env looks like **`sk-…`** and the other like **`gpt-…`**. **`GET /api/theory-inspector`** returns **`hasApiKey`**, **`configHint`** (optional). Local: **`frontend/.env.local`** + **`make dev`**. Production: **[deployment.md](deployment.md)** — **Preview** vs **Production** env, **redeploy** after edits. See **[Work log — naturals / LLM / audit](#wl-sandbox-naturals-llm-audit-2026-04-27)**.
-4. **Turbopack / monorepo env** — **`frontend/next.config.ts`** loads env via `loadEnvConfig(appDir)` so `.env.local` applies without `turbopack.root` (which broke Tailwind `@import`). Residual lockfile warnings are acceptable until Next documents a single-root strategy that preserves CSS resolution.
-5. **Tutor follow-up quality** — **Live-score evidence refresh on chat send** implemented (2026-04-06): `sendMessage` rebuilds measure/part FACT lines and note-level blocks from the flushed Zustand score before `POST /api/theory-inspector`. **`make lint-frontend`** exits 0 with a few `react-hooks/exhaustive-deps` warnings; use **`make verify-strict`** for verify + lint.
-6. **Idea actions (`<<<IDEA_ACTIONS>>>`)** — **Longest matching part name** in `summary` disambiguates substring collisions (e.g. Violin vs Violin II); duplicate identical names still return null. Still watch: **off-beat suggestions** and **model omitting** `NOTE_IDS`.
+1. **Configure live melody → Generate (2026-08-14)** — Code shipped; **browser QA still open** (edit staff on `/document` → Generate → sandbox melody). See **[session work log](#wl-session-2026-08-14)**.
+2. **PDF → MusicXML (Audiveris OMR)** — **Wiring shipped (2026-06-03); photo-PDF path (2026-06-04 PM); I/O hardening (2026-08-14):** **`make dev`** exports **`AUDIVERIS_BIN`**; **`GET /api/health` `omr.ready`**. **If Playground shows `Preview failed: 500` with no Audiveris stderr:** restart after **`make install`** — likely **`@napi-rs/canvas`**. **If `Application is not launched`:** rebuild **Audiveris 5.9.0** via **`make audiveris-setup`**. **Remaining gap:** OMR **accuracy** + E2E on a real scan. Vercel: raster preview only — **[deployment.md](deployment.md)**.
+3. **RiffScore sample URLs** — **Mitigated (2026-04-06):** `patch-package` points the built-in piano sampler at **Tone.js Salamander** (`https://tonejs.github.io/audio/salamander/`) instead of missing `/audio/piano/*.mp3`.
+4. **OpenAI in dev / deploy** — **`OPENAI_API_KEY`** = **`sk-…`** secret only; **`OPENAI_MODEL`** = model id (e.g. **`gpt-4o-mini`**). If **swapped**, OpenAI **401** echoes the model name as the “key”; app **`getServerOpenAIEnv()`** can **recover** when one env looks like **`sk-…`** and the other like **`gpt-…`**. **`GET /api/theory-inspector`** returns **`hasApiKey`**, **`configHint`** (optional). Local: **`frontend/.env.local`** + **`make dev`**. Production: **[deployment.md](deployment.md)** — **Preview** vs **Production** env, **redeploy** after edits. See **[Work log — naturals / LLM / audit](#wl-sandbox-naturals-llm-audit-2026-04-27)**.
+5. **Turbopack / monorepo env** — **`frontend/next.config.ts`** loads env via `loadEnvConfig(appDir)` so `.env.local` applies without `turbopack.root` (which broke Tailwind `@import`). Residual lockfile warnings are acceptable until Next documents a single-root strategy that preserves CSS resolution.
+6. **Tutor follow-up quality** — **Live-score evidence refresh on chat send** implemented (2026-04-06): `sendMessage` rebuilds measure/part FACT lines and note-level blocks from the flushed Zustand score before `POST /api/theory-inspector`. **`make lint-frontend`** exits 0 with a few `react-hooks/exhaustive-deps` warnings; use **`make verify-strict`** for verify + lint.
+7. **Idea actions (`<<<IDEA_ACTIONS>>>`)** — **Longest matching part name** in `summary` disambiguates substring collisions (e.g. Violin vs Violin II); duplicate identical names still return null. Still watch: **off-beat suggestions** and **model omitting** `NOTE_IDS`.
 
 **Recently cleared (not a blocker):** **Tactile Sandbox exports (2026-04-13)** — live-score flush, full export modal formats (XML, JSON, MIDI, PNG viewport, WAV, ZIP, chord-chart, print), coachmark parity; see **[Work log — Tactile Sandbox exports…](#wl-sandbox-exports-2026-04-13)**. **Symbolic MusicXML/MIDI intake (2026-04-07)** — mislabeled extensions, `.mxml`, ZIP-as-`.xml` on Document, Playground preview parity via engine API, reviewer **`readMelodyXml`** uses server preview when set; **`make dev`** no longer crashes on MIDI import (`tsx` + **`@tonejs/midi`**). Details: **[Work log — Symbolic intake…](#wl-intake-symbolic-2026-04-07)**. **Theory Inspector explanation-level toggle** removed (2026-04-03); tutor depth is fixed to **`intermediate`** by default—no UI step before chat or suggest. **Inspector split layout + IDEA_ACTIONS + ghost pitch labels + note-input preview label** shipped 2026-04-06; **silent Accept** fixed same pass via **NOTE_IDS** + **`resolveIdeaActionNoteId`**.
 
@@ -2936,7 +3096,16 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-06, refreshed 2026-06-03):**
+**Handover template (2026-08-14):**
+- **Canonical summary:** **[Work log — Session 2026-08-14](#wl-session-2026-08-14)** — end goal, approach, steps, **current failure**.
+- **End goal:** Upload → **edit melody on Configure** → Generate SATB from **those notes** → Sandbox palettes. Local PDF OMR after **`make audiveris-setup`**; honest errors when Audiveris is missing.
+- **Approach:** (1) `make dev` exports Audiveris env + OMR preflight. (2) Docked palettes + 0–3 note popover; hide native notation strip in sandbox. (3) Document editor does not write Zustand; Generate uses live sounding notes only when they differ from intake.
+- **Shipped this tranche:** PDF I/O, palettes/ties, Document live melody. **`make test`:** **409**.
+- **Current failure:** Browser QA — change pitch/duration on `/document` → Generate → sandbox melody matches. Also: palette F9/print QA; real-scan PDF E2E.
+- **Key files:** `ScorePreviewPanel.tsx`, `document/page.tsx`, `resolveMelodyXmlForGeneration.ts`, `RiffScoreEditor.tsx`, `NotePalettePopover.tsx`, `useNotePalettePopoverStore.ts`, `riffscoreAdapter.ts`, `audiverisPipeline.ts`, `intakeErrorHints.ts`, `scripts/audiveris/paths.sh`, `Makefile`.
+- **Run:** **`make audiveris-setup`** (once) → **`make dev-clean && make dev`** → http://localhost:3000. **`GET /api/health`** should include **`omr.ready`**.
+
+**Older handover (2026-06, refreshed 2026-06-03):**
 - **Canonical summary:** **[Work log — OSMD export + Audiveris PDF intake (2026-06-03)](#wl-export-audiveris-2026-06-03)** — end goal, approach, shipped steps, **current failure** (OMR quality QA + RiffScore re-verify).
 - **End goal:** (1) **PDF → MusicXML** via **Audiveris** on Playground/Document/Generate. (2) **Sandbox PDF/Print export** via **OSMD** (engraved notation, no app chrome). (3) Honest UX during multi-minute OMR. (4) Tooling under **`scripts/audiveris/`** (legacy **`approach_source_audiveris/`** removed).
 - **Approach:** **`audiverisPipeline.ts`** two-phase batch (import → `.omr` → export `.mxl`/`.xml`); client PDF raster = preview-only; **`ExportPrintRoot`** + **`PrintableScore`** + **`scoreToPartwiseMusicXML`** (beams, metronome); **`TransitionOverlay`** caps at 90% until server returns; Java 25 preflight + Homebrew **`JAVA_HOME`** auto-detect.

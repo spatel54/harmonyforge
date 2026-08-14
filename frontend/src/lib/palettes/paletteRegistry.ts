@@ -112,6 +112,9 @@ export const PALETTE_SECTIONS: PaletteSection[] = [
       { id: "barline-end-repeat", label: "End |⫶", glyph: "𝄇", toolId: "measure-barline-end-repeat" },
       { id: "barline-dashed", label: "Dashed", glyph: "┆", toolId: "measure-barline-dashed" },
       { id: "barline-tick", label: "Tick", glyph: "╵", toolId: "measure-barline-tick" },
+      { id: "meas-add-after", label: "Add bar", glyph: "+", toolId: "measure-insert-after", title: "Insert a measure after the focused bar" },
+      { id: "meas-add-before", label: "Bar before", glyph: "↥", toolId: "measure-insert-before", title: "Insert a measure before the focused bar" },
+      { id: "meas-delete", label: "Delete bar", glyph: "✕", toolId: "measure-delete", title: "Delete the focused measure" },
     ],
   },
   {
@@ -243,4 +246,37 @@ export function findPaletteItem(toolId: string): PaletteItem | null {
     if (match) return match;
   }
   return null;
+}
+
+/** Stable ordered ids for every palette section (popover clamp + picker). */
+export const PALETTE_SECTION_IDS: readonly string[] = PALETTE_SECTIONS.map((s) => s.id);
+
+/** Default note-selection popover sections — persisted until the user changes them. */
+export const DEFAULT_POPOVER_SECTION_IDS: readonly string[] = [
+  "accidentals",
+  "articulations",
+  "dynamics",
+];
+
+export const MAX_POPOVER_SECTIONS = 3;
+
+/**
+ * Dedupe, drop unknown ids, and cap at {@link MAX_POPOVER_SECTIONS}.
+ * Used when hydrating localStorage and when the user toggles sections.
+ */
+export function clampPopoverSectionIds(ids: readonly string[]): string[] {
+  const valid = new Set(PALETTE_SECTION_IDS);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!valid.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= MAX_POPOVER_SECTIONS) break;
+  }
+  return out;
+}
+
+export function getPaletteSectionById(id: string): PaletteSection | undefined {
+  return PALETTE_SECTIONS.find((s) => s.id === id);
 }

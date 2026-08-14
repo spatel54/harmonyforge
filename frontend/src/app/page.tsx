@@ -41,6 +41,23 @@ export default function Home() {
     setShowOnboarding(!isOnboardingComplete());
   }, []);
 
+  const [omrReady, setOmrReady] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/health")
+      .then((r) => r.json())
+      .then((data: { omr?: { ready?: boolean } }) => {
+        if (!cancelled) setOmrReady(data.omr?.ready ?? false);
+      })
+      .catch(() => {
+        if (!cancelled) setOmrReady(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleFileUpload = async (files: FileList) => {
     const file = files[0];
     if (!file) return;
@@ -121,6 +138,26 @@ export default function Home() {
             className="hf-playground-stand w-full max-w-[1000px] shrink-0 mt-4 sm:mt-8 flex flex-col gap-4 pb-6"
             data-coachmark="step-1"
           >
+            {omrReady === false && (
+              <div
+                className="rounded-xl border px-4 py-3 text-left"
+                role="status"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--hf-accent) 8%, var(--hf-panel-bg))",
+                  borderColor: "color-mix(in srgb, var(--hf-accent) 35%, var(--hf-detail))",
+                }}
+              >
+                <p
+                  className="font-sans text-[12px] sm:text-[13px] leading-relaxed"
+                  style={{ color: "var(--hf-text-primary)" }}
+                >
+                  <strong>PDF uploads:</strong> Audiveris is not set up on this dev server. Run{" "}
+                  <code className="font-mono text-[11px]">make audiveris-setup</code> (Java 25+), then
+                  restart <code className="font-mono text-[11px]">make dev</code>. MusicXML, MXL,
+                  and MIDI work without OMR.
+                </p>
+              </div>
+            )}
             {uploadError && (
               <div
                 className="hf-playground-error rounded-xl border px-4 py-3.5 text-left shadow-md"

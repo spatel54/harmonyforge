@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-RUN git clone --depth 1 --branch development https://github.com/Audiveris/audiveris.git
+RUN git clone --depth 1 --branch 5.9.0 https://github.com/Audiveris/audiveris.git
 WORKDIR /build/audiveris
 RUN ./gradlew installDist --no-daemon -x test
 

@@ -451,7 +451,15 @@ export const EnsembleBuilderPanel = React.forwardRef<
       />
 
       {/* Generate CTA row — Node nrVwz / rJKG6 */}
-      <div className="flex justify-end w-full">
+      <div className="flex flex-col items-end gap-2 w-full">
+        <p
+          className="font-mono text-[10px] leading-snug text-right m-0 max-w-[280px]"
+          style={{ color: "var(--hf-text-secondary)" }}
+        >
+          {studyPrimaryVariant === "reviewer_melody"
+            ? "Staff edits on the left are kept when you continue to the sandbox."
+            : "Staff edits on the left are the melody Generate Harmonies uses."}
+        </p>
         <button
           type="button"
           disabled={isGenerating}

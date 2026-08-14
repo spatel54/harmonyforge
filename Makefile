@@ -27,8 +27,11 @@ dev-clean:
 	@echo "Ports 3000, 3001 cleared (and Next dev lock removed if present)."
 
 # Start Next.js dev server (single process; engine runs inside /api/* routes).
+# Sources Audiveris paths when built so PDF OMR works without manual env exports.
 dev:
-	@cd frontend && npm run dev
+	@bash -c 'set -euo pipefail; \
+		source scripts/audiveris/paths.sh 2>/dev/null || true; \
+		cd frontend && npm run dev'
 
 dev-frontend: dev
 

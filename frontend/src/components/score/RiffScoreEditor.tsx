@@ -48,6 +48,7 @@ import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
 import {
   editableScoreToRiffConfig,
   hfNotePitchFromLiveRsScore,
+  riffScoreToEditableScore,
   shouldShowChordNotation,
 } from "@/lib/music/riffscoreAdapter";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
@@ -55,12 +56,10 @@ import { cn } from "@/lib/utils";
 import {
   cloneScore,
   getNoteById,
-  setNoteDynamics,
-  toggleNoteDots,
-  toggleNoteRests,
   transposeNotes,
 } from "@/lib/music/scoreUtils";
 import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
+import { downloadBlob } from "@/lib/sandbox/exportFormats";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import {
@@ -78,6 +77,7 @@ import {
 } from "@/lib/music/riffscorePositions";
 import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
+import { NotePalettePopover } from "@/components/molecules/NotePalettePopover";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import { applyDeleteSelectionAsRests } from "@/lib/sandbox/deleteSelectionAsRests";
@@ -282,6 +282,15 @@ export interface RiffScoreEditorProps {
   presentation?: boolean;
   /** When false, RiffScore does not accept edits (View mode in sandbox). Default true. */
   enableScoreEditing?: boolean;
+  /**
+   * When true (default), hide RiffScore's native duration/accidental/tie strip — sandbox palettes own those tools.
+   * Document melody editing sets this false so the native strip is available.
+   */
+  hideNativeNotationStrip?: boolean;
+  /** HF undo/transpose/export plugins on the RiffScore toolbar. Default true; Document sets false. */
+  includeHarmonyforgeToolbarPlugins?: boolean;
+  /** Write editor pulls into `useScoreStore`. Default true; Document sets false so sandbox score is not overwritten. */
+  persistScoreToStore?: boolean;
   /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
   onPaletteSymbolDrop?: (toolId: string) => void;
   /** Fired when the RiffScore editor API is ready (e.g. document preview playback). */
@@ -329,6 +338,9 @@ export function RiffScoreEditor({
   allowNoteNameLabelsInPresentation = false,
   presentation = false,
   enableScoreEditing = true,
+  hideNativeNotationStrip = true,
+  includeHarmonyforgeToolbarPlugins = true,
+  persistScoreToStore = true,
   onPaletteSymbolDrop,
   onEditorApiReady,
   onRiffInstanceId,
@@ -402,9 +414,35 @@ export function RiffScoreEditor({
   );
 
   const { pushToRiffScore, getRsToHf, flushToZustand, syncMultiPitchFromBaseline, resetMultiPitchDragSync } =
-    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds, { showChordTrack });
+    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds, {
+      showChordTrack,
+      persistToStore: persistScoreToStore,
+    });
   const flushToZustandRef = useRef(flushToZustand);
   flushToZustandRef.current = flushToZustand;
+  const getRsToHfRef = useRef(getRsToHf);
+  getRsToHfRef.current = getRsToHf;
+  const scoreForLiveReadRef = useRef(score);
+  scoreForLiveReadRef.current = score;
+
+  const readLiveScore = useCallback((): EditableScore | null => {
+    const api = apiRef.current;
+    const baseline = scoreForLiveReadRef.current;
+    if (!api) return baseline;
+    try {
+      const rsScore = api.getScore();
+      return riffScoreToEditableScore(
+        rsScore,
+        getRsToHfRef.current(),
+        baseline?.parts,
+        baseline,
+      );
+    } catch {
+      return baseline;
+    }
+  }, []);
+  const readLiveScoreRef = useRef(readLiveScore);
+  readLiveScoreRef.current = readLiveScore;
   const runEditorHistoryOp = useCallback((op: "undo" | "redo") => {
     const api = apiRef.current;
     if (!api) return;
@@ -417,8 +455,6 @@ export function RiffScoreEditor({
       requestAnimationFrame(() => flushToZustandRef.current());
     });
   }, []);
-  const getRsToHfRef = useRef(getRsToHf);
-  getRsToHfRef.current = getRsToHf;
   const syncMultiPitchFromBaselineRef = useRef(syncMultiPitchFromBaseline);
   syncMultiPitchFromBaselineRef.current = syncMultiPitchFromBaseline;
   const getPitchGroupNoteIdsRef = useRef(getPitchGroupNoteIds);
@@ -448,12 +484,10 @@ export function RiffScoreEditor({
       () => useScoreStore.getState().score ?? score,
     );
     if (!live) return;
-    const blob = new Blob([scoreToMusicXML(live)], { type: "application/xml" });
-    const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(blob);
-    anchor.download = "harmony-forge-score.xml";
-    anchor.click();
-    URL.revokeObjectURL(anchor.href);
+    downloadBlob(
+      new Blob([scoreToMusicXML(live)], { type: "application/xml" }),
+      "harmony-forge-score.xml",
+    );
   };
 
   const runToolbarAction = useCallback(
@@ -548,17 +582,6 @@ export function RiffScoreEditor({
     });
   };
 
-  const toggleSelectedRests = () => {
-    if (!score) return;
-    flushToZustandRef.current();
-    requestAnimationFrame(() => {
-      const liveScore = useScoreStore.getState().score ?? score;
-      const ids = getActiveNoteIds();
-      if (ids.size === 0) return;
-      applyScore(toggleNoteRests(liveScore, ids));
-    });
-  };
-
   /* RiffScore toolbar: onClick handlers read apiRef only when the user clicks, not during render. */
   const toolbarPlugins = useMemo(
     () => {
@@ -575,6 +598,8 @@ export function RiffScoreEditor({
         isDashed?: boolean;
         className?: string;
       }> = [];
+
+      if (!includeHarmonyforgeToolbarPlugins) return plugins;
 
       plugins.push(
         {
@@ -652,55 +677,6 @@ export function RiffScoreEditor({
             ),
         },
         {
-          id: "hf-action-dot-toggle",
-          label: "Dotted",
-          title: "Add/remove a dot on selected notes (. key)",
-          icon: <span className="text-[10px] font-semibold">DOT</span>,
-          disabled: !hasSelection,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () =>
-            runToolbarAction("hf-action-dot-toggle", () =>
-              applyOnSelection((current, ids) => toggleNoteDots(current, ids)),
-            ),
-        },
-        {
-          id: "hf-action-rest-toggle",
-          label: "Rest",
-          title: "Swap selection between note and rest (0)",
-          icon: <span className="text-[10px] font-semibold">RST</span>,
-          disabled: !hasSelection,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => runToolbarAction("hf-action-rest-toggle", toggleSelectedRests),
-        },
-        {
-          id: "hf-action-dyn-p",
-          label: "Piano",
-          title: "Mark selection piano (soft — p)",
-          icon: <span className="text-[10px] font-semibold">p</span>,
-          disabled: !hasSelection,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () =>
-            runToolbarAction("hf-action-dyn-p", () =>
-              applyOnSelection((current, ids) => setNoteDynamics(current, ids, "p")),
-            ),
-        },
-        {
-          id: "hf-action-dyn-f",
-          label: "Forte",
-          title: "Mark selection forte (loud — f)",
-          icon: <span className="text-[10px] font-semibold">f</span>,
-          disabled: !hasSelection,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () =>
-            runToolbarAction("hf-action-dyn-f", () =>
-              applyOnSelection((current, ids) => setNoteDynamics(current, ids, "f")),
-            ),
-        },
-        {
           id: "hf-action-export-xml",
           label: "Export XML",
           title: "Download the score as MusicXML",
@@ -728,11 +704,11 @@ export function RiffScoreEditor({
 
       return plugins;
     },
-    // `applyOnSelection` / `downloadXml` / `toggleSelectedRests` are inline helpers
+    // `applyOnSelection` / `downloadXml` are inline helpers
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hasSelection, score, selectedNoteIds, runEditorHistoryOp, runToolbarAction, onToolbarPrint],
+    [hasSelection, score, selectedNoteIds, runEditorHistoryOp, runToolbarAction, onToolbarPrint, includeHarmonyforgeToolbarPlugins],
   );
 
   // Build config from score, passing current theme
@@ -1095,6 +1071,7 @@ export function RiffScoreEditor({
       getPitchGroupNoteIds,
       getTransposeTargetNoteIds,
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
+      readLiveScore: () => readLiveScoreRef.current(),
     };
     onSessionReady(session);
   }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, getTransposeTargetNoteIds, runEditorHistoryOp]);
@@ -1105,7 +1082,7 @@ export function RiffScoreEditor({
    */
   useEffect(() => {
     const root = containerRef.current;
-    if (!root || !isReady || presentation || !enableScoreEditing) return;
+    if (!root || !isReady || presentation || !enableScoreEditing || !persistScoreToStore) return;
 
     const makeSessionFromRefs = (): RiffScoreSessionHandles => ({
       flushToZustand: () => flushToZustandRef.current(),
@@ -1116,6 +1093,7 @@ export function RiffScoreEditor({
       getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
       getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
+      readLiveScore: () => readLiveScoreRef.current(),
     });
 
     const onCaptureClick = (e: MouseEvent) => {
@@ -1135,12 +1113,12 @@ export function RiffScoreEditor({
 
     root.addEventListener("mousedown", onCaptureClick, true);
     return () => root.removeEventListener("mousedown", onCaptureClick, true);
-  }, [isReady, presentation, enableScoreEditing, runEditorHistoryOp]);
+  }, [isReady, presentation, enableScoreEditing, persistScoreToStore, runEditorHistoryOp]);
 
   /** RiffScore in-place edits; undo then HF rest substitution / duration split. */
   useEffect(() => {
     const api = apiRef.current;
-    if (!api || !isReady || presentation || !enableScoreEditing) return;
+    if (!api || !isReady || presentation || !enableScoreEditing || !persistScoreToStore) return;
 
     const makeSession = (): RiffScoreSessionHandles => ({
       flushToZustand: () => flushToZustandRef.current(),
@@ -1151,6 +1129,7 @@ export function RiffScoreEditor({
       getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
       getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
+      readLiveScore: () => readLiveScoreRef.current(),
     });
 
     const unsub = api.on(
@@ -1203,6 +1182,7 @@ export function RiffScoreEditor({
     isReady,
     presentation,
     enableScoreEditing,
+    persistScoreToStore,
     runEditorHistoryOp,
     selectedNoteIds,
   ]);
@@ -1224,9 +1204,9 @@ export function RiffScoreEditor({
   }, [isReady, score, pushToRiffScore]);
 
   useEffect(() => {
-    if (!isReady || !score) return;
+    if (!isReady || !score || !persistScoreToStore) return;
     pushToRiffScore();
-  }, [isReady, score, showChordTrack, pushToRiffScore]);
+  }, [isReady, score, showChordTrack, pushToRiffScore, persistScoreToStore]);
 
   // Extract note positions after renders for overlay positioning
   useEffect(() => {
@@ -1636,6 +1616,7 @@ export function RiffScoreEditor({
       className={cn(
         "relative w-full h-full min-h-[200px] riffscore-hf-wrapper",
         presentation && "riffscore-hf-wrapper--presentation",
+        hideNativeNotationStrip && "riffscore-hf-wrapper--no-notation-strip",
         showNoteNameLabels && (!presentation || allowNoteNameLabelsInPresentation) && "pt-5",
         className,
       )}
@@ -1717,6 +1698,11 @@ export function RiffScoreEditor({
           display: none !important;
         }
         .riffscore-hf-wrapper .riff-Toolbar__row > *:has(+ .riff-Toolbar__library-wrapper) {
+          display: none !important;
+        }
+        /* Notation palettes live in the docked panel + note popover (sandbox). */
+        .riffscore-hf-wrapper--no-notation-strip .riff-Toolbar > .riff-Toolbar__row ~ .riff-Toolbar__row,
+        .riffscore-hf-wrapper--no-notation-strip .riff-Toolbar > .riff-Divider--horizontal {
           display: none !important;
         }
         /*
@@ -2144,6 +2130,17 @@ export function RiffScoreEditor({
         >
           Hover this rest to preview pitch, click to place, or type A–G
         </div>
+      )}
+
+      {!presentation && onPaletteSymbolDrop && selection.length > 0 && (
+        <NotePalettePopover
+          selectionCount={selection.length}
+          notePositions={notePositions}
+          selectedNoteIds={selectedIds}
+          hasSelection={selection.length > 0}
+          onActivate={(toolId) => onPaletteSymbolDrop(toolId)}
+          containerRef={containerRef}
+        />
       )}
 
       {/* Ghost note correction overlays */}

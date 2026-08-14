@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { EditableScore } from "@/lib/music/scoreTypes";
 
 export type RiffScoreSessionHandles = {
   flushToZustand: () => void;
@@ -25,6 +26,11 @@ export type RiffScoreSessionHandles = {
    * lengthening one beamed note does not also retarget siblings from an earlier multi-select.
    */
   getDurationTargetNoteIds: () => Set<string>;
+  /**
+   * Live RiffScore → EditableScore without writing Zustand.
+   * Document generate uses this so melody edits are not the original upload.
+   */
+  readLiveScore: () => EditableScore | null;
 };
 
 export const RiffScoreSessionContext = createContext<RiffScoreSessionHandles | null>(null);

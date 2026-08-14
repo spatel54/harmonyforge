@@ -40,12 +40,14 @@ Both paths produce the same UX for symbolic files; PDF melody intake requires Au
 
 If Theory Inspector returns **401** and the error text names a **model** (e.g. `gpt-4o-mini`) instead of `sk-…`, you almost certainly put the **model id in `OPENAI_API_KEY`** and the **secret in `OPENAI_MODEL`**. Swap them in the Vercel dashboard, attach vars to **Preview** as well as **Production** if you use preview URLs, and **redeploy**. The app’s **`getServerOpenAIEnv()`** can auto-recover when one side looks like **`sk-…`** and the other like **`gpt-…`**, but fixing env names is the durable fix—see **[progress.md — 2026-04-27 naturals / LLM / audit](progress.md#wl-sandbox-naturals-llm-audit-2026-04-27)**.
 
-6. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }`.
+6. **Deploy** → confirm `/api/health` returns `{ "status": "ok" }` (self-hosted / local with Audiveris also **`omr.ready`**).
 7. **Smoke test** the upload → generate → sandbox flow with MusicXML (fastest) and MXL.
 
 **PDF on Vercel:** the browser client-rasterizes PDFs via `pdfjs-dist` so you always see a thumbnail on `/document`. Running **Audiveris** requires Java on the server — if you need PDF → MusicXML, use Path B or local **`make audiveris-setup`**.
 
 **Local dev — `Preview failed: 500` on PDF:** If the Next dev log shows **`@napi-rs/canvas`** / **`skia.*.node` MODULE_NOT_FOUND**, run **`make install`**, ensure **`frontend/next.config.ts`** lists **`@napi-rs/canvas`** under **`serverExternalPackages`**, then **`make dev-clean && make dev`**. That failure is **not** fixed by Audiveris setup alone — see **[progress.md — PDF intake 2026-06-04 PM](progress.md#wl-pdf-intake-chords-export-2026-06-04-pm)**.
+
+**Local dev — Audiveris batch fails with `Application is not launched`:** You likely built the **`development`** branch. Re-run **`make audiveris-setup`** — it pins **Audiveris 5.9.0** (see **[progress.md — PDF I/O 2026-08-14](progress.md#wl-pdf-io-2026-08-14)**).
 
 > Never put secrets in `NEXT_PUBLIC_*` variables — they're in the client bundle.
 
@@ -103,8 +105,8 @@ Upload a PDF on Playground after setup completes.
 ```text
 1. Configure env vars on the host
 2. Build / deploy
-3. GET /api/health → expect { status: "ok" }
-4. Upload a MusicXML sample → /document shows preview → Generate → Sandbox
+3. **GET /api/health** → expect `{ status: "ok" }`. Local with Audiveris: **`omr.ready: true`**.
+4. Upload a MusicXML sample → /document shows **editable** preview → **optionally fix notes** → Generate → Sandbox melody matches the staff
 5. (Docker or local Audiveris) Upload a PDF → /document shows raster + melody preview → Generate → Sandbox
 6. Sandbox → Export → PDF → print preview shows OSMD engraving (no app chrome)
 ```

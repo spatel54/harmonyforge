@@ -44,6 +44,7 @@ import { shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
 import { scoreToMusicXML, scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import {
+  downloadBlob,
   isSandboxExportFormatId,
   runSandboxExport,
   scoreToBrandedExportMusicXML,
@@ -450,7 +451,7 @@ function TactileSandboxPageInner({
 
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
   const printRootRef = React.useRef<PrintableScoreHandle>(null);
-  const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = React.useState(true);
   const notationMode = "edit" as const;
   const [showExpressiveSovereigntyCallout, setShowExpressiveSovereigntyCallout] = React.useState(
     () =>
@@ -727,14 +728,12 @@ function TactileSandboxPageInner({
   const downloadLiveXml = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     if (!live) return;
-    const blob = new Blob([scoreToExportMusicXML(live, sourceFileName)], {
-      type: "application/vnd.recordare.musicxml+xml",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "harmony-forge-score.musicxml";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(
+      new Blob([scoreToExportMusicXML(live, sourceFileName)], {
+        type: "application/vnd.recordare.musicxml+xml",
+      }),
+      "harmony-forge-score.musicxml",
+    );
   }, [sourceFileName]);
 
   /**
@@ -853,10 +852,22 @@ function TactileSandboxPageInner({
     const ids = new Set(selection.map((s) => s.noteId));
     const next = cloneScore(score);
     for (const part of next.parts) {
+      const sounding: { note: (typeof part.measures)[0]["notes"][0] }[] = [];
       for (const measure of part.measures) {
         for (const note of measure.notes) {
-          if (!ids.has(note.id) || note.isRest) continue;
-          note.tie = note.tie ? undefined : "start";
+          if (!note.isRest) sounding.push({ note });
+        }
+      }
+      for (let i = 0; i < sounding.length; i++) {
+        const note = sounding[i]!.note;
+        if (!ids.has(note.id)) continue;
+        const partner = sounding[i + 1]?.note;
+        if (note.tie) {
+          delete note.tie;
+          if (partner?.tie === "stop") delete partner.tie;
+        } else if (partner && partner.pitch === note.pitch) {
+          note.tie = "start";
+          if (!partner.tie) partner.tie = "stop";
         }
       }
     }

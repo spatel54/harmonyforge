@@ -215,7 +215,40 @@ export function buildIdMap(hfScore: EditableScore, rsScore: RsScore): { hfToRs: 
 // EditableScore -> RiffScoreConfig
 // ---------------------------------------------------------------------------
 
-function hfNoteToRsEvent(note: HfNote): ScoreEvent {
+/**
+ * RiffScore draws a hanging arc whenever `tied` is true and the next event
+ * is not the same pitch. Only emit `tied` when this note actually continues
+ * into a following sounding note of the same pitch.
+ */
+export function hfNoteEmitsRsTied(note: HfNote, nextSounding: HfNote | undefined): boolean {
+  if (note.isRest) return false;
+  if (note.tie !== "start" && note.tie !== "continue") return false;
+  if (!nextSounding || nextSounding.isRest) return false;
+  return nextSounding.pitch === note.pitch;
+}
+
+function nextSoundingNoteInPart(
+  part: Part,
+  measureIndex: number,
+  noteIndex: number,
+): HfNote | undefined {
+  const startMeasure = part.measures[measureIndex];
+  if (!startMeasure) return undefined;
+  for (let ni = noteIndex + 1; ni < startMeasure.notes.length; ni++) {
+    const n = startMeasure.notes[ni];
+    if (n.isRest) return undefined;
+    return n;
+  }
+  for (let mi = measureIndex + 1; mi < part.measures.length; mi++) {
+    for (const n of part.measures[mi]!.notes) {
+      if (n.isRest) return undefined;
+      return n;
+    }
+  }
+  return undefined;
+}
+
+function hfNoteToRsEvent(note: HfNote, nextSounding?: HfNote): ScoreEvent {
   const isRest = Boolean(note.isRest);
   const { letter, accidental, octave } = parsePitch(note.pitch);
   const rsNote: RsNote = {
@@ -224,7 +257,7 @@ function hfNoteToRsEvent(note: HfNote): ScoreEvent {
     // (HF stores combined strings like "C#4" in Zustand).
     pitch: isRest ? null : `${letter}${octave}`,
     accidental: isRest ? null : accidental,
-    tied: !isRest && (note.tie === "start" || note.tie === "continue"),
+    tied: hfNoteEmitsRsTied(note, nextSounding),
     isRest,
   };
 
@@ -237,10 +270,13 @@ function hfNoteToRsEvent(note: HfNote): ScoreEvent {
   };
 }
 
-function hfMeasureToRs(measure: HfMeasure): RsMeasure {
+function hfMeasureToRs(part: Part, measureIndex: number): RsMeasure {
+  const measure = part.measures[measureIndex]!;
   return {
     id: `rsm-${measure.id}`,
-    events: measure.notes.map(hfNoteToRsEvent),
+    events: measure.notes.map((note, noteIndex) =>
+      hfNoteToRsEvent(note, nextSoundingNoteInPart(part, measureIndex, noteIndex)),
+    ),
   };
 }
 
@@ -250,7 +286,7 @@ function hfPartToRsStaff(part: Part): RsStaff {
     id: `rss-${part.id}`,
     clef: hfClefToRs(part.clef),
     keySignature: hfKeySigToRs(firstMeasure?.keySignature),
-    measures: part.measures.map(hfMeasureToRs),
+    measures: part.measures.map((_, mi) => hfMeasureToRs(part, mi)),
   };
 }
 
@@ -441,6 +477,27 @@ function rsStaffToHfPart(
   };
 }
 
+function dropHangingHfTieStarts(part: Part): void {
+  const flat: HfNote[] = [];
+  for (const measure of part.measures) {
+    for (const note of measure.notes) flat.push(note);
+  }
+  for (let i = 0; i < flat.length; i++) {
+    const note = flat[i]!;
+    if (note.tie !== "start" && note.tie !== "continue") continue;
+    let next: HfNote | undefined;
+    for (let j = i + 1; j < flat.length; j++) {
+      const cand = flat[j]!;
+      if (cand.isRest) break;
+      next = cand;
+      break;
+    }
+    if (!hfNoteEmitsRsTied(note, next)) {
+      delete note.tie;
+    }
+  }
+}
+
 const DEFAULT_PART_NAMES = ["Soprano", "Alto", "Tenor", "Bass"];
 const DEFAULT_PART_IDS = ["soprano", "alto", "tenor", "bass"];
 
@@ -458,7 +515,9 @@ export function riffScoreToEditableScore(
   const parts = rsScore.staves.map((staff, i) => {
     const name = originalParts?.[i]?.name ?? DEFAULT_PART_NAMES[i] ?? `Part ${i + 1}`;
     const id = originalParts?.[i]?.id ?? DEFAULT_PART_IDS[i] ?? `part-${i}`;
-    return rsStaffToHfPart(staff, name, id, rsToHf, previousScore);
+    const part = rsStaffToHfPart(staff, name, id, rsToHf, previousScore);
+    dropHangingHfTieStarts(part);
+    return part;
   });
 
   // Propagate key/time signature from the RiffScore score level

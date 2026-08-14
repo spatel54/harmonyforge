@@ -15,6 +15,8 @@ import { useGenerationConfigStore } from "@/store/useGenerationConfigStore";
 import type { GenerationConfig } from "@/components/organisms/EnsembleBuilderPanel";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import type { EditableScore } from "@/lib/music/scoreTypes";
+import { resolveMelodyXmlForGeneration } from "@/lib/music/resolveMelodyXmlForGeneration";
+import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import { OnboardingCoachmark } from "@/components/organisms/OnboardingCoachmark";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
 import { COACHMARKS_ENABLED, useCoachmarkStore } from "@/store/useCoachmarkStore";
@@ -76,7 +78,7 @@ function deriveDisplayScoreTitle(
 /**
  * Document Page — /document
  * Step 2: Score preview (left) + Ensemble Builder (right).
- * Parses uploaded MusicXML to show preview; on "Generate Harmonies" → POST file + config → store MusicXML → navigate to /sandbox.
+ * Parses uploaded MusicXML to show preview; on "Generate Harmonies" → POST **live edited** melody + config → store MusicXML → navigate to /sandbox.
  */
 export default function DocumentPage() {
   const router = useRouter();
@@ -110,6 +112,7 @@ export default function DocumentPage() {
   // Client-side PDF rasterization — always renders a visible first page, even
   // when the server lacks Audiveris (Vercel). Melody XML comes from Playground intake or a PDF-only re-fetch.
   const pdfPreview = useClientPdfPreview(file);
+  const previewSessionRef = React.useRef<RiffScoreSessionHandles | null>(null);
   const pdfPreviewCaption = pdfPreview.isRendering
     ? "Rendering PDF…"
     : pdfPreview.pages.length > 1
@@ -232,6 +235,7 @@ export default function DocumentPage() {
           const res = await fetch(`/api/to-preview-musicxml`, {
             method: "POST",
             body: fd,
+            signal: AbortSignal.timeout(900_000),
           });
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -359,12 +363,25 @@ export default function DocumentPage() {
       ? TRANSITION_MIN_VISIBLE_MS.melody_only
       : TRANSITION_MIN_VISIBLE_MS.generating;
     try {
+      const liveScore = previewSessionRef.current?.readLiveScore() ?? previewScore;
+      const title = uploadedFileStem(file);
+      const melodyXml = resolveMelodyXmlForGeneration({
+        liveScore,
+        baselineScore: previewScore,
+        previewXml: storePreviewXml,
+        title,
+      });
+      if (melodyXml && melodyXml !== storePreviewXml) {
+        setPreviewMusicXML(melodyXml);
+      }
+
       if (reviewerArm) {
         logStudyEvent("skipped_generation_reviewer_arm", {
           mood: config.mood,
           genre: "classical",
         });
-        const musicXML = await readMelodyXmlForReviewer(file, storePreviewXml);
+        const musicXML =
+          melodyXml ?? (await readMelodyXmlForReviewer(file, storePreviewXml));
         setGeneratedMusicXML(musicXML);
         await awaitMinElapsedSince(t0, minMs);
         router.push("/sandbox");
@@ -376,14 +393,13 @@ export default function DocumentPage() {
         genre: "classical",
       });
       const formData = new FormData();
-      const normalizedSource =
-        storePreviewXml && storePreviewXml.trim().length > 0
-          ? new File(
-              [storePreviewXml],
-              `${file.name.replace(/\.[^/.]+$/, "") || "score"}.musicxml`,
-              { type: "application/xml" },
-            )
-          : file;
+      const normalizedSource = melodyXml
+        ? new File(
+            [melodyXml],
+            `${file.name.replace(/\.[^/.]+$/, "") || "score"}.musicxml`,
+            { type: "application/xml" },
+          )
+        : file;
       formData.append("file", normalizedSource);
       const configPayload: Record<string, unknown> = {
         mood: config.mood,
@@ -458,6 +474,9 @@ export default function DocumentPage() {
             onReupload={() => router.push("/")}
             pdfPreviewUrl={pdfPreview.previewUrl}
             pdfPreviewCaption={pdfPreviewCaption}
+            onSessionReady={(session) => {
+              previewSessionRef.current = session;
+            }}
           />
           <EnsembleBuilderPanel
             onGenerateHarmonies={handleGenerate}
@@ -488,7 +507,7 @@ export default function DocumentPage() {
             description={
               reviewerArm
                 ? "Preview the score and set mood for context. Continue with melody only. You will add harmonies in the sandbox."
-                : "Preview your upload, set mood and how the harmony moves, pick instruments, then generate SATB you can still edit."
+                : "Preview your upload — you can fix notes on the staff — then set mood and how the harmony moves, pick instruments, and generate SATB you can still edit."
             }
             primaryCta="Continue"
             onPrimary={() => setShowOnboarding(false)}
