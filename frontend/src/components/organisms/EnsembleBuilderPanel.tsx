@@ -463,6 +463,7 @@ export const EnsembleBuilderPanel = React.forwardRef<
         <button
           type="button"
           disabled={isGenerating}
+          data-testid="generate-harmonies"
           onClick={() =>
             onGenerateHarmonies?.({
               mood,

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "postinstall": "patch-package && node scripts/copy-pdfjs-worker.mjs",
     "test-engine": "tsx scripts/run-engine-cli.ts"
   },
@@ -40,6 +41,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^20",

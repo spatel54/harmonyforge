@@ -1,7 +1,7 @@
 # HarmonyForge Makefile
 # Single-process Next.js app (engine runs inside Next route handlers under src/server/engine/).
 
-.PHONY: install dev dev-clean test test-engine lint lint-frontend verify verify-strict build \
+.PHONY: install dev dev-clean test test-engine lint lint-frontend verify verify-strict build e2e \
         audiveris-setup audiveris-convert docker-build docker-run
 
 # Install Node dependencies. For PDF → MusicXML locally, also run `make audiveris-setup`.
@@ -37,6 +37,9 @@ dev-frontend: dev
 
 test:
 	@cd frontend && npm test
+
+e2e:
+	@cd frontend && npm run test:e2e
 
 test-engine:
 	@mkdir -p frontend/engine-cli-output

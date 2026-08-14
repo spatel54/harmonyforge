@@ -90,6 +90,7 @@ export function SandboxPalettePanel({
         className,
       )}
       aria-label="Notation and symbols (beta)"
+      data-testid="sandbox-palette-dock"
     >
       <div className="flex items-center justify-between h-[52px] px-3 border-b border-[var(--hf-detail)] shrink-0">
         <div className="flex flex-col leading-tight">
