@@ -22,6 +22,11 @@ export type RiffScoreSessionHandles = {
    */
   getTransposeTargetNoteIds: () => Set<string>;
   /**
+   * Same note-id resolution as {@link getTransposeTargetNoteIds} without flushing editor → Zustand.
+   * Use before synchronous toolbar transforms so `loadScore` does not clear RiffScore selection mid-gesture.
+   */
+  peekTransposeTargetNoteIds: () => Set<string>;
+  /**
    * Current editor selection only (no retained multi-select pitch group). Use for duration edits so
    * lengthening one beamed note does not also retarget siblings from an earlier multi-select.
    */

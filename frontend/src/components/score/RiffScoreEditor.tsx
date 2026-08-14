@@ -549,10 +549,17 @@ export function RiffScoreEditor({
   const getActiveNoteIdsRef = useRef(getActiveNoteIds);
   getActiveNoteIdsRef.current = getActiveNoteIds;
 
+  const peekTransposeTargetNoteIds = useCallback((): Set<string> => {
+    return getActiveNoteIdsRef.current();
+  }, []);
+
   const getTransposeTargetNoteIds = useCallback((): Set<string> => {
     flushToZustandRef.current();
     return getActiveNoteIdsRef.current();
   }, []);
+
+  const peekTransposeTargetNoteIdsRef = useRef(peekTransposeTargetNoteIds);
+  peekTransposeTargetNoteIdsRef.current = peekTransposeTargetNoteIds;
 
   const getTransposeTargetNoteIdsRef = useRef(getTransposeTargetNoteIds);
   getTransposeTargetNoteIdsRef.current = getTransposeTargetNoteIds;
@@ -1070,11 +1077,12 @@ export function RiffScoreEditor({
       },
       getPitchGroupNoteIds,
       getTransposeTargetNoteIds,
+      peekTransposeTargetNoteIds,
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
       readLiveScore: () => readLiveScoreRef.current(),
     };
     onSessionReady(session);
-  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, getTransposeTargetNoteIds, runEditorHistoryOp]);
+  }, [isReady, onSessionReady, flushToZustand, getPitchGroupNoteIds, getTransposeTargetNoteIds, peekTransposeTargetNoteIds, runEditorHistoryOp]);
 
   /**
    * RiffScore disables duration toolbar buttons when `canModifyEventDuration` fails
@@ -1092,6 +1100,7 @@ export function RiffScoreEditor({
       editorDeselectAll: () => apiRef.current?.deselectAll(),
       getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
       getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
+      peekTransposeTargetNoteIds: () => peekTransposeTargetNoteIdsRef.current(),
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
       readLiveScore: () => readLiveScoreRef.current(),
     });
@@ -1128,6 +1137,7 @@ export function RiffScoreEditor({
       editorDeselectAll: () => api.deselectAll(),
       getPitchGroupNoteIds: () => getPitchGroupNoteIdsRef.current(),
       getTransposeTargetNoteIds: () => getTransposeTargetNoteIdsRef.current(),
+      peekTransposeTargetNoteIds: () => peekTransposeTargetNoteIdsRef.current(),
       getDurationTargetNoteIds: () => getDurationTargetNoteIdsRef.current(),
       readLiveScore: () => readLiveScoreRef.current(),
     });

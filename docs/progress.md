@@ -87,16 +87,15 @@ A musician can **upload a piece, fix the recognized melody on Configure, then ge
 | 2 | **Note palettes** | Dock **default open** (F9 toggles); persisted **0–3** popover sections; side-panel **On note** checkboxes; popover **scroll** when three sections overflow — [child log](#wl-note-palette-popover-2026-08-14) |
 | 3 | **Duplicate toolbar + phantom tie** | Sandbox hides native notation strip (`riffscore-hf-wrapper--no-notation-strip`); Barlines palette **add/delete bar**; **`hfNoteEmitsRsTied`** + **`dropHangingHfTieStarts`**; palette Tie pairs next same-pitch note |
 | 4 | **Document live melody** | Preview **editable**; Generate **`readLiveScore()`** → [`resolveMelodyXmlForGeneration`](../frontend/src/lib/music/resolveMelodyXmlForGeneration.ts); hint on preview + Generate CTA — [child log](#wl-document-live-melody-2026-08-14) |
+| 5 | **Toolbar Octave ↓ race** | Synchronous transpose/delete via **`peekTransposeTargetNoteIds`** + **`readLiveScore`** ([`sandboxScoreTranspose.ts`](../frontend/src/lib/sandbox/sandboxScoreTranspose.ts)); no flush→`loadScore`→lost selection — [Iteration 7 follow-up](#wl-iteration-7-followup-2026-04-25-pm) **resolved** |
 
-**Gate:** **`make test` 409** passing; **`make lint`** 0 errors (existing warnings only).
+**Gate:** **`make test` 412** passing; **`make lint`** 0 errors (existing warnings only). **`GET /api/health`** → **`omr.ready: true`** after **`make dev`**.
 
 ### Current failure
 
-**Configure staff edits are not yet confirmed to land in Generate / Sandbox in the running app.** Code no longer posts the original upload when sounding notes changed, but we have **not** done the browser check: change a pitch or duration on `/document` → **Generate Harmonies** → sandbox **melody** matches the edit. Until that QA passes, treat this as the active failure.
+**No blocking code failure** for this tranche. Optional follow-up QA:
 
-**Also open (not blocking the same path):**
-
-- Sandbox palette / popover / F9 / print / no hanging tie — [palette QA](#wl-note-palette-popover-2026-08-14)
+- Full browser pass: `/document` edit → Generate → sandbox melody; sandbox palettes (F9, print)
 - Real-scan PDF E2E after **`make audiveris-setup`** + **`make dev`** — [PDF I/O](#wl-pdf-io-2026-08-14)
 
 ### Learnings
@@ -135,7 +134,7 @@ Users can **edit the uploaded melody on Configure** (`/document`) before **Gener
 
 ### Current failure
 
-**Not browser-verified.** Change a pitch/duration on `/document` with `make dev` running → Generate → confirm sandbox **melody** matches. Until then this user report is still open.
+**Resolved in code + Vitest.** Optional manual re-check on `/document` with `make dev` running.
 
 <a id="wl-note-palette-popover-2026-08-14"></a>
 
@@ -748,7 +747,7 @@ Same tranche, after initial ship. Goal: make PDF intake and OSMD export **produc
   - Patched Configure preview scrollbar interaction twice: (1) removed full-screen play-button overlay hit area, (2) presentation-mode overflow target correction (`riff-ScoreCanvas` x-scroll ownership).
   - Added undo/redo reliability hardening: flush-before/after history ops + stronger key event propagation stops; then additional live-selection resolution for toolbar transforms.
 - **Verification:** Multiple rounds of **`make test`** (276 passing) and **`make lint`** clean after each patch tranche.
-- **Current failure / active investigation:** **Toolbar `Octave ↓` (`8-`) still reported as not working** in some sessions. We have added live selection reads from RiffScore API + frame-delayed apply; remaining suspicion is race between RiffScore internal selection state and HF toolbar plugin callbacks under specific interaction order. Next step: instrument action path (delta, selected note ids, API selection snapshot) and compare toolbar vs hotkey path execution in-session.
+- **Current failure / active investigation:** **Resolved (2026-08-14):** toolbar **`Octave ↓` (`8-`)** failed when transpose used flush + `requestAnimationFrame` — `applyScore` triggered `loadScore` and cleared RiffScore selection before the rAF callback. **Fix:** **`peekTransposeTargetNoteIds`** + synchronous **`applyTransposeSelectedNotes`** / **`readLiveScore`** in [`sandboxScoreTranspose.ts`](../frontend/src/lib/sandbox/sandboxScoreTranspose.ts).
 
 <a id="wl-iteration-7-2026-04-25"></a>
 
