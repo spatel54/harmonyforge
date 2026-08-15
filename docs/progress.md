@@ -6,7 +6,10 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
-- [Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)](#wl-session-2026-08-14) — **end goal / approach / steps / current failure** for this tranche — **`make test` 412** · **`make e2e` 4** — **open:** E2E photo-PDF on real scan only
+- [Work log — Session 2026-08-14 PM (export letters · palettes · ties)](#wl-session-2026-08-14-pm) — **canonical handover** (end goal / approach / steps / current failure) — OSMD letter labels; Noto Music + tooltip cleanup; MuseScore-like **Tie** + metadata persist; **RiffScore `renderTies`** staff-width fix — **`make test` 424** · **`make e2e` 5** · **`make lint` 0 errors** — **no blocking failure** (tie hanging-arc **resolved**)
+- [Work log — Tie, palette persistence & tooltip cleanup (2026-08-14 PM)](#wl-tie-palette-persistence-2026-08-14-pm) — child detail: tooltips, `toggleTieOnSelection`, RS→HF merge, `renderTies` patch
+- [Work log — Export letter names, palette icons & actions (2026-08-14 PM)](#wl-export-palette-polish-2026-08-14-pm) — child detail: OSMD overlay hardening, Noto Music, notation badges
+- [Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)](#wl-session-2026-08-14) — morning/midday tranche — **`make test` 412** · **`make e2e` 4** — **open:** E2E photo-PDF on real scan only
 - [Work log — Document live melody → generate (2026-08-14)](#wl-document-live-melody-2026-08-14) — Configure staff **editable**; Generate uses **edited notes** when they differ from intake; hint copy on preview + CTA — **resolved:** Playwright **`document-live-melody.spec.ts`**
 - [Work log — PDF intake + file I/O hardening (2026-08-14)](#wl-pdf-io-2026-08-14) — **OMR preflight** + **`GET /api/health` `omr.ready`**; **`make dev`** exports **`AUDIVERIS_BIN`**; Playground **setup banner**; honest **`intakeErrorHints`** (no false canvas hint on successful raster); upload **900s** parity; **`downloadBlob`** hardening — **open:** E2E PDF OMR on real scan
 - [Work log — Note palette popover (2026-08-14)](#wl-note-palette-popover-2026-08-14) — **Docked palettes default open**; **0–3 persisted sections** on note-selection popover; native RiffScore notation strip **hidden**; hanging ties **suppressed** — **resolved:** Playwright **`sandbox-octave.spec.ts`** (F9 dock)
@@ -62,11 +65,122 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
 
+<a id="wl-session-2026-08-14-pm"></a>
+
+## Work log — Session 2026-08-14 PM (export letters · palettes · ties)
+
+Canonical handover for the **afternoon/evening** tranche (continues [morning session](#wl-session-2026-08-14)). Pin this section + [plan.md](plan.md) for the next chat.
+
+### End goal
+
+A musician editing in Sandbox can use **MuseScore/Noteflight-style palettes** without chrome bugs: glyphs and tooltips read cleanly, **articulations / words / bar marks persist** after RiffScore ↔ HarmonyForge sync, and **Tie** applies to the **highlighted note** and **draws on that notehead** (not a floating green stub in the previous bar). **Export / print letter names** stay on the noteheads when the toggle is on.
+
+### Approach
+
+1. **Export letters:** Stop OSMD `autoResize` from fighting the overlay; wait for layout, retry empty placements, re-apply on resize ([`osmdLetterLabelApply.ts`](../frontend/src/lib/music/osmdLetterLabelApply.ts)).
+2. **Palette chrome:** Self-host **Noto Music**; require `title` on every registry item; **do not** pass `shortcut` into `ActionTooltip` (shortcuts stay in the registry for `?` help).
+3. **Tie semantics:** Extract [`toggleTieOnSelection`](../frontend/src/lib/music/scoreUtils.ts) — MuseScore-like, next **same-pitch sounding** note only; flush live score first; use overlay / Zustand ids (not retained pitch-group); toast when nothing can tie.
+4. **Persistence:** On RS→HF flush, [`mergeNotationFromPrevious`](../frontend/src/lib/music/riffscoreAdapter.ts) copies notation-only fields from `previousScore` so palette marks survive a round-trip.
+5. **Tie engraving:** When the graphic still sat on the previous bar, treat it as a **layout** bug — runtime logs first, then patch RiffScore `Staff3.renderTies` to use the same `staffLayout` widths and `forcedPositions` as the noteheads.
+
+### Steps done so far
+
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | **OSMD letter labels** | `autoResize: false`; layout wait + retry; `ScorePreviewPane` ResizeObserver; Playwright [`export-letter-names.spec.ts`](../frontend/e2e/export-letter-names.spec.ts) — [child](#wl-export-palette-polish-2026-08-14-pm) |
+| 2 | **Palette glyphs + handlers** | Noto Music at `frontend/public/fonts/NotoMusic-Regular.ttf`; double accidentals; expression → `note.words`; key/time from focused bar; [`notationOverlayBadges.ts`](../frontend/src/lib/music/notationOverlayBadges.ts) |
+| 3 | **Tooltip cleanup** | `PaletteButton` no longer passes `shortcut` to `ActionTooltip` (stray comma/number row gone) |
+| 4 | **Tie apply + toast** | `toggleTieOnSelection` + Vitest (same-pitch / C-then-E skip / untie); toast *“Tie needs the next note to be the same pitch.”* |
+| 5 | **RS→HF metadata** | Merge articulations, dynamics, ornaments, lyrics, words, chord symbols, tuplets, lines, ties, measure barline/repeat/rehearsal/tempoText, key/time on non-zero measures |
+| 6 | **Dynamics unify** | Single `dynamics-*` handler in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) |
+| 7 | **Wrong-note hypothesis** | First visual bug looked like Tie hitting the previous note. Overlay ids were correct; pitch-group was **not** the hanging arc. Kept overlay-id targeting anyway. |
+| 8 | **`renderTies` layout fix** | Runtime evidence: selected C5 at x≈572, partner C5 at x≈716, previous G4 at x≈491; HF `tied` on the right event; RiffScore drew with unconstrained `calculateMeasureLayout` / `layout.totalWidth`. Patch aligns X with `staffLayout.measures[i].width` + `legacyLayout.eventPositions`. Regenerated [`riffscore+1.0.0-alpha.9.patch`](../frontend/patches/riffscore+1.0.0-alpha.9.patch) via `npx patch-package riffscore`. **User confirmed** the arc now sits on the selected note. |
+| 9 | **Debug cleanup** | Removed session `d998f4` ingest logs from sandbox, `scoreUtils`, `useRiffScoreSync`, `RiffScoreEditor`. |
+
+**Gate:** **`make test` 424** · **`make lint` 0 errors** · **`make e2e` 5**. After `npm install`, confirm **`patch-package`** prints `riffscore@1.0.0-alpha.9 ✔` (tie hunks live in both `index.js` and `index.mjs`). Hard-refresh Sandbox if `make dev` was already running.
+
+### Current failure
+
+**No blocking failure for this PM slice.** The hanging green Tie arc is **resolved** (browser confirm 2026-08-14).
+
+**Program-level open (unchanged):** E2E photo-PDF on a real scan after **`make audiveris-setup`** — [PDF I/O](#wl-pdf-io-2026-08-14). Optional: playback QA matrix, viola/tenor sandbox vs OSMD.
+
+### Learnings
+
+- A misplaced RiffScore **graphic** is not proof the **wrong HF note id** was mutated. Log selection, `tied` flags, and `notePositions` before changing apply logic.
+- `Staff3.renderTies` must share **measure widths and event X** with the notehead pass. Unconstrained `calculateMeasureLayout` + advancing by `layout.totalWidth` shifts arcs left (often into the previous bar). `Tie` returns `null` when `endX <= startX`, so a compressed start can become a short hanging stub.
+- Retained **pitch-group** ids can still include an earlier note after a duration click — Tie should use overlay / Zustand selection. That was a real hygiene fix, not the hanging-arc root cause.
+- Persist RiffScore edits with **`patch-package`** (needs an unrestricted shell here); `node_modules` edits alone vanish on `npm install`.
+
+<a id="wl-tie-palette-persistence-2026-08-14-pm"></a>
+
+## Work log — Tie, palette persistence & tooltip cleanup (2026-08-14 PM)
+
+Child of [Session 2026-08-14 PM](#wl-session-2026-08-14-pm).
+
+### End goal
+
+Palette Tie behaves like MuseScore: toggle on the highlighted note to the next same-pitch sounding note; toast when that partner is missing; marks from other palettes survive a RiffScore flush.
+
+### Approach
+
+Extract score-level `toggleTieOnSelection`; flush before read; overlay ids; merge notation-only fields on RS→HF; if the arc is still wrong, patch RiffScore engraving rather than the HF id set.
+
+### Steps done so far
+
+| Area | Change |
+|------|--------|
+| **Palette tooltips** | [`PaletteButton.tsx`](../frontend/src/components/atoms/PaletteButton.tsx) — stop passing `shortcut` to `ActionTooltip` (comma/number row removed; shortcuts stay in registry for `?` help) |
+| **Tie** | [`toggleTieOnSelection`](../frontend/src/lib/music/scoreUtils.ts); sandbox flushes live score first; toast *“Tie needs the next note to be the same pitch.”* Overlay / Zustand ids (not retained pitch-group). |
+| **Tie engraving** | Hanging green arc on the previous measure was `Staff3.renderTies` using unconstrained `calculateMeasureLayout` / `layout.totalWidth` while noteheads used `staffLayout.measures[i].width`. [`riffscore+1.0.0-alpha.9.patch`](../frontend/patches/riffscore+1.0.0-alpha.9.patch) uses staff widths + `forcedPositions`. **Resolved** in browser. |
+| **RS→HF metadata** | [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts) — `mergeNotationFromPrevious` (articulations, dynamics, ornaments, lyrics, words, chord symbols, tuplets, lines, ties, measure marks) |
+| **Dynamics** | Single `dynamics-*` handler in [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx) |
+
+### Current failure
+
+None for this child. See [session PM](#wl-session-2026-08-14-pm).
+
+### Gate
+
+Vitest: tie same-pitch / diff-pitch / untie / selected-note-only; metadata round-trip (staccato + words + barline). **`make test` 424** · **`make lint` 0 errors**.
+
+<a id="wl-export-palette-polish-2026-08-14-pm"></a>
+
+## Work log — Export letter names, palette icons & actions (2026-08-14 PM)
+
+Child of [Session 2026-08-14 PM](#wl-session-2026-08-14-pm).
+
+### End goal
+
+Letter names on **PDF preview and print** sit on the noteheads; palette buttons show music glyphs and a single readable tooltip.
+
+### Approach
+
+Harden OSMD overlay timing; self-host Noto Music; put titles on every registry item; show live badges on the RiffScore canvas for marks OSMD/RiffScore do not draw natively.
+
+### Steps done so far
+
+| Area | Change |
+|------|--------|
+| **Export letter names** | [`osmdExportRender.ts`](../frontend/src/lib/music/osmdExportRender.ts) — `autoResize: false`; [`osmdLetterLabelApply.ts`](../frontend/src/lib/music/osmdLetterLabelApply.ts) waits for layout + retries empty placements; [`ScorePreviewPane.tsx`](../frontend/src/components/molecules/ScorePreviewPane.tsx) re-applies on resize |
+| **Palette icons** | Self-hosted **Noto Music** at `frontend/public/fonts/NotoMusic-Regular.ttf`; `.font-music` on [`PaletteButton.tsx`](../frontend/src/components/atoms/PaletteButton.tsx) |
+| **Palette tooltips** | Required `title` + optional `shortcut` on all 101 items in [`paletteRegistry.ts`](../frontend/src/lib/palettes/paletteRegistry.ts); **ActionTooltip** wrapper (shortcut row removed in the tie child log) |
+| **Palette handlers** | Double♯/♭ (`##`/`bb`); expression/performance → `note.words` + MusicXML `<words>`; mordent-upper → inverted-mordent; key/time from focused bar onward; selection toasts |
+| **Live feedback** | [`notationOverlayBadges.ts`](../frontend/src/lib/music/notationOverlayBadges.ts) + overlay in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) |
+
+### Current failure
+
+None for this child. Program open remains E2E photo-PDF — [session morning](#wl-session-2026-08-14).
+
+### Gate
+
+**`make test` 419** at child ship · suite now **424** with tie tests · **`make lint` 0 errors** · **`make e2e` 5** (includes [`export-letter-names.spec.ts`](../frontend/e2e/export-letter-names.spec.ts))
+
 <a id="wl-session-2026-08-14"></a>
 
 ## Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)
 
-Canonical handover for this tranche. Detail lives in the three child logs below.
+Canonical handover for the **morning/midday** tranche. **Afternoon/evening** (export letters, palette polish, Tie + `renderTies`) is **[Session 2026-08-14 PM](#wl-session-2026-08-14-pm)**. Detail for this morning lives in the three child logs below.
 
 ### End goal
 
@@ -2490,7 +2604,9 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
-**2026-08-14 session (PDF I/O · palettes · Document live melody):** End goal, approach, steps — **[Work log — Session 2026-08-14](#wl-session-2026-08-14)**. **Shipped:** Audiveris env on **`make dev`** + OMR preflight / **`omr.ready`**; docked palettes + note popover; Document staff editable; Generate serializes live sounding notes when they differ from intake; **`make e2e`** (Document edit → Generate request + sandbox Octave ↓/F9). **`make test`:** **412**. **Open:** E2E photo-PDF on real scan.
+**2026-08-14 PM (export letters · palettes · ties):** End goal, approach, steps, **current failure** — **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)**. **Shipped:** OSMD letter-label hardening; Noto Music + tooltip cleanup; MuseScore-like **Tie** + RS→HF notation merge; RiffScore **`renderTies`** uses staff measure widths. **`make test`:** **424** · **`make e2e`:** **5**. **No blocking failure** (hanging Tie arc **resolved**). **Program open:** E2E photo-PDF on real scan.
+
+**2026-08-14 session (PDF I/O · palettes · Document live melody):** End goal, approach, steps — **[Work log — Session 2026-08-14](#wl-session-2026-08-14)**. **Shipped:** Audiveris env on **`make dev`** + OMR preflight / **`omr.ready`**; docked palettes + note popover; Document staff editable; Generate serializes live sounding notes when they differ from intake; **`make e2e`** (Document edit → Generate request + sandbox Octave ↓/F9). **`make test`:** **412** at morning gate (now **424**). **Open:** E2E photo-PDF on real scan.
 
 **2026-06-04 PM session (PDF photo intake · chord fixes · export toggles · canvas 500):** End goal, approach, steps, and **open work** — **[Work log — PDF photo intake, chord fixes, export toggles, canvas 500 (2026-06-04 PM)](#wl-pdf-intake-chords-export-2026-06-04-pm)**. **Shipped:** photo-PDF heuristic + server raster; client **`pages[]`** first for PDF OMR; async intake; chord **measureLengthBeats** + detect tie-break; export modal **Letter Names / Chords** live OSMD preview; **`serverExternalPackages`** for **`@napi-rs/canvas`**. **Fixed:** misleading **Preview failed: 500** (canvas native module, not Audiveris). **`make test`:** **373**. **Open:** E2E upload QA after **`make dev-clean && make dev`**; OMR **quality** on real scans; regen **riffscore** patch if chord-playback guards only in `node_modules`.
 
@@ -2897,6 +3013,15 @@ Short bullets; full narrative + **what we are failing on now** → **[Holistic r
 
 ## Learnings
 
+### Export letters, palettes, Tie engraving (2026-08-14 PM)
+
+Full narrative: **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)**.
+
+- **Misplaced graphic ≠ wrong id.** Overlay / Zustand / RS selection agreed; HF `tied` sat on the selected event. The green stub was `Staff3.renderTies` using a different measure layout than the noteheads.
+- **Share layout with noteheads.** `renderTies` must use `staffLayout.measures[i].width` and `legacyLayout.eventPositions` (or `calculateMeasureLayout(..., forcedPositions)`), then advance `currentMeasureX` by that width — not unconstrained `layout.totalWidth`.
+- **Tie targeting:** use highlighted overlay ids, not retained pitch-group (can still include an earlier note). Hygiene only; not the hanging-arc root cause.
+- **`patch-package`:** persist both `index.js` and `index.mjs`; regenerate the patch file or `npm install` wipes `node_modules`.
+
 ### Sandbox playback reliability (2026-06-04)
 
 Full narrative: **[Work log — Sandbox playback reliability (2026-06-04)](#wl-sandbox-playback-reliability-2026-06-04)**.
@@ -3047,7 +3172,7 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-**Immediate (2026-06 — see [Audiveris work log](#wl-export-audiveris-2026-06-03) + [Viola parity work log](#wl-viola-sandbox-export-parity-2026-06-03)):**
+**Immediate (2026-08-14 PM slice done — see [Session 2026-08-14 PM](#wl-session-2026-08-14-pm); remaining QA below):**
 1. **Viola / alto–tenor sandbox QA** — After **`rm -rf .next`**, generate or load **Melody + Viola + Cello** (or similar); confirm **Sandbox** noteheads and learner labels match **Export → PDF/Print** (OSMD). See **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**.
 2. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
 3. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
@@ -3091,7 +3216,16 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-08-14):**
+**Handover template (2026-08-14 PM):**
+- **Canonical summary:** **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)** — end goal, approach, steps, **current failure**. Morning PDF/Document tranche: **[Session 2026-08-14](#wl-session-2026-08-14)**.
+- **End goal:** Sandbox palettes with clean glyphs/tooltips; Tie on the highlighted notehead; palette marks persist across RS↔HF; export letter names stay on heads.
+- **Approach:** Harden OSMD overlay; Noto Music + no shortcut row on tooltips; `toggleTieOnSelection` + overlay ids + `mergeNotationFromPrevious`; patch `Staff3.renderTies` to staff widths / `forcedPositions`.
+- **Shipped this tranche:** OSMD letter apply, Noto Music, notation badges, Tie + toast, metadata merge, `renderTies` patch. **`make test`:** **424**; **`make e2e`:** **5**.
+- **Current failure:** **None blocking.** Hanging Tie arc **resolved**. Program open: E2E photo-PDF on real scan.
+- **Key files:** `osmdLetterLabelApply.ts`, `notationOverlayBadges.ts`, `PaletteButton.tsx`, `paletteRegistry.ts`, `scoreUtils.ts` (`toggleTieOnSelection`), `riffscoreAdapter.ts` (`mergeNotationFromPrevious`), `sandbox/page.tsx`, `patches/riffscore+1.0.0-alpha.9.patch`.
+- **Run:** **`make dev`** → hard-refresh `/sandbox` so the RiffScore patch loads. After pull: **`cd frontend && npm install`** (postinstall `patch-package`).
+
+**Older handover (2026-08-14 morning):**
 - **Canonical summary:** **[Work log — Session 2026-08-14](#wl-session-2026-08-14)** — end goal, approach, steps, **current failure**.
 - **End goal:** Upload → **edit melody on Configure** → Generate SATB from **those notes** → Sandbox palettes. Local PDF OMR after **`make audiveris-setup`**; honest errors when Audiveris is missing.
 - **Approach:** (1) `make dev` exports Audiveris env + OMR preflight. (2) Docked palettes + 0–3 note popover; hide native notation strip in sandbox. (3) Document editor does not write Zustand; Generate uses live sounding notes only when they differ from intake.

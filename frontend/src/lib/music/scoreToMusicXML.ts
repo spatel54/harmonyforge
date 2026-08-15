@@ -33,10 +33,12 @@ function esc(s: string): string {
 
 /** "C4" -> step, alter, octave */
 function pitchFromStr(pitch: string): { step: string; alter: number; octave: number } {
-  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  const m = pitch.match(/^([A-G])(#{1,2}|bb|b)?(\d+)$/);
   if (!m) return { step: "C", alter: 0, octave: 4 };
   const step = m[1] ?? "C";
-  const alter = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
+  const acc = m[2] ?? "";
+  const alter =
+    acc === "##" ? 2 : acc === "#" ? 1 : acc === "bb" ? -2 : acc === "b" ? -1 : 0;
   const octave = parseInt(m[3] ?? "4", 10);
   return { step, alter, octave };
 }
@@ -248,6 +250,7 @@ function buildNotations(note: Note): string {
   const ornamentXmlTag: Record<string, string> = {
     trill: "trill-mark",
     mordent: "mordent",
+    "mordent-upper": "inverted-mordent",
     "inverted-mordent": "inverted-mordent",
     turn: "turn",
     "inverted-turn": "inverted-turn",
@@ -443,6 +446,14 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         <direction-type><dynamics>${dynEl}</dynamics></direction-type>
       </direction>`);
           }
+        }
+
+        if (note.words && !note.isRest) {
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          <words>${esc(note.words)}</words>
+        </direction-type>
+      </direction>`);
         }
 
         // Chord symbol (harmony element precedes the note)

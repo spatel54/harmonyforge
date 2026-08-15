@@ -76,6 +76,11 @@ import {
   type StaffLabelLayout,
 } from "@/lib/music/riffscorePositions";
 import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
+import {
+  formatBadgeRow,
+  measureNotationBadges,
+  noteNotationBadges,
+} from "@/lib/music/notationOverlayBadges";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { NotePalettePopover } from "@/components/molecules/NotePalettePopover";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
@@ -2272,6 +2277,89 @@ export function RiffScoreEditor({
             })}
           </div>
         )}
+
+      {/* Notation overlay: articulations, dynamics, lyrics, measure marks (palette feedback). */}
+      {!presentation && notePositions.length > 0 && score && (
+        <div
+          className="absolute inset-0 pointer-events-none z-[2]"
+          style={
+            learnerClipTopPx > 0
+              ? { clipPath: `inset(${learnerClipTopPx}px 0 0 0)` }
+              : undefined
+          }
+          aria-hidden="true"
+        >
+          {notePositions.map((pos) => {
+            const hit = getNoteById(score, pos.selection.noteId);
+            if (!hit?.note || hit.note.isRest) return null;
+            const { above, below } = noteNotationBadges(hit.note);
+            const aboveText = formatBadgeRow(above);
+            const belowText = formatBadgeRow(below);
+            if (!aboveText && !belowText) return null;
+            return (
+              <div key={`notation-badge-${pos.selection.noteId}`}>
+                {aboveText ? (
+                  <div
+                    className="absolute font-mono text-[9px] font-medium leading-none whitespace-nowrap rounded px-0.5"
+                    style={{
+                      left: pos.x + pos.w / 2,
+                      top: pos.y - 2,
+                      transform: "translate(-50%, -100%)",
+                      color: "var(--hf-accent)",
+                      backgroundColor: "color-mix(in srgb, var(--hf-bg) 88%, transparent)",
+                    }}
+                  >
+                    {aboveText}
+                  </div>
+                ) : null}
+                {belowText ? (
+                  <div
+                    className="absolute font-mono text-[9px] font-medium leading-none whitespace-nowrap rounded px-0.5"
+                    style={{
+                      left: pos.x + pos.w / 2,
+                      top: pos.y + pos.h + 2,
+                      transform: "translate(-50%, 0)",
+                      color: "var(--hf-text-primary)",
+                      opacity: 0.85,
+                      backgroundColor: "color-mix(in srgb, var(--hf-bg) 88%, transparent)",
+                    }}
+                  >
+                    {belowText}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+          {score.parts.flatMap((part) =>
+            part.measures.map((measure, measureIdx) => {
+              const badges = measureNotationBadges(measure);
+              const text = formatBadgeRow(badges);
+              if (!text) return null;
+              const anchor = notePositions.find(
+                (p) =>
+                  p.selection.partId === part.id &&
+                  p.selection.measureIndex === measureIdx,
+              );
+              if (!anchor) return null;
+              return (
+                <div
+                  key={`measure-badge-${part.id}-${measureIdx}`}
+                  className="absolute font-mono text-[8px] font-semibold leading-none whitespace-nowrap rounded px-1 py-0.5"
+                  style={{
+                    left: Math.max(0, anchor.x - 6),
+                    top: anchor.y - 14,
+                    color: "var(--hf-text-primary)",
+                    opacity: 0.7,
+                    backgroundColor: "color-mix(in srgb, var(--hf-surface) 90%, transparent)",
+                  }}
+                >
+                  {text}
+                </div>
+              );
+            }),
+          )}
+        </div>
+      )}
     </div>
     {issueHighlightTooltip
       ? createPortal(

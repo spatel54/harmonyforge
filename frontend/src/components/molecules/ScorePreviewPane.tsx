@@ -6,10 +6,8 @@ import { cn } from "@/lib/utils";
 import { SmuflIcon } from "../atoms/SmuflIcon";
 import { extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
 import { renderOsmdExportScore } from "@/lib/music/osmdExportRender";
-import {
-  applyOsmdLearnerLetterLabels,
-  removeOsmdLearnerLetterLabels,
-} from "@/lib/music/osmdLearnerLabels";
+import { applyOsmdLetterLabelsWhenReady } from "@/lib/music/osmdLetterLabelApply";
+import { removeOsmdLearnerLetterLabels } from "@/lib/music/osmdLearnerLabels";
 import { osmdExportRenderOptionsForPdf } from "@/lib/music/osmdExportRenderOptions";
 import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { musicXmlForExportDisplay } from "@/lib/music/musicXmlExportDisplay";
@@ -70,7 +68,7 @@ export function ScorePreviewPane({
 
     if (canToggleLettersOnly) {
       if (showLetterNames) {
-        applyOsmdLearnerLetterLabels(container, osmd);
+        void applyOsmdLetterLabelsWhenReady(container, osmd);
       } else {
         removeOsmdLearnerLetterLabels(container);
       }
@@ -108,6 +106,23 @@ export function ScorePreviewPane({
       renderGenRef.current += 1;
     };
   }, [displayXml, showLetterNames, musicXML]);
+
+  React.useEffect(() => {
+    if (!showLetterNames || status !== "ready") return;
+    const container = containerRef.current;
+    const osmd = osmdRef.current;
+    if (!container || !osmd || !container.querySelector("svg")) return;
+
+    const reapply = () => {
+      void applyOsmdLetterLabelsWhenReady(container, osmd);
+    };
+
+    const ro = new ResizeObserver(() => {
+      reapply();
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [showLetterNames, status, displayXml]);
 
   return (
     <div

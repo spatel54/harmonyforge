@@ -38,6 +38,8 @@ export interface Note {
   lyric?: string;
   /** Chord symbol / performance/expression text annotations. */
   chordSymbol?: string;
+  /** Free-form expression or performance words (not dynamics). */
+  words?: string;
   /** Line starts anchored at this note: slur, hairpin, 8va, etc. Renderer-optional. */
   lineStart?: string;
   /** Line ends anchored at this note. */

@@ -87,9 +87,15 @@ function hfClefToRs(clef: string): "treble" | "bass" | "alto" | "tenor" {
 
 /** Parse accidental from HarmonyForge pitch string. "F#5" -> { letter: "F", acc: "sharp", octave: "5" } */
 function parsePitch(pitch: string): { letter: string; accidental: "sharp" | "flat" | "natural" | null; octave: string } {
-  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  const m = pitch.match(/^([A-G])(#{1,2}|bb|b)?(\d+)$/);
   if (!m) return { letter: "C", accidental: null, octave: "4" };
-  const acc = m[2] === "#" ? "sharp" as const : m[2] === "b" ? "flat" as const : null;
+  const accRaw = m[2] ?? "";
+  const acc =
+    accRaw === "#" || accRaw === "##"
+      ? ("sharp" as const)
+      : accRaw === "b" || accRaw === "bb"
+        ? ("flat" as const)
+        : null;
   return { letter: m[1], accidental: acc, octave: m[3] };
 }
 
@@ -406,6 +412,33 @@ export function editableScoreToRsScore(
 // RsScore -> EditableScore
 // ---------------------------------------------------------------------------
 
+function mergeNotationFromPrevious(
+  base: HfNote,
+  previousScore: EditableScore | null | undefined,
+  hfId: string,
+): HfNote {
+  if (!previousScore) return base;
+  const prevHit = getNoteById(previousScore, hfId);
+  if (!prevHit) return base;
+  const prev = prevHit.note;
+  const merged: HfNote = { ...base };
+  if (typeof prev.originalGeneratedPitch === "string" && prev.originalGeneratedPitch.length > 0) {
+    merged.originalGeneratedPitch = prev.originalGeneratedPitch;
+  }
+  if (prev.articulations?.length) merged.articulations = [...prev.articulations];
+  if (prev.dynamics) merged.dynamics = prev.dynamics;
+  if (prev.ornament) merged.ornament = prev.ornament;
+  if (prev.lyric) merged.lyric = prev.lyric;
+  if (prev.words) merged.words = prev.words;
+  if (prev.chordSymbol) merged.chordSymbol = prev.chordSymbol;
+  if (prev.tuplet) merged.tuplet = prev.tuplet;
+  if (prev.lineStart) merged.lineStart = prev.lineStart;
+  if (prev.lineEnd) merged.lineEnd = prev.lineEnd;
+  // RiffScore only marks `tied` on the start note; preserve full HF tie pair from previous score.
+  if (prev.tie) merged.tie = prev.tie;
+  return merged;
+}
+
 function rsEventToHfNote(
   event: ScoreEvent,
   idMap: IdMap,
@@ -432,17 +465,10 @@ function rsEventToHfNote(
   const pitch = rsPitchToHf(rsNote);
   const duration = rsDurationToHf(event.duration);
   const dots = event.dotted ? 1 : 0;
-  const tie = rsNote.tied ? "start" as const : undefined;
+  const tie = rsNote.tied ? ("start" as const) : undefined;
 
   const base: HfNote = { id: hfId, pitch, duration, dots, tie };
-  if (previousScore) {
-    const prevHit = getNoteById(previousScore, hfId);
-    const og = prevHit?.note.originalGeneratedPitch;
-    if (typeof og === "string" && og.length > 0) {
-      return { ...base, originalGeneratedPitch: og };
-    }
-  }
-  return base;
+  return mergeNotationFromPrevious(base, previousScore, hfId);
 }
 
 function rsMeasureToHf(
@@ -450,16 +476,32 @@ function rsMeasureToHf(
   idMap: IdMap,
   index: number,
   previousScore?: EditableScore | null,
+  partId?: string,
 ): HfMeasure {
   const notes: HfNote[] = [];
   for (const event of measure.events) {
     const note = rsEventToHfNote(event, idMap, previousScore);
     if (note) notes.push(note);
   }
-  return {
+  const hfMeasure: HfMeasure = {
     id: `m-${measure.id ?? index}`,
     notes,
   };
+  if (previousScore && partId) {
+    const prevPart = previousScore.parts.find((p) => p.id === partId);
+    const prevMeasure = prevPart?.measures[index];
+    if (prevMeasure) {
+      if (prevMeasure.barline) hfMeasure.barline = prevMeasure.barline;
+      if (prevMeasure.repeatMark) hfMeasure.repeatMark = prevMeasure.repeatMark;
+      if (prevMeasure.rehearsalMark) hfMeasure.rehearsalMark = prevMeasure.rehearsalMark;
+      if (prevMeasure.tempoText) hfMeasure.tempoText = prevMeasure.tempoText;
+      if (index > 0) {
+        if (prevMeasure.keySignature !== undefined) hfMeasure.keySignature = prevMeasure.keySignature;
+        if (prevMeasure.timeSignature) hfMeasure.timeSignature = prevMeasure.timeSignature;
+      }
+    }
+  }
+  return hfMeasure;
 }
 
 function rsStaffToHfPart(
@@ -473,7 +515,7 @@ function rsStaffToHfPart(
     id: partId,
     name: partName,
     clef: staff.clef === "grand" ? "treble" : staff.clef,
-    measures: staff.measures.map((m, i) => rsMeasureToHf(m, idMap, i, previousScore)),
+    measures: staff.measures.map((m, i) => rsMeasureToHf(m, idMap, i, previousScore, partId)),
   };
 }
 

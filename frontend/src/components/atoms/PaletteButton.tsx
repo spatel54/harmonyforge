@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import type { PaletteItem } from "@/lib/palettes/paletteRegistry";
+import { ActionTooltip } from "@/components/atoms/ActionTooltip";
 
 export interface PaletteButtonProps {
   item: PaletteItem;
@@ -19,13 +20,14 @@ export interface PaletteButtonProps {
  * aligned with the rest of the Sandbox chrome.
  */
 export function PaletteButton({ item, disabled, onActivate, className }: PaletteButtonProps) {
-  const title = item.title ?? item.label;
-  return (
+  const tooltip = item.title ?? item.label;
+  const useLabelAsIcon = !item.glyph;
+
+  const button = (
     <button
       type="button"
       disabled={disabled}
-      title={title}
-      aria-label={title}
+      aria-label={tooltip}
       draggable={!disabled}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "copy";
@@ -50,13 +52,13 @@ export function PaletteButton({ item, disabled, onActivate, className }: Palette
         "hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_12%,transparent)]",
         "active:border-[var(--hf-accent)] active:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]",
-        "disabled:shadow-none",
+        "disabled:shadow-none disabled:opacity-45",
         className,
       )}
     >
       {item.glyph ? (
         <span
-          className="font-serif text-[16px] leading-none"
+          className="font-music text-[18px] leading-none"
           style={{ color: "var(--hf-text-primary)" }}
           aria-hidden="true"
         >
@@ -64,11 +66,22 @@ export function PaletteButton({ item, disabled, onActivate, className }: Palette
         </span>
       ) : null}
       <span
-        className="font-mono text-[10px] leading-tight text-center"
+        className={cn(
+          "font-mono leading-tight text-center",
+          useLabelAsIcon
+            ? "text-[11px] font-semibold tracking-tight"
+            : "text-[10px]",
+        )}
         style={{ color: "var(--hf-text-primary)" }}
       >
         {item.label}
       </span>
     </button>
+  );
+
+  return (
+    <ActionTooltip content={tooltip}>
+      {button}
+    </ActionTooltip>
   );
 }

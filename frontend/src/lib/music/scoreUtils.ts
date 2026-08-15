@@ -1324,6 +1324,51 @@ export function setNoteDynamics(score: EditableScore, noteIds: Set<string>, dyna
   return next;
 }
 
+export type ToggleTieResult = {
+  score: EditableScore;
+  tied: number;
+  untied: number;
+  skipped: number;
+};
+
+/**
+ * Toggle tie on selected notes. Ties only to the next same-pitch sounding note (MuseScore-like).
+ * Returns counts so callers can toast when nothing was tied or untied.
+ */
+export function toggleTieOnSelection(score: EditableScore, noteIds: Set<string>): ToggleTieResult {
+  const next = cloneScore(score);
+  let tied = 0;
+  let untied = 0;
+  let skipped = 0;
+
+  for (const part of next.parts) {
+    const sounding: Note[] = [];
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!note.isRest) sounding.push(note);
+      }
+    }
+    for (let i = 0; i < sounding.length; i++) {
+      const note = sounding[i]!;
+      if (!noteIds.has(note.id)) continue;
+      const partner = sounding[i + 1];
+      if (note.tie) {
+        delete note.tie;
+        if (partner?.tie === "stop") delete partner.tie;
+        untied++;
+      } else if (partner && partner.pitch === note.pitch) {
+        note.tie = "start";
+        if (!partner.tie) partner.tie = "stop";
+        tied++;
+      } else {
+        skipped++;
+      }
+    }
+  }
+
+  return { score: next, tied, untied, skipped };
+}
+
 /** Insert empty measure before index */
 export function insertMeasureBefore(score: EditableScore, measureIndex: number): EditableScore {
   const next = cloneScore(score);
@@ -1472,6 +1517,12 @@ export function setMeasureTempoText(
   return next;
 }
 
+/** Map palette ornament ids to canonical MusicXML ornament keys. */
+export function normalizeOrnamentId(ornament: string): string {
+  if (ornament === "mordent-upper") return "inverted-mordent";
+  return ornament;
+}
+
 /** Add an ornament (trill, mordent, turn, etc.) to selected notes. */
 export function setOrnament(
   score: EditableScore,
@@ -1485,7 +1536,7 @@ export function setOrnament(
         if (!noteIds.has(note.id)) continue;
         if (note.isRest) continue;
         if (ornament === null) delete note.ornament;
-        else note.ornament = ornament;
+        else note.ornament = normalizeOrnamentId(ornament);
       }
     }
   }
@@ -1550,6 +1601,63 @@ export function setNoteLyric(
         if (lyric === null) delete note.lyric;
         else note.lyric = lyric;
       }
+    }
+  }
+  return next;
+}
+
+/** Attach expression / performance words to selected notes. */
+export function setNoteWords(
+  score: EditableScore,
+  noteIds: Set<string>,
+  words: string | null,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (words === null || words.trim() === "") delete note.words;
+        else note.words = words.trim();
+      }
+    }
+  }
+  return next;
+}
+
+/** Attach expression / performance words to selected notes. */
+export function applyKeySignatureFromMeasure(
+  score: EditableScore,
+  fromMeasureIndex: number,
+  fifths: number,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (let mi = fromMeasureIndex; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      if (measure) measure.keySignature = fifths;
+    }
+    if (fromMeasureIndex === 0 && part.measures[0]) {
+      part.measures[0].keySignature = fifths;
+    }
+  }
+  return next;
+}
+
+/** Apply a time signature from `fromMeasureIndex` through the end of every part. */
+export function applyTimeSignatureFromMeasure(
+  score: EditableScore,
+  fromMeasureIndex: number,
+  timeSignature: string,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (let mi = fromMeasureIndex; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi];
+      if (measure) measure.timeSignature = timeSignature;
+    }
+    if (fromMeasureIndex === 0 && part.measures[0]) {
+      part.measures[0].timeSignature = timeSignature;
     }
   }
   return next;

@@ -289,4 +289,42 @@ describe("riffscoreAdapter", () => {
     expect(rs.staves[0]!.measures[0]!.events[0]!.notes[0]!.tied).toBe(true);
     expect(rs.staves[0]!.measures[0]!.events[1]!.notes[0]!.tied).toBe(false);
   });
+
+  it("preserves notation metadata across RS flush when previousScore is provided", () => {
+    const annotated: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              barline: "light-heavy",
+              notes: [
+                {
+                  id: "n1",
+                  pitch: "C4",
+                  duration: "q",
+                  articulations: ["staccato"],
+                  words: "dolce",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(annotated);
+    const { rsToHf } = buildIdMap(annotated, rs);
+    const roundTrip = riffScoreToEditableScore(rs, rsToHf, annotated.parts, annotated);
+    const note = roundTrip.parts[0]!.measures[0]!.notes[0]!;
+    expect(note.articulations).toEqual(["staccato"]);
+    expect(note.words).toBe("dolce");
+    expect(roundTrip.parts[0]!.measures[0]!.barline).toBe("light-heavy");
+  });
 });

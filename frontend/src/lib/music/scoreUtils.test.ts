@@ -27,6 +27,7 @@ import {
   spellMidiPreferMajorKeySignature,
   toggleNoteDots,
   toggleNoteRests,
+  toggleTieOnSelection,
   transposeNotes,
   transposeNotesForceNaturalLetters,
 } from "./scoreUtils";
@@ -1078,5 +1079,97 @@ describe("spliceHarmonyMeasuresFromAddonScore", () => {
     if (!r.ok) return;
     expect(r.score.parts[1]!.measures[0]!.notes[0]!.pitch).toBe("F4");
     expect(r.score.parts[2]!.measures[0]!.notes[0]!.pitch).toBe("D4");
+  });
+});
+
+describe("toggleTieOnSelection", () => {
+  const tieScore: EditableScore = {
+    divisions: 1,
+    parts: [
+      {
+        id: "p1",
+        name: "Melody",
+        clef: "treble",
+        measures: [
+          {
+            id: "m1",
+            timeSignature: "4/4",
+            notes: [
+              { id: "n1", pitch: "C4", duration: "h" },
+              { id: "n2", pitch: "C4", duration: "h" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("ties selected note to next same-pitch sounding note", () => {
+    const { score, tied, untied, skipped } = toggleTieOnSelection(tieScore, new Set(["n1"]));
+    expect(tied).toBe(1);
+    expect(untied).toBe(0);
+    expect(skipped).toBe(0);
+    expect(score.parts[0]!.measures[0]!.notes[0]!.tie).toBe("start");
+    expect(score.parts[0]!.measures[0]!.notes[1]!.tie).toBe("stop");
+  });
+
+  it("does not tie when next note is a different pitch", () => {
+    const diffPitch: EditableScore = {
+      ...tieScore,
+      parts: [
+        {
+          ...tieScore.parts[0]!,
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "n1", pitch: "C4", duration: "h" },
+                { id: "n2", pitch: "E4", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const { score, tied, untied, skipped } = toggleTieOnSelection(diffPitch, new Set(["n1"]));
+    expect(tied).toBe(0);
+    expect(untied).toBe(0);
+    expect(skipped).toBe(1);
+    expect(score.parts[0]!.measures[0]!.notes[0]!.tie).toBeUndefined();
+  });
+
+  it("unties when selection is already tied", () => {
+    const tied: EditableScore = {
+      ...tieScore,
+      parts: [
+        {
+          ...tieScore.parts[0]!,
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                { id: "n1", pitch: "C4", duration: "h", tie: "start" },
+                { id: "n2", pitch: "C4", duration: "h", tie: "stop" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const { score, tied: tiedCount, untied } = toggleTieOnSelection(tied, new Set(["n1"]));
+    expect(tiedCount).toBe(0);
+    expect(untied).toBe(1);
+    expect(score.parts[0]!.measures[0]!.notes[0]!.tie).toBeUndefined();
+    expect(score.parts[0]!.measures[0]!.notes[1]!.tie).toBeUndefined();
+  });
+
+  it("does not start a tie on an unselected earlier note", () => {
+    const { score, tied, skipped } = toggleTieOnSelection(tieScore, new Set(["n2"]));
+    expect(tied).toBe(0);
+    expect(skipped).toBe(1);
+    expect(score.parts[0]!.measures[0]!.notes[0]!.tie).toBeUndefined();
+    expect(score.parts[0]!.measures[0]!.notes[1]!.tie).toBeUndefined();
   });
 });

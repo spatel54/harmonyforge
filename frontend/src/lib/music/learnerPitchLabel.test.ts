@@ -18,6 +18,13 @@ describe("formatLearnerLetterName", () => {
     expect(formatLearnerLetterName("Eb4")).toBe("Eb");
   });
 
+  it("preserves double sharp and double flat", () => {
+    expect(formatLearnerLetterName("C##4")).toBe("C##");
+    expect(formatLearnerLetterName("Ebb5")).toBe("Ebb");
+    expect(formatLearnerLetterName("F♯")).toBe("F#");
+    expect(formatLearnerLetterName("G♭")).toBe("Gb");
+  });
+
   it("trims whitespace", () => {
     expect(formatLearnerLetterName("  D5  ")).toBe("D");
   });
