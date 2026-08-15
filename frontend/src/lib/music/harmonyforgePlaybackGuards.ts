@@ -8,6 +8,7 @@ import { installPlaybackDebugBridge } from "./playbackDebugLog";
 import { installPlaybackMetronomeBridge } from "./playbackMetronome";
 import { installPlaybackPositionBridge } from "./playbackPositionBridge";
 import { installPlaybackPartScheduleBridge } from "./playbackPartSchedule";
+import { installPlaybackExpressionBridge } from "./playbackExpressionBridge";
 
 let installed = false;
 
@@ -17,6 +18,7 @@ export function ensureHarmonyForgePlaybackGuards(): void {
   installPlaybackPositionBridge();
   installPlaybackDebugBridge();
   installPlaybackPartScheduleBridge();
+  installPlaybackExpressionBridge();
   installed = true;
 }
 

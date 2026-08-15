@@ -18,6 +18,8 @@ import { mapRiffSelectedNotesToHFSelections } from "@/lib/music/riffscorePositio
 import { useToolStore } from "@/store/useToolStore";
 
 interface UseRiffScoreSyncReturn {
+  /** True while `loadScore` is in flight (and for one animation frame after). */
+  isPushingToEditor: () => boolean;
   /** Push current Zustand score to RiffScore. Call after load or Zustand-driven mutations. */
   pushToRiffScore: () => void;
   /** Pull editor state into Zustand via `replaceScoreFromEditor` (no HF history growth). */
@@ -181,7 +183,10 @@ export function useRiffScoreSync(
     [apiRef, persistToStore],
   );
 
+  const isPushingToEditor = useCallback(() => isPushingRef.current, []);
+
   return {
+    isPushingToEditor,
     pushToRiffScore,
     pullFromRiffScore,
     flushToZustand: pullFromRiffScore,

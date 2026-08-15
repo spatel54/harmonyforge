@@ -8,9 +8,9 @@ export const SANDBOX_HOTKEY_SECTIONS: SandboxHotkeySection[] = [
     title: "Selection & score",
     rows: [
       {
-        keys: "Toolbar · F9",
+        keys: "F9 · Notation panel",
         description:
-          "Durations, accidentals, and playback live in the RiffScore toolbar. F9 toggles the Notation (palette) panel for dynamics, clefs, and more.",
+          "Show or hide the Notation (beta) panel — durations, accidentals, articulations, dynamics, clefs, and more. The RiffScore duration strip is hidden on Sandbox; use this panel or keyboard shortcuts.",
       },
       {
         keys: "Inspector Float",

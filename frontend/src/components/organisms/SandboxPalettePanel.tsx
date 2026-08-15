@@ -17,6 +17,8 @@ export interface SandboxPalettePanelProps {
   onActivate: (toolId: string, item: PaletteItem) => void;
   /** True when the sandbox has an active note selection — enables selection-required items. */
   hasSelection: boolean;
+  /** Optional pressed-state resolver for MuseScore-style toggle feedback. */
+  isItemPressed?: (item: PaletteItem) => boolean;
   /** Ask the parent to close this column. */
   onClose?: () => void;
   className?: string;
@@ -34,6 +36,7 @@ export interface SandboxPalettePanelProps {
 export function SandboxPalettePanel({
   onActivate,
   hasSelection,
+  isItemPressed,
   onClose,
   className,
 }: SandboxPalettePanelProps) {
@@ -231,6 +234,7 @@ export function SandboxPalettePanel({
                       key={item.id}
                       item={item}
                       disabled={Boolean(item.requiresSelection) && !hasSelection}
+                      pressed={isItemPressed?.(item) ?? false}
                       onActivate={(it) => onActivate(it.toolId, it)}
                     />
                   ))}

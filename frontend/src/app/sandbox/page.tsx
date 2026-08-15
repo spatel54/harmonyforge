@@ -12,8 +12,6 @@ import {
   extractNotes,
   toggleNoteDots,
   toggleNoteRests,
-  addArticulation,
-  setNoteDynamics,
   insertMeasureBefore,
   insertMeasureAfter,
   deleteMeasure,
@@ -22,17 +20,6 @@ import {
   parseMeasureBeats,
   getInsertIndexAtBeat,
   getNoteById,
-  setMeasureBarline,
-  setMeasureRepeatMark,
-  setMeasureTempoText,
-  setOrnament,
-  setTuplet,
-  setLineOnSelection,
-  setNoteLyric,
-  setNoteChordSymbol,
-  setNoteWords,
-  applyKeySignatureFromMeasure,
-  applyTimeSignatureFromMeasure,
   applySuggestion,
   applySuggestions,
   measureRangeForLocalizedHarmonyRegenerate,
@@ -40,6 +27,18 @@ import {
   collectPitchesForNoteIds,
   toggleTieOnSelection as toggleTieOnNoteIds,
 } from "@/lib/music/scoreUtils";
+import {
+  applyPalettePromptResult,
+  applyPaletteScoreOp,
+  type PalettePromptKind,
+} from "@/lib/sandbox/paletteToolScoreOps";
+import { isPaletteItemPressed } from "@/lib/sandbox/palettePressedState";
+import {
+  PalettePromptModal,
+  palettePromptState,
+  type PalettePromptState,
+} from "@/components/molecules/PalettePromptModal";
+import type { PaletteItem } from "@/lib/palettes/paletteRegistry";
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML } from "@/lib/music/musicxmlParser";
@@ -442,6 +441,7 @@ function TactileSandboxPageInner({
   const [inspectorFabHintDismissed, setInspectorFabHintDismissed] = React.useState(true);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
+  const [palettePrompt, setPalettePrompt] = React.useState<PalettePromptState | null>(null);
   const openHotkeyHelp = React.useCallback(() => setHotkeysDialogOpen(true), []);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
   const [inspectorDockMode, setInspectorDockMode] = React.useState<"sidebar" | "floating">("sidebar");
@@ -903,24 +903,6 @@ function TactileSandboxPageInner({
     applyScore(next);
   }, [applyScore, showInspectorToast]);
 
-  const setMeasureTimeSignature = React.useCallback(() => {
-    if (!score) return;
-    const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-    const value = window.prompt("Enter time signature (e.g. 4/4):", "4/4");
-    if (!value) return;
-    applyScore(applyTimeSignatureFromMeasure(score, target, value.trim()));
-  }, [score, cursor, selection, applyScore]);
-
-  const setMeasureKeySignature = React.useCallback(() => {
-    if (!score) return;
-    const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-    const raw = window.prompt("Enter key signature fifths (-7 to 7):", "0");
-    if (raw === null) return;
-    const value = Number.parseInt(raw, 10);
-    if (!Number.isFinite(value) || value < -7 || value > 7) return;
-    applyScore(applyKeySignatureFromMeasure(score, target, value));
-  }, [score, cursor, selection, applyScore]);
-
   const setSelectedPartClef = React.useCallback((clef: "treble" | "bass" | "alto" | "tenor") => {
     if (!score) return;
     const targetPartId = cursor?.partId ?? selection[0]?.partId ?? score.parts[0]?.id;
@@ -932,29 +914,58 @@ function TactileSandboxPageInner({
     applyScore(next);
   }, [score, cursor, selection, applyScore]);
 
-  const annotateSelection = React.useCallback((label: string, kind: "words" | "dynamics" = "words") => {
-    if (!score || selection.length === 0) {
-      showInspectorToast(`${label} requires selected notes.`);
-      return;
-    }
-    const text = window.prompt(`${label}: enter text`);
-    if (text === null) return;
-    const ids = new Set(selection.map((s) => s.noteId));
-    if (kind === "words") {
-      applyScore(setNoteWords(score, ids, text.trim() === "" ? null : text));
-      return;
-    }
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      for (const measure of part.measures) {
-        for (const note of measure.notes) {
-          if (!ids.has(note.id)) continue;
-          note.dynamics = text;
-        }
+  const selectedNoteIdSet = React.useMemo(
+    () => new Set(selection.map((s) => s.noteId)),
+    [selection],
+  );
+
+  const palettePressedCtx = React.useMemo(
+    () => ({
+      score,
+      selectedNoteIds: selectedNoteIdSet,
+      activeTool,
+      dottedInputMode: activeTool === "duration-dotted",
+    }),
+    [score, selectedNoteIdSet, activeTool],
+  );
+
+  const isPaletteButtonPressed = React.useCallback(
+    (item: PaletteItem) => isPaletteItemPressed(item, palettePressedCtx),
+    [palettePressedCtx],
+  );
+
+  const resolvePaletteOpContext = React.useCallback((dropNoteId?: string) => {
+    if (!score) return null;
+    riffSessionRef.current?.flushToZustand?.();
+    const live = useScoreStore.getState().score ?? score;
+    const noteIds = dropNoteId
+      ? new Set([dropNoteId])
+      : new Set(riffSessionRef.current?.getPitchGroupNoteIds() ?? selectedNoteIdSet);
+    const measureIndex = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
+    return { score: live, noteIds, measureIndex };
+  }, [score, selectedNoteIdSet, cursor, selection]);
+
+  const handlePalettePromptSubmit = React.useCallback(
+    (kind: PalettePromptKind, value: string) => {
+      const liveCtx = resolvePaletteOpContext();
+      if (!liveCtx && !palettePrompt) {
+        setPalettePrompt(null);
+        return;
       }
-    }
-    applyScore(next);
-  }, [score, selection, applyScore, showInspectorToast]);
+      const snapIds = palettePrompt?.noteIds;
+      const ctx = {
+        score: liveCtx?.score ?? score!,
+        noteIds: new Set(
+          snapIds && snapIds.length > 0 ? snapIds : (liveCtx?.noteIds ?? []),
+        ),
+        measureIndex: palettePrompt?.measureIndex ?? liveCtx?.measureIndex ?? 0,
+      };
+      const next = applyPalettePromptResult(kind, value, ctx);
+      if (next) applyScore(next);
+      setPalettePrompt(null);
+    },
+    [resolvePaletteOpContext, applyScore, palettePrompt, score],
+  );
 
   const resolveInsertionTarget = React.useCallback(() => {
     if (!score) return null;
@@ -1008,9 +1019,13 @@ function TactileSandboxPageInner({
   }, [cursor, score, selection]);
 
   const handleToolSelect = React.useCallback(
-    (toolId: string) => {
+    (toolId: string, options?: { dropNoteId?: string }) => {
       const paletteItem = findPaletteItem(toolId);
-      if (paletteItem?.requiresSelection && selection.length === 0) {
+      if (
+        paletteItem?.requiresSelection &&
+        selection.length === 0 &&
+        !options?.dropNoteId
+      ) {
         showInspectorToast("Select a note first.");
         return;
       }
@@ -1116,14 +1131,17 @@ function TactileSandboxPageInner({
         const noteIds =
           riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
         applyScore(toggleNoteRests(live, noteIds));
-      } else if (toolId === "duration-dotted" && selection.length > 0) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        const next = toggleNoteDots(live, noteIds);
-        applyScore(next);
+      } else if (toolId === "duration-dotted") {
+        if (selection.length > 0) {
+          riffSessionRef.current?.flushToZustand?.();
+          const live = useScoreStore.getState().score;
+          if (!live) return;
+          const noteIds =
+            riffSessionRef.current?.getPitchGroupNoteIds() ?? selectedNoteIdSet;
+          applyScore(toggleNoteDots(live, noteIds));
+        } else {
+          setActiveTool(activeTool === "duration-dotted" ? "duration-quarter" : "duration-dotted");
+        }
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
       } else if (pitchHandlers[toolId] !== undefined) {
@@ -1138,64 +1156,20 @@ function TactileSandboxPageInner({
         applyAccidentalToSelection("b");
       } else if (toolId === "pitch-accidental-natural") {
         applyAccidentalToSelection("natural");
-      } else if (
-        ["artic-slur", "artic-staccato", "artic-tenuto", "artic-accent", "artic-strong-accent", "artic-staccatissimo"].includes(toolId) &&
-        score &&
-        selection.length > 0
-      ) {
-        const articMap: Record<string, string> = {
-          "artic-slur": "slur",
-          "artic-staccato": "a.",
-          "artic-tenuto": "a-",
-          "artic-accent": "a>",
-          "artic-strong-accent": "a^",
-          "artic-staccatissimo": "staccatissimo",
-        };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        const next = addArticulation(score, noteIds, articMap[toolId] ?? "a.");
-        applyScore(next);
-      } else if (toolId === "text-expression") {
-        annotateSelection("Expression text", "words");
-      } else if (toolId === "text-performance") {
-        annotateSelection("Performance text", "words");
-      } else if (toolId.startsWith("dynamics-") && selection.length > 0) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const dynMap: Record<string, string> = {
-          "dynamics-piano": "p",
-          "dynamics-forte": "f",
-          "dynamics-cresc": "crescendo",
-          "dynamics-decresc": "decrescendo",
-          "dynamics-ppp": "ppp",
-          "dynamics-pp": "pp",
-          "dynamics-mp": "mp",
-          "dynamics-mf": "mf",
-          "dynamics-f": "f",
-          "dynamics-ff": "ff",
-          "dynamics-fff": "fff",
-          "dynamics-sfz": "sfz",
-          "dynamics-fp": "fp",
-        };
-        const dynamics = dynMap[toolId];
-        if (!dynamics) return;
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        applyScore(setNoteDynamics(live, noteIds, dynamics));
+      } else if (toolId === "pitch-accidental-dsharp" && score && selection.length > 0) {
+        applyAccidentalToSelection("##");
+      } else if (toolId === "pitch-accidental-dflat" && score && selection.length > 0) {
+        applyAccidentalToSelection("bb");
       } else if (toolId === "measure-insert-before" && score) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
         applyScore(insertMeasureBefore(score, mIdx));
       } else if (toolId === "measure-insert-after" && score) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        applyScore(insertMeasureAfter(score, mIdx + 1));
+        applyScore(insertMeasureAfter(score, mIdx));
       } else if (toolId === "measure-delete" && score && (selection.length > 0 || cursor)) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
         applyScore(deleteMeasure(score, mIdx));
         clearSelection();
-      } else if (toolId === "measure-change-time") {
-        setMeasureTimeSignature();
-      } else if (toolId === "measure-change-key") {
-        setMeasureKeySignature();
       } else if (toolId === "measure-clef-treble") {
         setSelectedPartClef("treble");
       } else if (toolId === "measure-clef-bass") {
@@ -1204,139 +1178,6 @@ function TactileSandboxPageInner({
         setSelectedPartClef("alto");
       } else if (toolId === "measure-clef-tenor") {
         setSelectedPartClef("tenor");
-      } else if (toolId.startsWith("measure-change-key-") && score) {
-        const raw = toolId.slice("measure-change-key-".length);
-        const fifths = Number.parseInt(raw, 10);
-        if (Number.isFinite(fifths) && fifths >= -7 && fifths <= 7) {
-          const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-          applyScore(applyKeySignatureFromMeasure(score, target, fifths));
-        }
-      } else if (toolId.startsWith("measure-change-time-") && score) {
-        const raw = toolId.slice("measure-change-time-".length);
-        const match = raw.match(/^(\d+)-(\d+)$/);
-        if (match) {
-          const ts = `${match[1]}/${match[2]}`;
-          const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-          applyScore(applyTimeSignatureFromMeasure(score, target, ts));
-        }
-      } else if (toolId.startsWith("measure-barline-") && score) {
-        const style = toolId.slice("measure-barline-".length) as Parameters<typeof setMeasureBarline>[2];
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        applyScore(setMeasureBarline(score, target, style));
-      } else if (toolId.startsWith("measure-repeat-") && score) {
-        const kind = toolId.slice("measure-repeat-".length);
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        if (kind === "clear") {
-          applyScore(setMeasureRepeatMark(score, target, null));
-        } else if (["segno", "coda", "dc", "ds", "fine"].includes(kind)) {
-          applyScore(
-            setMeasureRepeatMark(
-              score,
-              target,
-              kind as "segno" | "coda" | "dc" | "ds" | "fine",
-            ),
-          );
-        }
-      } else if (toolId === "measure-rehearsal-mark" && score) {
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        const text = window.prompt("Rehearsal mark:", "A");
-        if (text !== null) {
-          const next = cloneScore(score);
-          for (const part of next.parts) {
-            const measure = part.measures[target];
-            if (measure) {
-              if (text.trim() === "") delete measure.rehearsalMark;
-              else measure.rehearsalMark = text.trim();
-            }
-          }
-          applyScore(next);
-        }
-      } else if (toolId.startsWith("tempo-preset-") && score) {
-        const kind = toolId.slice("tempo-preset-".length);
-        const presets: Record<string, { text: string; bpm: number }> = {
-          largo: { text: "Largo", bpm: 40 },
-          adagio: { text: "Adagio", bpm: 66 },
-          andante: { text: "Andante", bpm: 76 },
-          moderato: { text: "Moderato", bpm: 108 },
-          allegro: { text: "Allegro", bpm: 132 },
-          presto: { text: "Presto", bpm: 168 },
-        };
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        if (kind === "custom") {
-          const raw = window.prompt("Tempo BPM (quarter note):", String(score.bpm ?? 120));
-          if (raw) {
-            const bpm = Number.parseFloat(raw);
-            if (Number.isFinite(bpm) && bpm > 0) {
-              applyScore(setMeasureTempoText(score, target, `♩ = ${Math.round(bpm)}`, bpm));
-            }
-          }
-        } else if (kind in presets) {
-          const { text, bpm } = presets[kind]!;
-          applyScore(setMeasureTempoText(score, target, `${text} ♩ = ${bpm}`, bpm));
-        }
-      } else if (toolId.startsWith("ornament-") && score && selection.length > 0) {
-        const ornament = toolId.slice("ornament-".length);
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(setOrnament(score, noteIds, ornament));
-      } else if (toolId.startsWith("tuplet-") && score && selection.length > 0) {
-        const rest = toolId.slice("tuplet-".length);
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        if (rest === "clear") {
-          applyScore(setTuplet(score, noteIds, null));
-        } else {
-          const n = Number.parseInt(rest, 10);
-          if (Number.isFinite(n) && n > 0) applyScore(setTuplet(score, noteIds, n));
-        }
-      } else if (
-        (toolId === "line-slur" ||
-          toolId === "line-cresc-hairpin" ||
-          toolId === "line-decresc-hairpin" ||
-          toolId === "line-8va" ||
-          toolId === "line-8vb") &&
-        score &&
-        selection.length > 0
-      ) {
-        const kindMap: Record<string, string> = {
-          "line-slur": "slur",
-          "line-cresc-hairpin": "cresc-hairpin",
-          "line-decresc-hairpin": "decresc-hairpin",
-          "line-8va": "8va",
-          "line-8vb": "8vb",
-        };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(setLineOnSelection(score, noteIds, kindMap[toolId] ?? "slur"));
-      } else if (toolId === "pitch-accidental-dsharp" && score && selection.length > 0) {
-        applyAccidentalToSelection("##");
-      } else if (toolId === "pitch-accidental-dflat" && score && selection.length > 0) {
-        applyAccidentalToSelection("bb");
-      } else if (toolId === "artic-fermata" && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(addArticulation(score, noteIds, "fermata"));
-      } else if (
-        (toolId === "breath-mark" || toolId === "breath-caesura") &&
-        score &&
-        selection.length > 0
-      ) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(
-          addArticulation(
-            score,
-            noteIds,
-            toolId === "breath-mark" ? "breath-mark" : "caesura",
-          ),
-        );
-      } else if (toolId === "text-lyrics" && score && selection.length > 0) {
-        const text = window.prompt("Lyric syllable:");
-        if (text !== null) {
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          applyScore(setNoteLyric(score, noteIds, text.trim() === "" ? null : text));
-        }
-      } else if (toolId === "text-chord-symbol" && score && selection.length > 0) {
-        const text = window.prompt("Chord symbol (e.g. Cmaj7):");
-        if (text !== null) {
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          applyScore(setNoteChordSymbol(score, noteIds, text.trim() === "" ? null : text));
-        }
       } else if (toolId === "score-copy") {
         const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
         if (live) navigator.clipboard?.writeText(scoreToMusicXML(live));
@@ -1351,16 +1192,47 @@ function TactileSandboxPageInner({
       } else if (toolId === "score-parts" || toolId === "score-layers") {
         setLayersPanelOpen((o) => !o);
       } else {
-        if (
-          toolId.startsWith("duration-") ||
-          toolId.startsWith("pitch-") ||
-          toolId.startsWith("edit-")
-        ) {
+        const measureIndex = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
+        const peekIds = options?.dropNoteId
+          ? new Set([options.dropNoteId])
+          : selectedNoteIdSet;
+        if (score) {
+          const peek = applyPaletteScoreOp(toolId, {
+            score,
+            noteIds: peekIds,
+            measureIndex,
+          });
+          if (peek?.kind === "prompt") {
+            const defaults =
+              peek.promptKind === "tempo"
+                ? { tempo: String(score.bpm ?? 120) }
+                : peek.promptKind === "time"
+                  ? { time: "4/4" }
+                  : peek.promptKind === "key"
+                    ? { key: "0" }
+                    : undefined;
+            // Open the modal before any RS flush — flush/loadScore was closing HfModal.
+            setPalettePrompt(
+              palettePromptState(peek.promptKind, defaults, {
+                noteIds: peekIds,
+                measureIndex,
+              }),
+            );
+            return;
+          }
+        }
+        const opCtx = resolvePaletteOpContext(options?.dropNoteId);
+        if (opCtx) {
+          const opResult = applyPaletteScoreOp(toolId, opCtx);
+          if (opResult?.kind === "score") {
+            applyScore(opResult.score);
+            return;
+          }
         }
         setActiveTool(toolId);
       }
     },
-    [score, selection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly, downloadLiveXml, showInspectorToast]
+    [score, selection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, selectedNoteIdSet, resolvePaletteOpContext, printScoreOnly, downloadLiveXml, showInspectorToast, setSelectedPartClef]
   );
 
   const handleToolbarAction = React.useCallback(
@@ -1977,9 +1849,10 @@ function TactileSandboxPageInner({
               }
               onRiffScoreSessionReady={handleRiffScoreSessionReady}
               noteInputPitchLabelEnabled={isNoteInputMode || isRepitchMode}
-              onPaletteSymbolDrop={(toolId) => {
-                handleToolSelect(toolId);
+              onPaletteSymbolDrop={(toolId, dropNoteId) => {
+                handleToolSelect(toolId, { dropNoteId });
               }}
+              paletteIsItemPressed={isPaletteButtonPressed}
               onToolbarAction={handleToolbarAction}
               onToolbarPrint={printScoreOnly}
               onRestInputCommit={handleRestInputCommit}
@@ -2051,6 +1924,7 @@ function TactileSandboxPageInner({
               <SandboxPalettePanel
                 className="h-full"
                 hasSelection={selection.length > 0}
+                isItemPressed={isPaletteButtonPressed}
                 onActivate={(toolId) => handleToolSelect(toolId)}
                 onClose={() => {
                   setPaletteDrawerMotion("drawer");
@@ -2341,6 +2215,12 @@ function TactileSandboxPageInner({
           const xml = useUploadStore.getState().workspaceBaselineXml;
           if (xml) hydrateSandboxFromMusicXml(xml);
         }}
+      />
+
+      <PalettePromptModal
+        state={palettePrompt}
+        onSubmit={handlePalettePromptSubmit}
+        onClose={() => setPalettePrompt(null)}
       />
 
       {/* Modals */}

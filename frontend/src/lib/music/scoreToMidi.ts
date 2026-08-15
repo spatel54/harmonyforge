@@ -3,7 +3,7 @@
  */
 
 import type { EditableScore } from "./scoreTypes";
-import { parseBeatsPerMeasure, noteDurationInBeats } from "./playbackUtils";
+import { realizeSoundingTimeline } from "./realizeSoundingTimeline";
 import { pitchStringToMidi } from "./pitchMidi";
 
 const PPQ = 480;
@@ -71,30 +71,18 @@ function collectPartNoteEvents(
   channel: number,
   beatsPerMeasureDefault: number,
 ): AbsEv[] {
-  const part = score.parts[partIndex];
-  if (!part) return [];
+  const timeline = realizeSoundingTimeline(score, beatsPerMeasureDefault);
   const out: AbsEv[] = [];
-  let partBeatCursor = 0;
-
-  for (const measure of part.measures) {
-    const measureBeats = parseBeatsPerMeasure(measure.timeSignature, beatsPerMeasureDefault);
-    const measureStartBeat = partBeatCursor;
-    let currentBeat = measureStartBeat;
-
-    for (const note of measure.notes) {
-      const dur = noteDurationInBeats(note);
-      const midi = !note.isRest ? pitchStringToMidi(note.pitch) : null;
-      if (midi !== null) {
-        const startTick = Math.round(currentBeat * PPQ);
-        const endTick = Math.round((currentBeat + dur) * PPQ);
-        out.push({ tick: endTick, kind: "off", ch: channel, note: midi, vel: 0 });
-        out.push({ tick: startTick, kind: "on", ch: channel, note: midi, vel: 100 });
-      }
-      currentBeat += dur;
-    }
-    partBeatCursor = Math.max(measureStartBeat + measureBeats, currentBeat);
+  for (const ev of timeline) {
+    if (ev.partIndex !== partIndex) continue;
+    const midi = pitchStringToMidi(ev.pitch);
+    if (midi === null) continue;
+    const startTick = Math.round(ev.startBeat * PPQ);
+    const endTick = Math.round((ev.startBeat + ev.durationBeats) * PPQ);
+    const vel = Math.max(1, Math.min(127, ev.velocity));
+    out.push({ tick: endTick, kind: "off", ch: channel, note: midi, vel: 0 });
+    out.push({ tick: startTick, kind: "on", ch: channel, note: midi, vel });
   }
-
   return out;
 }
 

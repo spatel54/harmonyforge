@@ -44,6 +44,7 @@ export function HfModal({
   const reduceMotion = useReducedMotion();
   const duration = reduceMotion ? 0.12 : 0.25;
 
+  const backdropPointerRef = React.useRef(false);
   React.useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -52,6 +53,14 @@ export function HfModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
+
+  const dismissFromBackdrop = React.useCallback(() => {
+    // Only close when the gesture started on the backdrop — not when a palette
+    // click opens the modal and the leftover click lands on the new overlay.
+    if (!backdropPointerRef.current) return;
+    backdropPointerRef.current = false;
+    onClose();
+  }, [onClose]);
 
   if (typeof document === "undefined") return null;
 
@@ -75,7 +84,10 @@ export function HfModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration, ease: MODAL_EASE }}
-            onClick={closeOnBackdrop ? onClose : undefined}
+            onPointerDown={() => {
+              backdropPointerRef.current = true;
+            }}
+            onClick={closeOnBackdrop ? dismissFromBackdrop : undefined}
           />
           <div
             className={cn(

@@ -6,6 +6,11 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Notation overlay placement (2026-08-15 late)](#wl-notation-overlay-placement-2026-08-15) — **canonical handover** — palette marks sit **above the staff**, aligned to the note; dynamics same lane; TR/turn/mordent use Noto Music Unicode; tempo larger — **`make test` 461** · **no blocking overlay failure**
+- [Work log — Notation glyphs on canvas (2026-08-15)](#wl-notation-glyphs-2026-08-15) — coda/segno as **Noto Music signs**, not `CODA` pills — Y-placement superseded by the overlay log above
+- [Work log — Palette QA leftovers (2026-08-15 late)](#wl-palette-qa-leftovers-2026-08-15) — OSMD export markings; toolbar BPM sync; RS Play expression patch — **`make test` 455**
+- [Work log — Palette browser QA (2026-08-15)](#wl-palette-browser-qa-2026-08-15) — live Playwright pass over all 14 dock sections; **lyrics persist**; **triplet split**; **Add bar**; **pressed state**; **F9 / Export / Play** — leftovers **closed** in the 2026-08-15 late log
+- [Work log — Palette & button audit (MuseScore/Noteflight) (2026-08-14 late)](#wl-palette-button-audit-2026-08-14) — MuseScore toggle reducers; **real tuplets**; **`realizeSoundingTimeline`**; SVG engraving; **`HfModal` prompts**; drop-on-note; RS expression bridge — leftovers **closed**
 - [Work log — Apple-quality motion on HarmonyForge chrome (2026-08-14 late)](#wl-apple-motion-chrome-2026-08-14) — **canonical handover** — Emil + Apple motion law; **`HfModal`** + Sonner; sandbox **panel rails** + float-inspector spring; **`make test` 429** · **`make lint` 0 errors** · **`npm run build` OK** — **no blocking failure**; **open:** manual browser QA matrix (Export exit, F9 instant, rail drawer, Sonner toast)
 - [Work log — Session 2026-08-14 PM (export letters · palettes · ties)](#wl-session-2026-08-14-pm) — OSMD letter labels; Noto Music + tooltip cleanup; MuseScore-like **Tie** + metadata persist; **RiffScore `renderTies`** staff-width fix — **`make test` 424** · **`make e2e` 5** · **`make lint` 0 errors** — **no blocking failure** (tie hanging-arc **resolved**)
 - [Work log — Tie, palette persistence & tooltip cleanup (2026-08-14 PM)](#wl-tie-palette-persistence-2026-08-14-pm) — child detail: tooltips, `toggleTieOnSelection`, RS→HF merge, `renderTies` patch
@@ -65,6 +70,193 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-notation-overlay-placement-2026-08-15"></a>
+
+## Work log — Notation overlay placement (2026-08-15 late)
+
+Canonical handover for the **sandbox palette-mark overlay**. Pin this + [plan.md](plan.md). Continues [glyphs](#wl-notation-glyphs-2026-08-15) and [palette leftovers](#wl-palette-qa-leftovers-2026-08-15).
+
+### End goal
+
+When a musician applies articulations, ornaments, dynamics, tempo, or repeats from the dock, the **same glyphs as the palette** appear on the RiffScore canvas: **centered on that note’s column**, **just above the top staff line** (not inside the staff on the notehead, not at the stem tip, not in empty space above the system). Tempo / D.S. / coda are **larger and bolder**. Play, Export, and OSMD remain as shipped in the leftovers log.
+
+### Approach
+
+RiffScore does not engrave HarmonyForge palette metadata. The overlay in [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) is the feedback path. DOM note boxes are **~14×193** (SMuFL/font column, not the head). Selection already used [`tightNoteHighlightRect`](../frontend/src/lib/music/noteHighlightRect.ts); marks now use **`noteheadAnchor`** for X and **`notationAboveStaffY(staffTop, headTop)`** for Y, with staff top/bottom from [`staffLineYsFiveInContainer`](../frontend/src/lib/music/riffscorePositions.ts). Glyphs come from **Noto Music** (bundled Unicode Musical Symbols) — **not** SMuFL PUA (Bravura is not a webfont). Debug ingest proved stem-column vs staff-line Y, then was **removed**.
+
+### Steps done so far
+
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | **Palette leftovers** | OSMD tuplets/tempo; toolbar BPM from `score.bpm`; Play `__HF_LOOKUP_PLAYBACK_*` — [leftovers](#wl-palette-qa-leftovers-2026-08-15) |
+| 2 | **Coda/segno signs** | `coda` → U+1D10C, `segno` → U+1D10B; no `CODA` pills; top staff only — [glyphs](#wl-notation-glyphs-2026-08-15) |
+| 3 | **Stem-column Y (runtime)** | Logs: `h: 193`, `articTop` at box top (~64–76) vs notehead `tight.cy` (~164). Overlay used raw `pos.y` / `pos.y+h` |
+| 4 | **Notehead snap** | `noteheadAnchor` + selection pill geometry. User: better, but accent still **inside the staff** on the head |
+| 5 | **Staff-top Y (runtime)** | Logs: C5 `staffTop: 146`, `articTop: 136` (above staff). Dynamics still `belowTop: 204` |
+| 6 | **Dynamics above staff** | [`noteNotationBadges`](../frontend/src/lib/music/notationOverlayBadges.ts) puts dynamics in **above**; `formatDynamicMark` maps p/m/f → U+1D18F–1D191 |
+| 7 | **Wrong ornament codepoints** | Overlay used U+1D19C/1D19E (**ornament strokes**). Noto has **TR** U+1D196, **TURN** U+1D197, zigzag U+1D19D. Palette buttons match |
+| 8 | **Tempo / words size** | Measure words **18px bold italic**; glyphs **26px**; rehearsal **14px bold** |
+| 9 | **Instrumentation out** | Debug fetch regions removed from `RiffScoreEditor` / `riffscorePositions` |
+
+### Runtime evidence (pre-fix → post-fix)
+
+- **A confirmed:** C5 `pos.h: 193`, `articTop: 63.5` vs `tight.cy: 164` (stem/font column).
+- **B rejected:** overlay `dy: 0` vs wrapper.
+- **F confirmed:** after notehead snap, `articTop: 301.9` next to `tight.cy: 314` (inside staff).
+- **Staff lines:** `staffTop: 146`, `staffBottom: 194` → above-staff `articTop: 136`.
+- **H confirmed:** `dyn: "f"` still `belowTop: 204` until dynamics moved to the above lane.
+- **J confirmed:** Unicode names — U+1D19C is ORNAMENT STROKE-2 (wedge), not TR.
+
+### Key files
+
+- [`notationOverlayBadges.ts`](../frontend/src/lib/music/notationOverlayBadges.ts) — glyphs, `formatDynamicMark`, dynamics in `above`
+- [`noteHighlightRect.ts`](../frontend/src/lib/music/noteHighlightRect.ts) — `noteheadAnchor`, `notationAboveStaffY`, `notationBelowStaffY`
+- [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx) — overlay; `staffBands` from five staff lines
+- [`NotationEngravingOverlay.tsx`](../frontend/src/components/score/NotationEngravingOverlay.tsx) — slur/hairpin endpoints on notehead
+- [`paletteRegistry.ts`](../frontend/src/lib/palettes/paletteRegistry.ts) — trill/turn/mordent glyphs match overlay
+
+### Verification
+
+- **`make test`:** **461** passed
+- User confirmed overlay placement in the sandbox; debug logs removed
+
+### Current failure
+
+**None on this overlay slice** (user marked fixed). **Program open (unchanged):** E2E photo-PDF on a real scan; viola/tenor sandbox vs OSMD PDF; post-import measure-gutter QA.
+
+<a id="wl-notation-glyphs-2026-08-15"></a>
+
+## Work log — Notation glyphs on canvas (2026-08-15)
+
+Coda (and other repeat marks) applied correctly but the sandbox overlay printed **`CODA`** in a pill on every staff instead of the sign. **Y-placement and ornament codepoints** were finished in [overlay placement](#wl-notation-overlay-placement-2026-08-15).
+
+### Fix
+
+| Change | Detail |
+|--------|--------|
+| Repeat marks | [`notationOverlayBadges.ts`](../frontend/src/lib/music/notationOverlayBadges.ts) maps `coda` → U+1D10C , `segno` → U+1D10B; D.C. / D.S. / Fine stay words |
+| Placement (this slice) | One overlay on the **top staff** only (no `CODA` pill) |
+| Note marks | Articulations/breaths stay notehead glyphs; hairpin/slur/8va no longer double as text badges. Ornaments: **Noto Music Unicode** (not SMuFL PUA) — see overlay log |
+
+### Browser (this slice)
+
+- Coda click → overlay codepoint `1d10c`, **no `CODA` text**, button `aria-pressed`
+- Segno → `1d10b`; fermata `1d110`; breath `1d112`; hairpin polyline + slur path present
+- Trill on canvas is now **`1d196`** (MUSICAL SYMBOL TR), not `1d19c` (ornament stroke)
+
+### Verification
+
+- **`make test`:** 457 at glyph ship; **461** after overlay placement tests
+
+<a id="wl-palette-browser-qa-2026-08-15"></a>
+
+## Work log — Palette browser QA (2026-08-15)
+
+Live sandbox pass (`http://localhost:3000/sandbox`, Playwright MCP) over every dock section and chrome control. Pin this + [plan.md](plan.md).
+
+### Fixes from the browser
+
+| Bug | Fix |
+|-----|-----|
+| Triplet white-screened RS (`tuplet.ratio[1]` on a number) | [`riffscoreAdapter.ts`](../frontend/src/lib/music/riffscoreAdapter.ts) `hfTupletToRsEvent` |
+| Lyrics/custom prompts applied to no notes after RS remount | Snapshot `noteIds` on [`PalettePromptModal`](../frontend/src/components/molecules/PalettePromptModal.tsx); open prompt **before** `flushToZustand` |
+| Prompt modal vanished on the opening click | [`HfModal`](../frontend/src/components/molecules/HfModal.tsx) backdrop closes only if the pointer **started** on the backdrop |
+| Add bar skipped a measure | `insertMeasureAfter(score, mIdx)` not `mIdx + 1` |
+| Palette toggles lost selection after `loadScore` | Ignore empty RS selection while pushing score |
+| Almost no `aria-pressed` feedback | [`palettePressedState.ts`](../frontend/src/lib/sandbox/palettePressedState.ts) — duration, clef, key, time, barline, repeat, tempo, accidentals, tie |
+| F9 ignored after Letter Names checkbox | [`isTypingTarget.ts`](../frontend/src/lib/ui/isTypingTarget.ts) — checkbox/radio/range are not typing targets |
+
+### Browser matrix (this session)
+
+- **Note entry / clefs / key / time / barlines / accidentals** — click applies; matching button stays pressed
+- **Articulations, ornaments, dynamics, lines, breaths** — toggle; selection survives remount
+- **Repeats** — segno/coda/D.C./D.S./Fine press; Clear unpresses
+- **Tempo** — Andante badge + pressed; Custom… modal
+- **Text** — Lyrics **la** overlay; Chord / Expression / Performance / Rehearsal modals
+- **Tuplets** — one quarter → triplet eighths (8 → 10 note hits); no crash
+- **Add bar** — scrub label 2 → 3 measures
+- **Chrome** — F9 hide/show (focus on score); Export dialog; Play → Pause; Letter Names toggle
+
+### Verification
+
+- **`make test`:** 452 passed
+- **`make lint`:** 0 errors
+- **`make e2e`:** [`sandbox-palette-buttons.spec.ts`](../frontend/e2e/sandbox-palette-buttons.spec.ts) added — needs Playwright browser `chromium_headless_shell-1161` in this environment
+
+### Open
+
+Leftovers **closed** — [Palette QA leftovers (2026-08-15 late)](#wl-palette-qa-leftovers-2026-08-15).
+
+<a id="wl-palette-qa-leftovers-2026-08-15"></a>
+
+## Work log — Palette QA leftovers (2026-08-15 late)
+
+Closed the three opens from [browser QA](#wl-palette-browser-qa-2026-08-15). Pin this + [plan.md](plan.md).
+
+### End goal
+
+Export PDF/OSMD shows palette articulations, hairpins, and tuplets; the RiffScore toolbar BPM matches palette tempo; sandbox Play uses expression velocity/duration.
+
+### What shipped
+
+| Leftover | Fix |
+|----------|-----|
+| **OSMD / Export markings** | [`scoreToMusicXML.ts`](../frontend/src/lib/music/scoreToMusicXML.ts): sounding tuplet `<duration>` at **DIVISIONS=24**; `<tuplet type="start/stop">`; tempo **words + metronome + `<sound>`** when both `tempoText` and `bpm` are set |
+| **Toolbar BPM stays 120** | RiffScore `MusicEditor` syncs React `bpm` from `score.bpm` after `loadScore` (CJS + ESM) |
+| **Play expression hook** | Patched `scheduleTonePlayback` calls `__HF_LOOKUP_PLAYBACK_VELOCITY` / `__HF_LOOKUP_PLAYBACK_DURATION` (MIDI vel → Tone 0–1; beats → seconds). Regenerated [`patches/riffscore+1.0.0-alpha.9.patch`](../frontend/patches/riffscore+1.0.0-alpha.9.patch) via `npx patch-package riffscore` |
+
+### Browser spot-check (`localhost:3000/sandbox`)
+
+- **Andante** → toolbar BPM input **`76`**; measure badge **Andante ♩ = 76**
+- **Export OSMD** MusicXML has `<staccato/>`, `<wedge>`, `<tuplet>`, `<time-modification>`; OSMD model has VF modifier `a.`, hairpin `lines`, tuplet `num_notes=3`; preview shows Andante + beamed triplet eighths
+- **Play** invoked expression lookups (4 vel + 4 dur in ~1.2s); staccato cache `durC5=0.5`
+
+### Verification
+
+- **`make test`:** 455 passed
+- **`make lint`:** 0 errors (10 pre-existing warnings)
+- After pull: `cd frontend && npm install` (applies patch) then **`rm -rf .next`** if Play/BPM look stale
+
+### Open
+
+None from this leftover list. Follow-on overlay Y-placement + ornament glyphs **closed** in [overlay placement](#wl-notation-overlay-placement-2026-08-15). Program-level opens unchanged (PDF OMR quality, viola/tenor manual QA).
+
+<a id="wl-palette-button-audit-2026-08-14"></a>
+
+## Work log — Palette & button audit (MuseScore/Noteflight) (2026-08-14 late)
+
+Canonical handover for the **14-section palette + sandbox chrome** audit. Pin this section + [plan.md](plan.md) for follow-up QA.
+
+### End goal
+
+Every palette tool and sandbox chrome button follows **MuseScore/Noteflight law**: articulations/ornaments/lines/dynamics **toggle**; dynamics anchor on first selected note; **cresc./dim.** are text (hairpins live in Lines); **real tuplets** (3:2, 5:4, 6:4, 7:4); expression on **MIDI/WAV/export** timeline; SVG engraving for slurs/hairpins/8va; **`HfModal`** replaces `window.prompt`.
+
+### Steps done so far
+
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | **Toggle reducers** | [`scoreUtils.ts`](../frontend/src/lib/music/scoreUtils.ts): `toggleArticulation`, `toggleOrnament`, `toggleDynamicOnAnchor`, `toggleLineOnSelection`, fermata/breath on rests |
+| 2 | **Testable dispatch** | [`paletteToolScoreOps.ts`](../frontend/src/lib/sandbox/paletteToolScoreOps.ts) + Vitest; [`palettePressedState.ts`](../frontend/src/lib/sandbox/palettePressedState.ts) |
+| 3 | **Palette chrome** | `aria-pressed`, tenor glyph `𝄡₄`, honest cresc./dim. titles, dotted note-input without selection, [`PalettePromptModal`](../frontend/src/components/molecules/PalettePromptModal.tsx) |
+| 4 | **Toolbar cleanup** | Removed duplicate Undo/Export XML plugins from RiffScore toolbar; [`toolbarActionMap.ts`](../frontend/src/components/score/toolbarActionMap.ts) trimmed to live actions |
+| 5 | **Real tuplets** | [`tupletUtils.ts`](../frontend/src/lib/music/tupletUtils.ts), `applyTupletGroup`, `noteBeats` sounding factor, RS `event.tuplet`, MusicXML `<time-modification>` |
+| 6 | **Engraving overlay** | [`NotationEngravingOverlay.tsx`](../frontend/src/components/score/NotationEngravingOverlay.tsx) — SVG slurs, hairpins, 8va |
+| 7 | **Expression playback** | [`realizeSoundingTimeline.ts`](../frontend/src/lib/music/realizeSoundingTimeline.ts) — dynamics velocity, staccato duration, ornaments, D.C./D.S.; wired to MIDI/WAV/`usePlayback` |
+| 8 | **Drop-on-note** | Palette drag-drop hit-tests note/rest under cursor → applies to that note |
+| 9 | **RS expression bridge** | [`playbackExpressionBridge.ts`](../frontend/src/lib/music/playbackExpressionBridge.ts) + regenerated **`riffscore` patch** calls `__HF_LOOKUP_PLAYBACK_*` at `triggerAttackRelease` — [leftovers](#wl-palette-qa-leftovers-2026-08-15) |
+
+### Verification
+
+- **`make test`:** 443 passed (Vitest)
+- **`make lint`:** 0 errors (10 pre-existing warnings)
+- **`make e2e`:** blocked in CI sandbox — Playwright browsers not installed (`npx playwright install`)
+
+### Open / manual QA
+
+- [x] Browser matrix: all 14 palette sections + F9 rail + header Export + Play + Letter Names — see [2026-08-15 QA](#wl-palette-browser-qa-2026-08-15)
+- [x] OSMD spot-check: articulations, dynamics, hairpins, tuplets in PDF preview — [leftovers](#wl-palette-qa-leftovers-2026-08-15)
+- [x] Regenerate **`patches/riffscore+1.0.0-alpha.9.patch`** to wire RS sandbox Play through expression velocity/duration lookup
 
 <a id="wl-apple-motion-chrome-2026-08-14"></a>
 
@@ -2671,7 +2863,9 @@ Each chunk was validated with **`make test`**, **`cd frontend && npm run test`**
 
 ## Current Focus
 
-**2026-08-14 PM (export letters · palettes · ties):** End goal, approach, steps, **current failure** — **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)**. **Shipped:** OSMD letter-label hardening; Noto Music + tooltip cleanup; MuseScore-like **Tie** + RS→HF notation merge; RiffScore **`renderTies`** uses staff measure widths. **`make test`:** **424** · **`make e2e`:** **5**. **No blocking failure** (hanging Tie arc **resolved**). **Program open:** E2E photo-PDF on real scan.
+**2026-08-15 late (notation overlay placement):** End goal, approach, steps, **current failure** — **[Work log — Notation overlay placement](#wl-notation-overlay-placement-2026-08-15)**. **Shipped:** staff-top overlay for articulations/ornaments/dynamics/tempo; Noto Music TR/turn/mordent; leftover OSMD/BPM/Play expression. **`make test`:** **461**. **No blocking overlay failure.** **Program open:** E2E photo-PDF on real scan; viola/tenor vs OSMD.
+
+**2026-08-14 PM (export letters · palettes · ties):** End goal, approach, steps, **current failure** — **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)**. **Shipped:** OSMD letter-label hardening; Noto Music + tooltip cleanup; MuseScore-like **Tie** + RS→HF notation merge; RiffScore **`renderTies`** uses staff measure widths. **`make test`:** **424** · **`make e2e`:** **5**. **No blocking failure** (hanging Tie arc **resolved**). **Program open:** E2E photo-PDF on a real scan.
 
 **2026-08-14 session (PDF I/O · palettes · Document live melody):** End goal, approach, steps — **[Work log — Session 2026-08-14](#wl-session-2026-08-14)**. **Shipped:** Audiveris env on **`make dev`** + OMR preflight / **`omr.ready`**; docked palettes + note popover; Document staff editable; Generate serializes live sounding notes when they differ from intake; **`make e2e`** (Document edit → Generate request + sandbox Octave ↓/F9). **`make test`:** **412** at morning gate (now **424**). **Open:** E2E photo-PDF on real scan.
 
@@ -3239,7 +3433,7 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **MVP (M4 #79):** Core engine + upload → generate → sandbox path is in place. **M5 (User Study & Evaluation):** can proceed once dev friction below is acceptable.
 
-**Immediate (2026-08-14 PM slice done — see [Session 2026-08-14 PM](#wl-session-2026-08-14-pm); remaining QA below):**
+**Immediate (2026-08-15 overlay slice done — see [Notation overlay placement](#wl-notation-overlay-placement-2026-08-15); remaining QA below):**
 1. **Viola / alto–tenor sandbox QA** — After **`rm -rf .next`**, generate or load **Melody + Viola + Cello** (or similar); confirm **Sandbox** noteheads and learner labels match **Export → PDF/Print** (OSMD). See **[Viola sandbox vs export parity](#wl-viola-sandbox-export-parity-2026-06-03)**.
 2. **PDF OMR quality QA** — End-to-end on a real scan (e.g. **`月亮代表我的心`**) after **`make audiveris-setup`**: Playground upload → Document preview → Generate → Sandbox. Compare OMR output to source; document when to recommend native MusicXML/MXL/MIDI upload instead.
 3. **RiffScore post-import UX** — Re-verify measure-gutter click selection after Audiveris import (**`Target event not found`** fix landed; needs browser pass on dense/multi-voice scores).
@@ -3283,7 +3477,16 @@ Full narrative: **[Work log — Accidentals, RiffScore adapter, Theory Inspector
 
 **When context is noisy:** Paste summary here before starting fresh chat.
 
-**Handover template (2026-08-14 PM):**
+**Handover template (2026-08-15 late):**
+- **Canonical summary:** **[Work log — Notation overlay placement](#wl-notation-overlay-placement-2026-08-15)** — end goal, approach, steps, **current failure**. Prior same-day: [glyphs](#wl-notation-glyphs-2026-08-15), [leftovers](#wl-palette-qa-leftovers-2026-08-15), [browser QA](#wl-palette-browser-qa-2026-08-15).
+- **End goal:** Palette marks on the canvas sit **above the staff**, aligned to the note, with correct Noto Music glyphs and bolder tempo.
+- **Approach:** Overlay uses `noteheadAnchor` (X) + five staff-line Y (`notationAboveStaffY`); dynamics in the above lane; Unicode TR/TURN (U+1D196/1D197), not ornament strokes.
+- **Shipped this tranche:** Overlay placement, dynamic letters, ornament/palette glyph sync, leftover OSMD/BPM/Play expression, coda/segno signs. **`make test`:** **461**.
+- **Current failure:** **None blocking on overlay** (user confirmed). Program open: E2E photo-PDF on a real scan; viola/tenor vs OSMD.
+- **Key files:** `RiffScoreEditor.tsx`, `notationOverlayBadges.ts`, `noteHighlightRect.ts`, `NotationEngravingOverlay.tsx`, `paletteRegistry.ts`, `scoreToMusicXML.ts`, `patches/riffscore+1.0.0-alpha.9.patch`.
+- **Run:** **`make dev`** → `/sandbox`. After pull: **`cd frontend && npm install`** (postinstall `patch-package`).
+
+**Older handover (2026-08-14 PM):**
 - **Canonical summary:** **[Work log — Session 2026-08-14 PM](#wl-session-2026-08-14-pm)** — end goal, approach, steps, **current failure**. Morning PDF/Document tranche: **[Session 2026-08-14](#wl-session-2026-08-14)**.
 - **End goal:** Sandbox palettes with clean glyphs/tooltips; Tie on the highlighted notehead; palette marks persist across RS↔HF; export letter names stay on heads.
 - **Approach:** Harden OSMD overlay; Noto Music + no shortcut row on tooltips; `toggleTieOnSelection` + overlay ids + `mergeNotationFromPrevious`; patch `Staff3.renderTies` to staff widths / `forcedPositions`.

@@ -46,7 +46,7 @@ index 1ca537c..ee2d0eb 100644
      scale?: number;
      label?: string;
 diff --git a/node_modules/riffscore/dist/index.js b/node_modules/riffscore/dist/index.js
-index ef82e00..bef7263 100644
+index ef82e00..afef679 100644
 --- a/node_modules/riffscore/dist/index.js
 +++ b/node_modules/riffscore/dist/index.js
 @@ -1165,12 +1165,25 @@ var CLEF_REFERENCE = {
@@ -99,7 +99,7 @@ index ef82e00..bef7263 100644
    sampler = new Tone.Sampler({
      urls: {
        A0: "A0.mp3",
-@@ -3492,23 +3511,84 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3492,23 +3511,93 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }
    stopTonePlayback();
    Tone.Transport.bpm.value = bpm;
@@ -170,7 +170,16 @@ index ef82e00..bef7263 100644
 +      return;
 +    }
 +    try {
-+      instrument.triggerAttackRelease(event.note, event.duration, time);
++      const scoreTimeSec = (typeof event.time === "number" ? event.time : 0) + startTimeOffset;
++      const velMidi = typeof globalThis.__HF_LOOKUP_PLAYBACK_VELOCITY === "function" ? globalThis.__HF_LOOKUP_PLAYBACK_VELOCITY(event.note, scoreTimeSec) : void 0;
++      const durBeats = typeof globalThis.__HF_LOOKUP_PLAYBACK_DURATION === "function" ? globalThis.__HF_LOOKUP_PLAYBACK_DURATION(event.note, scoreTimeSec) : void 0;
++      const vel = typeof velMidi === "number" ? Math.max(0, Math.min(1, velMidi / 127)) : void 0;
++      const dur = typeof durBeats === "number" && durBeats > 0 ? durBeats * 60 / bpm : event.duration;
++      if (vel != null) {
++        instrument.triggerAttackRelease(event.note, dur, time, vel);
++      } else {
++        instrument.triggerAttackRelease(event.note, dur, time);
++      }
 +    } catch (err) {
 +      triggerErrors++;
 +      logHfPlayback({
@@ -189,7 +198,7 @@ index ef82e00..bef7263 100644
      Tone.Draw.schedule(() => {
        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
      }, time);
-@@ -3516,15 +3596,36 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3516,15 +3605,36 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    currentPart = part;
    part.start(0);
    const lastEvent = events[events.length - 1];
@@ -227,7 +236,7 @@ index ef82e00..bef7263 100644
    if (chordEvents.length === 0) return;
    const Tone = await loadTone();
    const instrument = getActiveInstrument();
-@@ -3547,16 +3648,92 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
+@@ -3547,16 +3657,92 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
    chordPart = chordPartInstance;
    chordPartInstance.start(0);
  };
@@ -324,7 +333,7 @@ index ef82e00..bef7263 100644
    Tone.Transport.stop();
    Tone.Transport.cancel();
    if (currentPart) {
-@@ -3578,6 +3755,12 @@ var playNote = async (pitch, duration = "8n") => {
+@@ -3578,6 +3764,12 @@ var playNote = async (pitch, duration = "8n") => {
      instrument.triggerAttackRelease(pitch, duration);
    }
  };
@@ -337,7 +346,7 @@ index ef82e00..bef7263 100644
  var isSamplerLoaded = () => state.samplerLoaded;
  var isPlaying = () => state.isPlaying;
  
-@@ -3613,19 +3796,15 @@ var createTimeline = (score, bpm) => {
+@@ -3613,19 +3805,15 @@ var createTimeline = (score, bpm) => {
        let currentMeasureQuant = 0;
        measure.events.forEach((event, eIndex) => {
          const eventDurQuants = getNoteDuration(event.duration, event.dotted, event.tuplet);
@@ -361,7 +370,7 @@ index ef82e00..bef7263 100644
              duration: eventDurQuants * secondsPerQuant,
              pitch: note.pitch,
              tied: !!note.tied,
-@@ -3635,18 +3814,35 @@ var createTimeline = (score, bpm) => {
+@@ -3635,18 +3823,35 @@ var createTimeline = (score, bpm) => {
              staffIndex
            });
          });
@@ -400,7 +409,7 @@ index ef82e00..bef7263 100644
          if (isConnected) {
            current.duration += next.duration;
            current.tied = next.tied;
-@@ -3659,6 +3855,18 @@ var createTimeline = (score, bpm) => {
+@@ -3659,6 +3864,18 @@ var createTimeline = (score, bpm) => {
      }
    });
    function addEventToTimeline(raw) {
@@ -419,7 +428,7 @@ index ef82e00..bef7263 100644
      const freq = getFrequency(raw.pitch);
      if (freq) {
        timeline.push({
-@@ -3692,6 +3900,16 @@ var usePlayback = (score, bpm) => {
+@@ -3692,6 +3909,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -436,7 +445,7 @@ index ef82e00..bef7263 100644
    const exitPlaybackMode = React2.useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3700,6 +3918,10 @@ var usePlayback = (score, bpm) => {
+@@ -3700,6 +3927,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -447,7 +456,7 @@ index ef82e00..bef7263 100644
    }, []);
    const pausePlayback = React2.useCallback(() => {
      stopTonePlayback();
-@@ -3708,24 +3930,49 @@ var usePlayback = (score, bpm) => {
+@@ -3708,24 +3939,49 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = React2.useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -508,7 +517,7 @@ index ef82e00..bef7263 100644
        setIsActive(true);
        requestAnimationFrame(() => {
          requestAnimationFrame(() => {
-@@ -3738,10 +3985,12 @@ var usePlayback = (score, bpm) => {
+@@ -3738,10 +3994,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -521,7 +530,7 @@ index ef82e00..bef7263 100644
              }
            );
          });
-@@ -3754,9 +4003,23 @@ var usePlayback = (score, bpm) => {
+@@ -3754,9 +4012,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -548,7 +557,7 @@ index ef82e00..bef7263 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -7158,21 +7421,10 @@ var useModifiers = ({
+@@ -7158,21 +7430,10 @@ var useModifiers = ({
      if (tools.activeTie !== targetState) tools.handleTieToggle();
    }, [selection, tools, dispatch, scoreRef]);
    const checkDurationValidity = React2.useCallback(
@@ -573,7 +582,7 @@ index ef82e00..bef7263 100644
    );
    const checkDotValidity = React2.useCallback(() => {
      if (selection.measureIndex === null || !selection.eventId) return true;
-@@ -8442,8 +8694,7 @@ var useNavigation = ({
+@@ -8442,8 +8703,7 @@ var useNavigation = ({
            if (!chordResult.atBoundary && chordResult.chordId !== selection.chordId) {
              const chord = (_a = scoreRef.current.chordTrack) == null ? void 0 : _a.find((c) => c.id === chordResult.chordId);
              if (chord) {
@@ -583,7 +592,7 @@ index ef82e00..bef7263 100644
              }
            }
          }
-@@ -8466,8 +8717,7 @@ var useNavigation = ({
+@@ -8466,8 +8726,7 @@ var useNavigation = ({
              selectionEngine.selectChord(vertResult.chordId);
              const chord = (_d = scoreRef.current.chordTrack) == null ? void 0 : _d.find((c) => c.id === vertResult.chordId);
              if (chord) {
@@ -593,7 +602,7 @@ index ef82e00..bef7263 100644
              }
              return;
            }
-@@ -8740,13 +8990,36 @@ var useInteraction = ({
+@@ -8740,13 +8999,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -631,7 +640,7 @@ index ef82e00..bef7263 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8765,7 +9038,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8765,7 +9047,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -643,7 +652,7 @@ index ef82e00..bef7263 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -11457,9 +11733,14 @@ var Staff3 = ({
+@@ -11457,9 +11742,14 @@ var Staff3 = ({
      let currentMeasureX = tieStartX;
      const allNotes = [];
      measures.forEach((measure, mIndex) => {
@@ -660,7 +669,7 @@ index ef82e00..bef7263 100644
          event.notes.forEach((note, nIndex) => {
            if (note.pitch === null) return;
            allNotes.push({
-@@ -11475,7 +11756,7 @@ var Staff3 = ({
+@@ -11475,7 +11765,7 @@ var Staff3 = ({
            });
          });
        });
@@ -669,7 +678,7 @@ index ef82e00..bef7263 100644
      });
      allNotes.forEach((note) => {
        var _a, _b;
-@@ -12401,8 +12682,7 @@ var ScoreCanvas = ({
+@@ -12401,8 +12691,7 @@ var ScoreCanvas = ({
                    selectionEngine.selectChord(chordId2);
                    const chord = chordTrackHook.chords.find((c) => c.id === chordId2);
                    if (chord) {
@@ -679,7 +688,7 @@ index ef82e00..bef7263 100644
                    }
                  },
                  onEmptyClick: (quant) => {
-@@ -18041,7 +18321,8 @@ var Toolbar = React2.forwardRef(
+@@ -18041,7 +18330,8 @@ var Toolbar = React2.forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -689,7 +698,7 @@ index ef82e00..bef7263 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18190,6 +18471,26 @@ var Toolbar = React2.forwardRef(
+@@ -18190,6 +18480,26 @@ var Toolbar = React2.forwardRef(
                  }
                )
              ] }),
@@ -716,7 +725,7 @@ index ef82e00..bef7263 100644
              /* @__PURE__ */ jsxRuntime.jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsxRuntime.jsx(
                ToolbarButton_default,
-@@ -23943,7 +24244,8 @@ var ScoreEditorContent = ({
+@@ -23943,7 +24253,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -726,7 +735,21 @@ index ef82e00..bef7263 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24159,7 +24461,8 @@ var ScoreEditorContent = ({
+@@ -23954,7 +24265,12 @@ var ScoreEditorContent = ({
+   const { addChord: addChordToMeasure, updatePitch: updateNotePitch } = scoreLogic.entry;
+   const { clearSelection, setPreviewNote } = scoreLogic;
+   const { pendingClefChange, setPendingClefChange } = scoreLogic;
+-  const [bpm, setBpm] = React2.useState(120);
++  const [bpm, setBpm] = React2.useState(score.bpm || 120);
++  React2.useEffect(() => {
++    if (typeof score.bpm === "number" && Number.isFinite(score.bpm) && score.bpm > 0) {
++      setBpm(score.bpm);
++    }
++  }, [score.bpm]);
+   const [showHelp, setShowHelp] = React2.useState(false);
+   const [isHoveringScore, setIsHoveringScore] = React2.useState(false);
+   const [selectedInstrument, setSelectedInstrument] = React2.useState("bright");
+@@ -24159,7 +24475,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -736,7 +759,7 @@ index ef82e00..bef7263 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsxRuntime.jsx(Portal_default, { children: /* @__PURE__ */ jsxRuntime.jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24272,7 +24575,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24272,7 +24589,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,
@@ -747,7 +770,7 @@ index ef82e00..bef7263 100644
          ) }) })
        ]
 diff --git a/node_modules/riffscore/dist/index.mjs b/node_modules/riffscore/dist/index.mjs
-index fc71835..5917c8b 100644
+index fc71835..856e680 100644
 --- a/node_modules/riffscore/dist/index.mjs
 +++ b/node_modules/riffscore/dist/index.mjs
 @@ -1159,12 +1159,25 @@ var CLEF_REFERENCE = {
@@ -791,7 +814,7 @@ index fc71835..5917c8b 100644
    const mapping = getYToPitch(clef);
    return mapping[offset];
  };
-@@ -3486,23 +3505,84 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3486,23 +3505,93 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    }
    stopTonePlayback();
    Tone.Transport.bpm.value = bpm;
@@ -862,7 +885,16 @@ index fc71835..5917c8b 100644
 +      return;
 +    }
 +    try {
-+      instrument.triggerAttackRelease(event.note, event.duration, time);
++      const scoreTimeSec = (typeof event.time === "number" ? event.time : 0) + startTimeOffset;
++      const velMidi = typeof globalThis.__HF_LOOKUP_PLAYBACK_VELOCITY === "function" ? globalThis.__HF_LOOKUP_PLAYBACK_VELOCITY(event.note, scoreTimeSec) : void 0;
++      const durBeats = typeof globalThis.__HF_LOOKUP_PLAYBACK_DURATION === "function" ? globalThis.__HF_LOOKUP_PLAYBACK_DURATION(event.note, scoreTimeSec) : void 0;
++      const vel = typeof velMidi === "number" ? Math.max(0, Math.min(1, velMidi / 127)) : void 0;
++      const dur = typeof durBeats === "number" && durBeats > 0 ? durBeats * 60 / bpm : event.duration;
++      if (vel != null) {
++        instrument.triggerAttackRelease(event.note, dur, time, vel);
++      } else {
++        instrument.triggerAttackRelease(event.note, dur, time);
++      }
 +    } catch (err) {
 +      triggerErrors++;
 +      logHfPlayback({
@@ -881,7 +913,7 @@ index fc71835..5917c8b 100644
      Tone.Draw.schedule(() => {
        onPositionUpdate == null ? void 0 : onPositionUpdate(event.measureIndex, event.quant, event.duration);
      }, time);
-@@ -3510,15 +3590,36 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
+@@ -3510,15 +3599,36 @@ var scheduleTonePlayback = async (timeline, bpm, startTimeOffset = 0, onPosition
    currentPart = part;
    part.start(0);
    const lastEvent = events[events.length - 1];
@@ -919,7 +951,7 @@ index fc71835..5917c8b 100644
    if (chordEvents.length === 0) return;
    const Tone = await loadTone();
    const instrument = getActiveInstrument();
-@@ -3541,16 +3642,92 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
+@@ -3541,16 +3651,92 @@ var scheduleChordPlayback = async (chordEvents, startTimeOffset = 0) => {
    chordPart = chordPartInstance;
    chordPartInstance.start(0);
  };
@@ -1016,7 +1048,7 @@ index fc71835..5917c8b 100644
    Tone.Transport.stop();
    Tone.Transport.cancel();
    if (currentPart) {
-@@ -3572,6 +3749,12 @@ var playNote = async (pitch, duration = "8n") => {
+@@ -3572,6 +3758,12 @@ var playNote = async (pitch, duration = "8n") => {
      instrument.triggerAttackRelease(pitch, duration);
    }
  };
@@ -1029,7 +1061,7 @@ index fc71835..5917c8b 100644
  var isSamplerLoaded = () => state.samplerLoaded;
  var isPlaying = () => state.isPlaying;
  
-@@ -3607,19 +3790,15 @@ var createTimeline = (score, bpm) => {
+@@ -3607,19 +3799,15 @@ var createTimeline = (score, bpm) => {
        let currentMeasureQuant = 0;
        measure.events.forEach((event, eIndex) => {
          const eventDurQuants = getNoteDuration(event.duration, event.dotted, event.tuplet);
@@ -1053,7 +1085,7 @@ index fc71835..5917c8b 100644
              duration: eventDurQuants * secondsPerQuant,
              pitch: note.pitch,
              tied: !!note.tied,
-@@ -3629,18 +3808,35 @@ var createTimeline = (score, bpm) => {
+@@ -3629,18 +3817,35 @@ var createTimeline = (score, bpm) => {
              staffIndex
            });
          });
@@ -1092,7 +1124,7 @@ index fc71835..5917c8b 100644
          if (isConnected) {
            current.duration += next.duration;
            current.tied = next.tied;
-@@ -3653,6 +3849,18 @@ var createTimeline = (score, bpm) => {
+@@ -3653,6 +3858,18 @@ var createTimeline = (score, bpm) => {
      }
    });
    function addEventToTimeline(raw) {
@@ -1111,7 +1143,7 @@ index fc71835..5917c8b 100644
      const freq = getFrequency(raw.pitch);
      if (freq) {
        timeline.push({
-@@ -3686,6 +3894,16 @@ var usePlayback = (score, bpm) => {
+@@ -3686,6 +3903,16 @@ var usePlayback = (score, bpm) => {
      });
      isInitialized2.current = true;
    }, []);
@@ -1128,7 +1160,7 @@ index fc71835..5917c8b 100644
    const exitPlaybackMode = useCallback(() => {
      setIsActive(false);
    }, []);
-@@ -3694,6 +3912,10 @@ var usePlayback = (score, bpm) => {
+@@ -3694,6 +3921,10 @@ var usePlayback = (score, bpm) => {
      setIsPlaying(false);
      setIsActive(true);
      setPlaybackPosition({ measureIndex: null, quant: null, duration: 0 });
@@ -1139,7 +1171,7 @@ index fc71835..5917c8b 100644
    }, []);
    const pausePlayback = useCallback(() => {
      stopTonePlayback();
-@@ -3702,24 +3924,43 @@ var usePlayback = (score, bpm) => {
+@@ -3702,24 +3933,43 @@ var usePlayback = (score, bpm) => {
    }, []);
    const playScore = useCallback(
      async (startMeasureIndex = 0, startQuant = 0) => {
@@ -1194,7 +1226,7 @@ index fc71835..5917c8b 100644
        setIsActive(true);
        requestAnimationFrame(() => {
          requestAnimationFrame(() => {
-@@ -3732,10 +3973,12 @@ var usePlayback = (score, bpm) => {
+@@ -3732,10 +3982,12 @@ var usePlayback = (score, bpm) => {
              startTimeOffset,
              (measureIndex, quant, duration) => {
                setPlaybackPosition({ measureIndex, quant, duration: duration || 0 });
@@ -1207,7 +1239,7 @@ index fc71835..5917c8b 100644
              }
            );
          });
-@@ -3748,9 +3991,23 @@ var usePlayback = (score, bpm) => {
+@@ -3748,9 +4000,23 @@ var usePlayback = (score, bpm) => {
      if (isPlaying2) {
        pausePlayback();
      } else {
@@ -1234,7 +1266,7 @@ index fc71835..5917c8b 100644
      }
    }, [isPlaying2, playScore, pausePlayback, playbackPosition]);
    return {
-@@ -7152,21 +7409,10 @@ var useModifiers = ({
+@@ -7152,21 +7418,10 @@ var useModifiers = ({
      if (tools.activeTie !== targetState) tools.handleTieToggle();
    }, [selection, tools, dispatch, scoreRef]);
    const checkDurationValidity = useCallback(
@@ -1259,7 +1291,7 @@ index fc71835..5917c8b 100644
    );
    const checkDotValidity = useCallback(() => {
      if (selection.measureIndex === null || !selection.eventId) return true;
-@@ -8436,8 +8682,7 @@ var useNavigation = ({
+@@ -8436,8 +8691,7 @@ var useNavigation = ({
            if (!chordResult.atBoundary && chordResult.chordId !== selection.chordId) {
              const chord = (_a = scoreRef.current.chordTrack) == null ? void 0 : _a.find((c) => c.id === chordResult.chordId);
              if (chord) {
@@ -1269,7 +1301,7 @@ index fc71835..5917c8b 100644
              }
            }
          }
-@@ -8460,8 +8705,7 @@ var useNavigation = ({
+@@ -8460,8 +8714,7 @@ var useNavigation = ({
              selectionEngine.selectChord(vertResult.chordId);
              const chord = (_d = scoreRef.current.chordTrack) == null ? void 0 : _d.find((c) => c.id === vertResult.chordId);
              if (chord) {
@@ -1279,7 +1311,7 @@ index fc71835..5917c8b 100644
              }
              return;
            }
-@@ -8734,13 +8978,36 @@ var useInteraction = ({
+@@ -8734,13 +8987,36 @@ var useInteraction = ({
  };
  
  // src/hooks/handlers/handlePlayback.ts
@@ -1317,7 +1349,7 @@ index fc71835..5917c8b 100644
        const m = measures[selection.measureIndex];
        const quant = getEventQuant(m, selection.eventId);
        playScore(selection.measureIndex, quant);
-@@ -8759,7 +9026,10 @@ var handlePlayback = (e, playback, selection, score) => {
+@@ -8759,7 +9035,10 @@ var handlePlayback = (e, playback, selection, score) => {
        if (isPlaying2) {
          playback.pausePlayback();
        } else {
@@ -1329,7 +1361,7 @@ index fc71835..5917c8b 100644
            const resumeQuant = ((_a = playback.playbackPosition.quant) != null ? _a : -1) + 1;
            playScore(playback.playbackPosition.measureIndex, resumeQuant);
          } else if (selection.measureIndex !== null && selection.eventId) {
-@@ -11451,9 +11721,14 @@ var Staff3 = ({
+@@ -11451,9 +11730,14 @@ var Staff3 = ({
      let currentMeasureX = tieStartX;
      const allNotes = [];
      measures.forEach((measure, mIndex) => {
@@ -1346,7 +1378,7 @@ index fc71835..5917c8b 100644
          event.notes.forEach((note, nIndex) => {
            if (note.pitch === null) return;
            allNotes.push({
-@@ -11469,7 +11744,7 @@ var Staff3 = ({
+@@ -11469,7 +11753,7 @@ var Staff3 = ({
            });
          });
        });
@@ -1355,7 +1387,7 @@ index fc71835..5917c8b 100644
      });
      allNotes.forEach((note) => {
        var _a, _b;
-@@ -12395,8 +12670,7 @@ var ScoreCanvas = ({
+@@ -12395,8 +12679,7 @@ var ScoreCanvas = ({
                    selectionEngine.selectChord(chordId2);
                    const chord = chordTrackHook.chords.find((c) => c.id === chordId2);
                    if (chord) {
@@ -1365,7 +1397,7 @@ index fc71835..5917c8b 100644
                    }
                  },
                  onEmptyClick: (quant) => {
-@@ -18035,7 +18309,8 @@ var Toolbar = forwardRef(
+@@ -18035,7 +18318,8 @@ var Toolbar = forwardRef(
      selectedInstrument,
      onInstrumentChange,
      samplerLoaded,
@@ -1375,7 +1407,7 @@ index fc71835..5917c8b 100644
    }, ref) => {
      var _a, _b, _c;
      const { theme: _theme } = useTheme();
-@@ -18184,6 +18459,26 @@ var Toolbar = forwardRef(
+@@ -18184,6 +18468,26 @@ var Toolbar = forwardRef(
                  }
                )
              ] }),
@@ -1402,7 +1434,7 @@ index fc71835..5917c8b 100644
              /* @__PURE__ */ jsx("div", { className: "riff-Toolbar__spacer" }),
              /* @__PURE__ */ jsx(
                ToolbarButton_default,
-@@ -23937,7 +24232,8 @@ var ScoreEditorContent = ({
+@@ -23937,7 +24241,8 @@ var ScoreEditorContent = ({
    showBackground = true,
    showScoreTitle = true,
    enableKeyboard = true,
@@ -1412,7 +1444,21 @@ index fc71835..5917c8b 100644
  }) => {
    const { theme } = useTheme();
    const scoreLogic = useScoreContext();
-@@ -24153,7 +24449,8 @@ var ScoreEditorContent = ({
+@@ -23948,7 +24253,12 @@ var ScoreEditorContent = ({
+   const { addChord: addChordToMeasure, updatePitch: updateNotePitch } = scoreLogic.entry;
+   const { clearSelection, setPreviewNote } = scoreLogic;
+   const { pendingClefChange, setPendingClefChange } = scoreLogic;
+-  const [bpm, setBpm] = useState(120);
++  const [bpm, setBpm] = useState(score.bpm || 120);
++  useEffect(() => {
++    if (typeof score.bpm === "number" && Number.isFinite(score.bpm) && score.bpm > 0) {
++      setBpm(score.bpm);
++    }
++  }, [score.bpm]);
+   const [showHelp, setShowHelp] = useState(false);
+   const [isHoveringScore, setIsHoveringScore] = useState(false);
+   const [selectedInstrument, setSelectedInstrument] = useState("bright");
+@@ -24153,7 +24463,8 @@ var ScoreEditorContent = ({
              samplerLoaded,
              errorMsg,
              onToggleHelp: () => setShowHelp(true),
@@ -1422,7 +1468,7 @@ index fc71835..5917c8b 100644
            }
          ),
          showHelp && /* @__PURE__ */ jsx(Portal_default, { children: /* @__PURE__ */ jsx(ShortcutsOverlay_default, { onClose: () => setShowHelp(false) }) }),
-@@ -24266,7 +24563,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
+@@ -24266,7 +24577,8 @@ var RiffScoreInner = ({ id, config: userConfig }) => {
              showToolbar: config.ui.showToolbar,
              showBackground: config.ui.showBackground,
              enableKeyboard: config.interaction.enableKeyboard,

@@ -327,4 +327,39 @@ describe("riffscoreAdapter", () => {
     expect(note.words).toBe("dolce");
     expect(roundTrip.parts[0]!.measures[0]!.barline).toBe("light-heavy");
   });
+
+  it("maps HF tuplet numbers to RiffScore ratio objects (not a bare number)", () => {
+    const score: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              notes: [
+                { id: "n1", pitch: "C4", duration: "8", tuplet: 3 },
+                { id: "n2", pitch: "D4", duration: "8", tuplet: 3 },
+                { id: "n3", pitch: "E4", duration: "8", tuplet: 3 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(score);
+    const events = rs.staves[0]!.measures[0]!.events;
+    expect(events[0]!.tuplet).toEqual({
+      ratio: [3, 2],
+      groupSize: 3,
+      position: 0,
+      baseDuration: "eighth",
+      id: "tup-n1",
+    });
+    expect(events[1]!.tuplet?.position).toBe(1);
+    expect(events[2]!.tuplet?.position).toBe(2);
+    expect(typeof events[0]!.tuplet).toBe("object");
+  });
 });

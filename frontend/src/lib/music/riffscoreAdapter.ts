@@ -7,6 +7,7 @@ import { finalizeChordTrack } from "./chordSymbolDetect";
 import { normalizeLeadSheetChordSymbol } from "./chordSymbolFormat";
 import type { EditableScore, DurationType, Note as HfNote, Part, Measure as HfMeasure } from "./scoreTypes";
 import { getNoteById } from "./scoreUtils";
+import { getTupletRatio } from "./tupletUtils";
 import type { ReactNode } from "react";
 import type {
   Score as RsScore,
@@ -254,7 +255,32 @@ function nextSoundingNoteInPart(
   return undefined;
 }
 
-function hfNoteToRsEvent(note: HfNote, nextSounding?: HfNote): ScoreEvent {
+function hfTupletToRsEvent(
+  note: HfNote,
+  siblings: HfNote[],
+  index: number,
+): ScoreEvent["tuplet"] | undefined {
+  const ratio = getTupletRatio(note.tuplet);
+  if (!ratio) return undefined;
+  let start = index;
+  while (start > 0 && siblings[start - 1]?.tuplet === note.tuplet) start -= 1;
+  let end = index;
+  while (end + 1 < siblings.length && siblings[end + 1]?.tuplet === note.tuplet) end += 1;
+  return {
+    ratio: [ratio.actual, ratio.normal],
+    groupSize: end - start + 1,
+    position: index - start,
+    baseDuration: hfDurationToRs(note.duration),
+    id: `tup-${siblings[start]!.id}`,
+  };
+}
+
+function hfNoteToRsEvent(
+  note: HfNote,
+  nextSounding: HfNote | undefined,
+  siblings: HfNote[],
+  index: number,
+): ScoreEvent {
   const isRest = Boolean(note.isRest);
   const { letter, accidental, octave } = parsePitch(note.pitch);
   const rsNote: RsNote = {
@@ -271,6 +297,7 @@ function hfNoteToRsEvent(note: HfNote, nextSounding?: HfNote): ScoreEvent {
     id: `rse-${note.id}`,
     duration: hfDurationToRs(note.duration),
     dotted: (note.dots ?? 0) > 0,
+    tuplet: hfTupletToRsEvent(note, siblings, index),
     notes: [rsNote],
     isRest,
   };
@@ -281,7 +308,12 @@ function hfMeasureToRs(part: Part, measureIndex: number): RsMeasure {
   return {
     id: `rsm-${measure.id}`,
     events: measure.notes.map((note, noteIndex) =>
-      hfNoteToRsEvent(note, nextSoundingNoteInPart(part, measureIndex, noteIndex)),
+      hfNoteToRsEvent(
+        note,
+        nextSoundingNoteInPart(part, measureIndex, noteIndex),
+        measure.notes,
+        noteIndex,
+      ),
     ),
   };
 }
@@ -447,13 +479,16 @@ function rsEventToHfNote(
   if (event.isRest) {
     const restSourceId = event.notes[0]?.id ?? event.id;
     const hfId = idMap.get(restSourceId) ?? `n-${restSourceId}`;
-    return {
+    const actual = event.tuplet?.ratio?.[0];
+    const rest: HfNote = {
       id: hfId,
       pitch: "B4",
       duration: rsDurationToHf(event.duration),
       dots: event.dotted ? 1 : 0,
       isRest: true,
     };
+    if (typeof actual === "number" && actual > 1) rest.tuplet = actual;
+    return mergeNotationFromPrevious(rest, previousScore, hfId);
   }
   if (event.notes.length === 0) return null;
   const rsNote = event.notes[0];
@@ -468,6 +503,8 @@ function rsEventToHfNote(
   const tie = rsNote.tied ? ("start" as const) : undefined;
 
   const base: HfNote = { id: hfId, pitch, duration, dots, tie };
+  const actual = event.tuplet?.ratio?.[0];
+  if (typeof actual === "number" && actual > 1) base.tuplet = actual;
   return mergeNotationFromPrevious(base, previousScore, hfId);
 }
 

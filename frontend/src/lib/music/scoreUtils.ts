@@ -12,6 +12,10 @@ import type {
 } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
 import type { ScoreCorrection } from "./suggestionTypes";
+import {
+  getTupletRatio,
+  innerDurationForTupletSlot,
+} from "./tupletUtils";
 
 /** Inverse of `pitchToMidi` — uses the same convention as `server/engine/types.ts` (e.g. MIDI 60 → C4). */
 function midiToPitch(midi: number): string {
@@ -65,6 +69,24 @@ export function collectNonRestPitchesInMeasure(
 }
 
 export function noteBeats(note: Note): number {
+  const base = DURATION_BEATS[note.duration] ?? 1;
+  let written = base;
+  if (note.dots) {
+    let factor = 1;
+    let add = 0.5;
+    for (let i = 0; i < note.dots; i++) {
+      factor += add;
+      add /= 2;
+    }
+    written = base * factor;
+  }
+  const ratio = getTupletRatio(note.tuplet);
+  if (ratio) return written * (ratio.normal / ratio.actual);
+  return written;
+}
+
+/** Written duration without tuplet adjustment (for splitting / display). */
+export function noteWrittenBeats(note: Note): number {
   const base = DURATION_BEATS[note.duration] ?? 1;
   if (!note.dots) return base;
   let factor = 1;
@@ -1292,7 +1314,7 @@ export function transposeNotes(score: EditableScore, noteIds: Set<string>, semit
   return next;
 }
 
-/** Add articulation to notes by ID */
+/** Add articulation to notes by ID (accumulate — prefer {@link toggleArticulation} for palette UX). */
 export function addArticulation(score: EditableScore, noteIds: Set<string>, articulation: string): EditableScore {
   const next = cloneScore(score);
   for (const part of next.parts) {
@@ -1302,6 +1324,32 @@ export function addArticulation(score: EditableScore, noteIds: Set<string>, arti
           const arts = note.articulations ?? [];
           if (!arts.includes(articulation)) arts.push(articulation);
           note.articulations = arts;
+        }
+      }
+    }
+  }
+  return next;
+}
+
+/** MuseScore-style toggle: click again removes the articulation (works on rests too). */
+export function toggleArticulation(
+  score: EditableScore,
+  noteIds: Set<string>,
+  articulation: string,
+): EditableScore {
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        const arts = [...(note.articulations ?? [])];
+        const idx = arts.indexOf(articulation);
+        if (idx >= 0) {
+          arts.splice(idx, 1);
+          if (arts.length === 0) delete note.articulations;
+          else note.articulations = arts;
+        } else {
+          note.articulations = [...arts, articulation];
         }
       }
     }
@@ -1321,6 +1369,34 @@ export function setNoteDynamics(score: EditableScore, noteIds: Set<string>, dyna
       }
     }
   }
+  return next;
+}
+
+/** First selected note in score order (MuseScore dynamic anchor). */
+export function firstSelectedNoteId(score: EditableScore, noteIds: Set<string>): string | null {
+  for (const part of score.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (noteIds.has(note.id)) return note.id;
+      }
+    }
+  }
+  return null;
+}
+
+/** Toggle dynamic on the anchor (first selected) note only. */
+export function toggleDynamicOnAnchor(
+  score: EditableScore,
+  noteIds: Set<string>,
+  dynamics: string,
+): EditableScore {
+  const anchorId = firstSelectedNoteId(score, noteIds);
+  if (!anchorId) return score;
+  const next = cloneScore(score);
+  const hit = getNoteById(next, anchorId);
+  if (!hit) return score;
+  if (hit.note.dynamics === dynamics) delete hit.note.dynamics;
+  else hit.note.dynamics = dynamics;
   return next;
 }
 
@@ -1543,7 +1619,28 @@ export function setOrnament(
   return next;
 }
 
-/** Tag a group of selected notes with a tuplet number (3 = triplet, 5 = quintuplet…). */
+/** MuseScore-style: same ornament clears; different replaces. */
+export function toggleOrnament(
+  score: EditableScore,
+  noteIds: Set<string>,
+  ornament: string,
+): EditableScore {
+  const normalized = normalizeOrnamentId(ornament);
+  const next = cloneScore(score);
+  for (const part of next.parts) {
+    for (const measure of part.measures) {
+      for (const note of measure.notes) {
+        if (!noteIds.has(note.id)) continue;
+        if (note.isRest) continue;
+        if (note.ornament === normalized) delete note.ornament;
+        else note.ornament = normalized;
+      }
+    }
+  }
+  return next;
+}
+
+/** Tag a group of selected notes with a tuplet number (legacy stamp — prefer {@link applyTupletGroup}). */
 export function setTuplet(
   score: EditableScore,
   noteIds: Set<string>,
@@ -1559,6 +1656,65 @@ export function setTuplet(
       }
     }
   }
+  return next;
+}
+
+/** Clear tuplet tags from selected notes. */
+export function clearTupletOnSelection(score: EditableScore, noteIds: Set<string>): EditableScore {
+  return setTuplet(score, noteIds, null);
+}
+
+/**
+ * MuseScore-style tuplet: tag 2+ notes, or split 1 note into `actual` smaller notes.
+ * Ratios: 3:2, 5:4, 6:4, 7:4.
+ */
+export function applyTupletGroup(
+  score: EditableScore,
+  noteIds: Set<string>,
+  actual: number,
+): EditableScore {
+  const ratio = getTupletRatio(actual);
+  if (!ratio || noteIds.size === 0) return score;
+
+  if (noteIds.size >= 2) {
+    return setTuplet(score, noteIds, actual);
+  }
+
+  const onlyId = [...noteIds][0]!;
+  const hit = getNoteById(score, onlyId);
+  if (!hit || hit.note.isRest) return setTuplet(score, noteIds, actual);
+
+  const slotBeats = noteWrittenBeats(hit.note);
+  const innerDur = innerDurationForTupletSlot(slotBeats, actual);
+  if (!innerDur) return setTuplet(score, noteIds, actual);
+
+  const next = cloneScore(score);
+  const part = next.parts[hit.partIdx];
+  const measure = part?.measures[hit.measureIdx];
+  if (!part || !measure) return score;
+
+  const source = measure.notes[hit.noteIdx]!;
+  const replacements: Note[] = [];
+  for (let i = 0; i < actual; i++) {
+    replacements.push({
+      id: i === 0 ? source.id : generateId("n"),
+      pitch: source.pitch,
+      duration: innerDur,
+      dots: source.dots,
+      tie: source.tie,
+      articulations: source.articulations ? [...source.articulations] : undefined,
+      dynamics: source.dynamics,
+      ornament: source.ornament,
+      tuplet: actual,
+      lyric: source.lyric,
+      chordSymbol: source.chordSymbol,
+      words: source.words,
+      lineStart: i === 0 ? source.lineStart : undefined,
+      lineEnd: i === actual - 1 ? source.lineEnd : undefined,
+      originalGeneratedPitch: source.originalGeneratedPitch,
+    });
+  }
+  measure.notes.splice(hit.noteIdx, 1, ...replacements);
   return next;
 }
 
@@ -1584,6 +1740,89 @@ export function setLineOnSelection(
   if (first) first.lineStart = kind;
   if (last && last !== first) last.lineEnd = kind;
   else if (last && last === first) last.lineEnd = kind;
+  return next;
+}
+
+function clearLineKindOnNotes(notes: Note[], kind: string): void {
+  for (const note of notes) {
+    if (note.lineStart === kind) delete note.lineStart;
+    if (note.lineEnd === kind) delete note.lineEnd;
+  }
+}
+
+function nextSoundingAfter(
+  part: Part,
+  measureIndex: number,
+  noteIndex: number,
+): Note | undefined {
+  const measure = part.measures[measureIndex];
+  if (!measure) return undefined;
+  for (let ni = noteIndex + 1; ni < measure.notes.length; ni++) {
+    const n = measure.notes[ni]!;
+    if (!n.isRest) return n;
+  }
+  for (let mi = measureIndex + 1; mi < part.measures.length; mi++) {
+    for (const n of part.measures[mi]!.notes) {
+      if (!n.isRest) return n;
+    }
+  }
+  return undefined;
+}
+
+/** MuseScore-style line span: toggle off if present; single note extends to next sounding note. */
+export function toggleLineOnSelection(
+  score: EditableScore,
+  noteIds: Set<string>,
+  kind: string,
+): EditableScore {
+  if (noteIds.size === 0) return score;
+  const next = cloneScore(score);
+  const selected: Note[] = [];
+  let firstPart: Part | null = null;
+  let firstMeasureIdx = 0;
+  let firstNoteIdx = 0;
+
+  for (const part of next.parts) {
+    for (let mi = 0; mi < part.measures.length; mi++) {
+      const measure = part.measures[mi]!;
+      for (let ni = 0; ni < measure.notes.length; ni++) {
+        const note = measure.notes[ni]!;
+        if (!noteIds.has(note.id)) continue;
+        if (selected.length === 0) {
+          firstPart = part;
+          firstMeasureIdx = mi;
+          firstNoteIdx = ni;
+        }
+        selected.push(note);
+      }
+    }
+  }
+
+  if (selected.length === 0) return score;
+
+  const first = selected[0]!;
+  const last = selected[selected.length - 1]!;
+  const alreadyActive =
+    first.lineStart === kind && (last.lineEnd === kind || (selected.length === 1 && first.lineEnd === kind));
+
+  if (alreadyActive) {
+    clearLineKindOnNotes(selected, kind);
+    return next;
+  }
+
+  for (const note of next.parts.flatMap((p) => p.measures.flatMap((m) => m.notes))) {
+    if (note.lineStart === kind || note.lineEnd === kind) {
+      if (noteIds.has(note.id)) continue;
+    }
+  }
+
+  first.lineStart = kind;
+  let endNote = last;
+  if (selected.length === 1 && firstPart && !first.isRest) {
+    const partner = nextSoundingAfter(firstPart, firstMeasureIdx, firstNoteIdx);
+    if (partner) endNote = partner;
+  }
+  endNote.lineEnd = kind;
   return next;
 }
 

@@ -230,14 +230,20 @@ export function usePlayback({
       }).toDestination();
 
       const part = new Tone.Part(
-        (time: number, ev: { pitch: string; duration: number }) => {
+        (time: number, ev: { pitch: string; duration: number; velocity?: number }) => {
           try {
-            synth.triggerAttackRelease(ev.pitch, ev.duration, time);
+            const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+            synth.triggerAttackRelease(ev.pitch, ev.duration, time, vel);
           } catch (err) {
             console.warn("[harmonyforge] Dropped event on trigger", err, ev);
           }
         },
-        timed.map((ev) => ({ time: ev.time, pitch: ev.pitch, duration: ev.duration }))
+        timed.map((ev) => ({
+          time: ev.time,
+          pitch: ev.pitch,
+          duration: ev.duration,
+          velocity: ev.velocity,
+        })),
       );
 
       const totalDuration = timed.length

@@ -39,6 +39,9 @@ import type { EditableScore, NotePosition } from "@/lib/music/scoreTypes";
 import { laySummaryForIssueHighlight, type ScoreIssueHighlight } from "@/lib/music/inspectorTypes";
 import {
   DEFAULT_NOTE_HIGHLIGHT_PAD,
+  notationAboveStaffY,
+  notationBelowStaffY,
+  noteheadAnchor,
   tightNoteHighlightRect,
 } from "@/lib/music/noteHighlightRect";
 import type { NoteSelection } from "@/store/useScoreStore";
@@ -65,6 +68,7 @@ import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import {
   extractNotePositions,
   extractStaffLabelLayout,
+  staffLineYsFiveInContainer,
   findNoteInputPreviewLayout,
   getRiffScoreScrollRoots,
   pickRestDomHitAt,
@@ -78,9 +82,13 @@ import {
 import { formatLearnerLetterName } from "@/lib/music/learnerPitchLabel";
 import {
   formatBadgeRow,
-  measureNotationBadges,
+  measureOverlayMarks,
   noteNotationBadges,
 } from "@/lib/music/notationOverlayBadges";
+import {
+  NotationEngravingOverlay,
+  articulationGlyphForNote,
+} from "@/components/score/NotationEngravingOverlay";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { NotePalettePopover } from "@/components/molecules/NotePalettePopover";
 import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
@@ -96,6 +104,10 @@ import {
 } from "@/lib/sandbox/riffscoreDurationToolbar";
 import { installPlaybackMetronomeBridge } from "@/lib/music/playbackMetronome";
 import { installPlaybackPositionBridge } from "@/lib/music/playbackPositionBridge";
+import {
+  installPlaybackExpressionBridge,
+  syncPlaybackExpressionCache,
+} from "@/lib/music/playbackExpressionBridge";
 import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
@@ -241,6 +253,26 @@ function canvasPointHitsAnyNoteOrRest(
   return false;
 }
 
+/** Hit-test note or rest at canvas coordinates for palette drop targeting. */
+function pickNoteOrRestAtCanvasPoint(
+  positions: readonly NotePosition[],
+  mx: number,
+  my: number,
+  pad = NOTE_OR_REST_CANVAS_HIT_PAD,
+): NoteSelection | null {
+  for (const pos of positions) {
+    if (
+      mx >= pos.x - pad &&
+      mx <= pos.x + pos.w + pad &&
+      my >= pos.y - pad &&
+      my <= pos.y + pos.h + pad
+    ) {
+      return pos.selection;
+    }
+  }
+  return null;
+}
+
 // Dynamic import — RiffScore manipulates DOM/SVG and cannot SSR
 const RiffScoreComponent = dynamic(
   () => import("riffscore").then((mod) => mod.RiffScore),
@@ -297,7 +329,8 @@ export interface RiffScoreEditorProps {
   /** Write editor pulls into `useScoreStore`. Default true; Document sets false so sandbox score is not overwritten. */
   persistScoreToStore?: boolean;
   /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
-  onPaletteSymbolDrop?: (toolId: string) => void;
+  onPaletteSymbolDrop?: (toolId: string, dropNoteId?: string) => void;
+  paletteIsItemPressed?: (item: import("@/lib/palettes/paletteRegistry").PaletteItem) => boolean;
   /** Fired when the RiffScore editor API is ready (e.g. document preview playback). */
   onEditorApiReady?: (api: MusicEditorAPI) => void;
   /** Instance id registered on `window.riffScore` — lets parents resolve the API if React state lags. */
@@ -347,6 +380,7 @@ export function RiffScoreEditor({
   includeHarmonyforgeToolbarPlugins = true,
   persistScoreToStore = true,
   onPaletteSymbolDrop,
+  paletteIsItemPressed,
   onEditorApiReady,
   onRiffInstanceId,
   onRestInputCommit,
@@ -368,6 +402,7 @@ export function RiffScoreEditor({
   onScoreBackgroundInteractRef.current = onScoreBackgroundInteract;
   const [staffLabelLayouts, setStaffLabelLayouts] = useState<StaffLabelLayout[]>([]);
   const [staffLabelsUseOverlay, setStaffLabelsUseOverlay] = useState(false);
+  const [staffBands, setStaffBands] = useState<Record<string, { top: number; bottom: number }>>({});
   const [isReady, setIsReady] = useState(false);
   const restHoverGateRef = useRef({
     presentation,
@@ -418,11 +453,18 @@ export function RiffScoreEditor({
     showChordSymbols && score && shouldShowChordNotation(score),
   );
 
-  const { pushToRiffScore, getRsToHf, flushToZustand, syncMultiPitchFromBaseline, resetMultiPitchDragSync } =
-    useRiffScoreSync(apiRef, score, getPitchGroupNoteIds, {
-      showChordTrack,
-      persistToStore: persistScoreToStore,
-    });
+  const {
+    isPushingToEditor,
+    pushToRiffScore,
+    getRsToHf,
+    flushToZustand,
+    syncMultiPitchFromBaseline,
+    resetMultiPitchDragSync,
+  } = useRiffScoreSync(apiRef, score, getPitchGroupNoteIds, {
+    showChordTrack,
+    persistToStore: persistScoreToStore,
+  });
+  const ignoreEmptySelectionUntilRef = useRef(0);
   const flushToZustandRef = useRef(flushToZustand);
   flushToZustandRef.current = flushToZustand;
   const getRsToHfRef = useRef(getRsToHf);
@@ -615,28 +657,6 @@ export function RiffScoreEditor({
 
       plugins.push(
         {
-          id: "hf-action-undo",
-          label: "Undo",
-          title: "Undo last edit (⌘Z)",
-          icon: <span className="text-[10px] font-semibold">UN</span>,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => {
-            runToolbarAction("hf-action-undo", () => runEditorHistoryOp("undo"));
-          },
-        },
-        {
-          id: "hf-action-redo",
-          label: "Redo",
-          title: "Redo last edit (⇧⌘Z)",
-          icon: <span className="text-[10px] font-semibold">RE</span>,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => {
-            runToolbarAction("hf-action-redo", () => runEditorHistoryOp("redo"));
-          },
-        },
-        {
           id: "hf-action-transpose-up",
           label: "Step ↑",
           title: "Transpose selected notes up one whole step (↑)",
@@ -687,16 +707,6 @@ export function RiffScoreEditor({
             runToolbarAction("hf-action-octave-down", () =>
               applyOnSelection((current, ids) => transposeNotes(current, ids, -12)),
             ),
-        },
-        {
-          id: "hf-action-export-xml",
-          label: "Export XML",
-          title: "Download the score as MusicXML",
-          icon: <span className="text-[10px] font-semibold">XML</span>,
-          disabled: !score,
-          showLabel: true,
-          className: "hf-plugin-btn hf-plugin-btn--action",
-          onClick: () => runToolbarAction("hf-action-export-xml", downloadXml),
         },
         {
           id: "hf-action-print",
@@ -1050,7 +1060,12 @@ export function RiffScoreEditor({
   useEffect(() => {
     installPlaybackMetronomeBridge();
     installPlaybackPositionBridge();
+    installPlaybackExpressionBridge();
   }, []);
+
+  useEffect(() => {
+    if (score) syncPlaybackExpressionCache(score);
+  }, [score]);
 
   useEffect(() => {
     const api = apiRef.current;
@@ -1214,12 +1229,14 @@ export function RiffScoreEditor({
     // Only push if the score reference actually changed (not from our own pull)
     if (score !== prevScoreRef.current) {
       prevScoreRef.current = score;
+      ignoreEmptySelectionUntilRef.current = performance.now() + 400;
       pushToRiffScore();
     }
   }, [isReady, score, pushToRiffScore]);
 
   useEffect(() => {
     if (!isReady || !score || !persistScoreToStore) return;
+    ignoreEmptySelectionUntilRef.current = performance.now() + 400;
     pushToRiffScore();
   }, [isReady, score, showChordTrack, pushToRiffScore, persistScoreToStore]);
 
@@ -1238,6 +1255,14 @@ export function RiffScoreEditor({
         layouts.every((l) => l.height >= 4);
       setStaffLabelsUseOverlay(overlayOk);
       setStaffLabelLayouts(overlayOk ? layouts : []);
+      const bands: Record<string, { top: number; bottom: number }> = {};
+      for (let si = 0; si < score.parts.length; si++) {
+        const ys = staffLineYsFiveInContainer(containerRef.current, si);
+        if (!ys || ys.length < 5) continue;
+        const sorted = [...ys].sort((a, b) => a - b);
+        bands[score.parts[si]!.id] = { top: sorted[0]!, bottom: sorted[4]! };
+      }
+      setStaffBands(bands);
     };
 
     const scheduleFromScroll = () => {
@@ -1411,6 +1436,10 @@ export function RiffScoreEditor({
 
       const selected = rsSel.selectedNotes;
       if (selected.length === 0) {
+        // loadScore clears native selection; keep HF selection so palette toggles stay armed.
+        if (isPushingToEditor() || performance.now() < ignoreEmptySelectionUntilRef.current) {
+          return;
+        }
         pitchGroupRef.current = new Set();
         onEditorSelectionChange?.([]);
         return;
@@ -1509,6 +1538,7 @@ export function RiffScoreEditor({
     onNoteClick,
     score,
     getRsToHf,
+    isPushingToEditor,
   ]);
 
   // Subscribe to errors
@@ -1598,7 +1628,17 @@ export function RiffScoreEditor({
       e.stopPropagation();
       try {
         const parsed = JSON.parse(raw) as { toolId?: string };
-        if (parsed.toolId) onPaletteSymbolDrop(parsed.toolId);
+        if (!parsed.toolId) return;
+        const root = containerRef.current;
+        let dropNoteId: string | undefined;
+        if (root) {
+          const rect = root.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          const hit = pickNoteOrRestAtCanvasPoint(notePositionsRef.current, mx, my);
+          dropNoteId = hit?.noteId;
+        }
+        onPaletteSymbolDrop(parsed.toolId, dropNoteId);
       } catch {
         /* ignore malformed drop payload */
       }
@@ -2154,6 +2194,7 @@ export function RiffScoreEditor({
           selectedNoteIds={selectedIds}
           hasSelection={selection.length > 0}
           onActivate={(toolId) => onPaletteSymbolDrop(toolId)}
+          isItemPressed={paletteIsItemPressed}
           containerRef={containerRef}
         />
       )}
@@ -2281,6 +2322,7 @@ export function RiffScoreEditor({
       {/* Notation overlay: articulations, dynamics, lyrics, measure marks (palette feedback). */}
       {!presentation && notePositions.length > 0 && score && (
         <div
+          data-testid="hf-notation-overlay"
           className="absolute inset-0 pointer-events-none z-[2]"
           style={
             learnerClipTopPx > 0
@@ -2289,38 +2331,64 @@ export function RiffScoreEditor({
           }
           aria-hidden="true"
         >
+          <NotationEngravingOverlay score={score} notePositions={notePositions} />
           {notePositions.map((pos) => {
             const hit = getNoteById(score, pos.selection.noteId);
-            if (!hit?.note || hit.note.isRest) return null;
+            if (!hit?.note) return null;
+            const articGlyph = articulationGlyphForNote(hit.note);
             const { above, below } = noteNotationBadges(hit.note);
             const aboveText = formatBadgeRow(above);
             const belowText = formatBadgeRow(below);
-            if (!aboveText && !belowText) return null;
+            if (!aboveText && !belowText && !articGlyph) return null;
+            const head = noteheadAnchor(pos);
+            const band = staffBands[pos.selection.partId];
+            const aboveY = notationAboveStaffY(band?.top, head.top, 10);
+            const belowY = notationBelowStaffY(band?.bottom, head.bottom, 10);
             return (
               <div key={`notation-badge-${pos.selection.noteId}`}>
-                {aboveText ? (
+                {articGlyph || aboveText ? (
                   <div
-                    className="absolute font-mono text-[9px] font-medium leading-none whitespace-nowrap rounded px-0.5"
+                    className="absolute flex flex-col items-center gap-0.5 leading-none"
                     style={{
-                      left: pos.x + pos.w / 2,
-                      top: pos.y - 2,
+                      left: head.cx,
+                      top: aboveY,
                       transform: "translate(-50%, -100%)",
-                      color: "var(--hf-accent)",
-                      backgroundColor: "color-mix(in srgb, var(--hf-bg) 88%, transparent)",
+                      color: "var(--hf-text-primary)",
                     }}
                   >
-                    {aboveText}
+                    {aboveText ? (
+                      <div
+                        className="font-music text-[22px] font-bold leading-none whitespace-nowrap"
+                        style={{
+                          WebkitTextStroke: "0.4px currentColor",
+                          paintOrder: "stroke fill",
+                        }}
+                      >
+                        {aboveText}
+                      </div>
+                    ) : null}
+                    {articGlyph ? (
+                      <div
+                        className="font-music text-[24px] font-bold leading-none"
+                        style={{
+                          WebkitTextStroke: "0.55px currentColor",
+                          paintOrder: "stroke fill",
+                        }}
+                      >
+                        {articGlyph}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {belowText ? (
                   <div
-                    className="absolute font-mono text-[9px] font-medium leading-none whitespace-nowrap rounded px-0.5"
+                    className="absolute font-mono text-[12px] font-semibold leading-none whitespace-nowrap rounded px-0.5"
                     style={{
-                      left: pos.x + pos.w / 2,
-                      top: pos.y + pos.h + 2,
+                      left: head.cx,
+                      top: belowY,
                       transform: "translate(-50%, 0)",
                       color: "var(--hf-text-primary)",
-                      opacity: 0.85,
+                      opacity: 0.92,
                       backgroundColor: "color-mix(in srgb, var(--hf-bg) 88%, transparent)",
                     }}
                   >
@@ -2330,34 +2398,47 @@ export function RiffScoreEditor({
               </div>
             );
           })}
-          {score.parts.flatMap((part) =>
-            part.measures.map((measure, measureIdx) => {
-              const badges = measureNotationBadges(measure);
-              const text = formatBadgeRow(badges);
-              if (!text) return null;
-              const anchor = notePositions.find(
-                (p) =>
-                  p.selection.partId === part.id &&
-                  p.selection.measureIndex === measureIdx,
-              );
-              if (!anchor) return null;
-              return (
-                <div
-                  key={`measure-badge-${part.id}-${measureIdx}`}
-                  className="absolute font-mono text-[8px] font-semibold leading-none whitespace-nowrap rounded px-1 py-0.5"
-                  style={{
-                    left: Math.max(0, anchor.x - 6),
-                    top: anchor.y - 14,
-                    color: "var(--hf-text-primary)",
-                    opacity: 0.7,
-                    backgroundColor: "color-mix(in srgb, var(--hf-surface) 90%, transparent)",
-                  }}
-                >
-                  {text}
-                </div>
-              );
-            }),
-          )}
+          {score.parts[0]
+            ? score.parts[0].measures.map((measure, measureIdx) => {
+                const marks = measureOverlayMarks(measure);
+                if (marks.length === 0) return null;
+                const anchor = notePositions.find(
+                  (p) =>
+                    p.selection.partId === score.parts[0]!.id &&
+                    p.selection.measureIndex === measureIdx,
+                );
+                if (!anchor) return null;
+                const head = noteheadAnchor(anchor);
+                const band = staffBands[score.parts[0]!.id];
+                return (
+                  <div
+                    key={`measure-badge-${score.parts[0]!.id}-${measureIdx}`}
+                    className="absolute flex items-end gap-1.5 leading-none whitespace-nowrap"
+                    style={{
+                      left: Math.max(0, head.cx - head.width / 2 - 4),
+                      top: Math.max(0, notationAboveStaffY(band?.top, head.top, 10)),
+                      transform: "translateY(-100%)",
+                    }}
+                  >
+                    {marks.map((mark, i) => (
+                      <span
+                        key={`${mark.role}-${mark.text}-${i}`}
+                        className={
+                          mark.role === "glyph"
+                            ? "font-music text-[26px] font-bold leading-none"
+                            : mark.role === "rehearsal"
+                              ? "font-mono text-[14px] font-bold leading-none border-2 border-current px-1"
+                              : "font-serif text-[18px] font-bold italic leading-none"
+                        }
+                        style={{ color: "var(--hf-text-primary)" }}
+                      >
+                        {mark.text}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })
+            : null}
         </div>
       )}
     </div>

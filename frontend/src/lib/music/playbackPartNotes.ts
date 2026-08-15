@@ -1,53 +1,29 @@
 /**
  * Like scoreToScheduledNotes, but tags each event with the source part name for timbre mapping.
  */
-import type { EditableScore, Note } from "./scoreTypes";
+import type { EditableScore } from "./scoreTypes";
 import { ensureStrictlyIncreasingPartTimes } from "./playbackPartSchedule";
-import { noteDurationInBeats, parseBeatsPerMeasure, type ScheduledNote } from "./playbackUtils";
-
-const PITCH_RE = /^[A-G](?:#{1,2}|b{1,2})?\d+$/;
+import { realizeSoundingTimeline } from "./realizeSoundingTimeline";
+import type { ScheduledNote } from "./playbackUtils";
 
 export interface ScheduledPartNote extends ScheduledNote {
   partName: string;
 }
 
 /**
- * Build timed note events, each with `partName` for playback orchestration.
+ * Build timed note events with expression realization, each tagged with `partName`.
  */
 export function scoreToScheduledPartNotes(
   score: EditableScore,
   beatsPerMeasure = 4,
 ): ScheduledPartNote[] {
-  const events: ScheduledPartNote[] = [];
-
-  for (const part of score.parts) {
-    let partBeatCursor = 0;
-    const name = part.name?.trim() || "Part";
-    part.measures.forEach((measure) => {
-      const measureBeats = parseBeatsPerMeasure(measure.timeSignature, beatsPerMeasure);
-      const measureStartBeat = partBeatCursor;
-      let currentBeat = measureStartBeat;
-      for (const note of measure.notes) {
-        const durationBeats = noteDurationInBeats(note);
-        if (!note.isRest && isPlayablePitch(note, PITCH_RE)) {
-          events.push({
-            startBeat: currentBeat,
-            pitch: note.pitch,
-            durationBeats,
-            partName: name,
-          });
-        }
-        currentBeat += durationBeats;
-      }
-      partBeatCursor = Math.max(measureStartBeat + measureBeats, currentBeat);
-    });
-  }
-
-  return events;
-}
-
-function isPlayablePitch(note: Note, re: RegExp): boolean {
-  return re.test(note.pitch);
+  return realizeSoundingTimeline(score, beatsPerMeasure).map((e) => ({
+    startBeat: e.startBeat,
+    pitch: e.pitch,
+    durationBeats: e.durationBeats,
+    velocity: e.velocity,
+    partName: e.partName,
+  }));
 }
 
 /**
@@ -56,7 +32,7 @@ function isPlayablePitch(note: Note, re: RegExp): boolean {
 export function scheduledPartNotesToSeconds(
   events: ScheduledPartNote[],
   bpm: number,
-): Array<{ time: number; pitch: string; duration: number; partName: string }> {
+): Array<{ time: number; pitch: string; duration: number; partName: string; velocity?: number }> {
   const secondsPerBeat = 60 / bpm;
   const raw = events
     .map((e) => ({
@@ -64,6 +40,7 @@ export function scheduledPartNotesToSeconds(
       pitch: e.pitch,
       duration: e.durationBeats * secondsPerBeat,
       partName: e.partName,
+      velocity: e.velocity,
     }))
     .sort((a, b) => a.time - b.time);
   return ensureStrictlyIncreasingPartTimes(raw);

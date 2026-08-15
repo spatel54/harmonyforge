@@ -32,7 +32,7 @@ export interface Note {
   dynamics?: string;
   /** Ornament symbol ("trill", "mordent", "turn", etc.) — renderer-optional. */
   ornament?: string;
-  /** Tuplet grouping (e.g. 3 = triplet). Renderer-optional; XML export falls back to normal durations. */
+  /** Tuplet grouping (e.g. 3 = triplet). Partwise export emits sounding `<duration>` plus `<tuplet>` start/stop. */
   tuplet?: number;
   /** Free-form lyric text attached to this note. */
   lyric?: string;

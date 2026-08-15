@@ -19,6 +19,7 @@ export interface NotePalettePopoverProps {
   selectedNoteIds: ReadonlySet<string>;
   hasSelection: boolean;
   onActivate: (toolId: string, item: PaletteItem) => void;
+  isItemPressed?: (item: PaletteItem) => boolean;
   containerRef: React.RefObject<HTMLElement | null>;
   className?: string;
 }
@@ -67,6 +68,7 @@ export function NotePalettePopover({
   selectedNoteIds,
   hasSelection,
   onActivate,
+  isItemPressed,
   containerRef,
   className,
 }: NotePalettePopoverProps) {
@@ -238,6 +240,7 @@ export function NotePalettePopover({
                   key={item.id}
                   item={item}
                   disabled={Boolean(item.requiresSelection) && !hasSelection}
+                  pressed={isItemPressed?.(item) ?? false}
                   onActivate={(it) => onActivate(it.toolId, it)}
                   className="min-h-[36px] min-w-[36px] px-1 py-1"
                 />

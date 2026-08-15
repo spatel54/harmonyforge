@@ -184,4 +184,80 @@ describe("scoreToPartwiseMusicXML", () => {
     expect(xml).toContain('<beam number="1">end</beam>');
     expect(xml).toContain('<beam number="2">begin</beam>');
   });
+
+  it("emits staccato, hairpin wedges, and tuplet brackets for OSMD print", () => {
+    const score: EditableScore = {
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              notes: [
+                {
+                  id: "n1",
+                  pitch: "C4",
+                  duration: "8",
+                  tuplet: 3,
+                  articulations: ["a."],
+                  lineStart: "cresc-hairpin",
+                },
+                { id: "n2", pitch: "D4", duration: "8", tuplet: 3 },
+                {
+                  id: "n3",
+                  pitch: "E4",
+                  duration: "8",
+                  tuplet: 3,
+                  lineEnd: "cresc-hairpin",
+                },
+                { id: "n4", pitch: "F4", duration: "q" },
+                { id: "n5", pitch: "G4", duration: "q" },
+                { id: "n6", pitch: "A4", duration: "q" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const xml = scoreToPartwiseMusicXML(score);
+    expect(xml).toContain("<staccato/>");
+    expect(xml).toContain('<wedge type="crescendo" number="1"/>');
+    expect(xml).toContain('<wedge type="stop" number="1"/>');
+    expect(xml).toContain("<actual-notes>3</actual-notes>");
+    expect(xml).toContain("<normal-notes>2</normal-notes>");
+    expect(xml).toContain('<tuplet type="start" number="1" bracket="yes"/>');
+    expect(xml).toContain('<tuplet type="stop" number="1"/>');
+    // Triplet eighth sounding duration is 8 at DIVISIONS=24 (three fill one quarter).
+    const tupletDurations = [...xml.matchAll(/<duration>(\d+)<\/duration>/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(tupletDurations.slice(0, 3)).toEqual([8, 8, 8]);
+    expect(tupletDurations.slice(0, 3).reduce((a, b) => a + b, 0)).toBe(24);
+  });
+
+  it("emits tempo words together with metronome and sound when both are set", () => {
+    const score: EditableScore = {
+      ...withChord,
+      bpm: 76,
+      parts: [
+        {
+          ...withChord.parts[0]!,
+          measures: [
+            {
+              ...withChord.parts[0]!.measures[0]!,
+              tempoText: "Andante ♩ = 76",
+            },
+          ],
+        },
+      ],
+    };
+    const xml = scoreToPartwiseMusicXML(score);
+    expect(xml).toContain("Andante");
+    expect(xml).toContain("<metronome>");
+    expect(xml).toContain("<per-minute>76</per-minute>");
+    expect(xml).toContain('tempo="76"');
+  });
 });
