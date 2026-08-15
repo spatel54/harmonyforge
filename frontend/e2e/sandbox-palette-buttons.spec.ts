@@ -43,7 +43,38 @@ test.describe("Sandbox palette buttons", () => {
       const promptTitle = PROMPT_TOOLS[toolId];
       if (promptTitle) {
         await expect(page.locator("#palette-prompt-title")).toHaveText(promptTitle);
-        await page.getByRole("button", { name: "Cancel" }).click();
+        // #region agent log
+        const cancelSnap = await page.evaluate(() => {
+          const buttons = [...document.querySelectorAll("button")].map((b) => ({
+            name: (b.getAttribute("aria-label") || b.textContent || "").trim().slice(0, 80),
+            testId: b.getAttribute("data-testid"),
+          }));
+          const dialogs = [...document.querySelectorAll('[role="dialog"]')].map((el) => ({
+            labelledBy: el.getAttribute("aria-labelledby"),
+            className: String((el as HTMLElement).className).slice(0, 90),
+          }));
+          fetch("http://127.0.0.1:7406/ingest/555ec36b-f260-4597-b685-d87aa80b5dde", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "73a776" },
+            body: JSON.stringify({
+              sessionId: "73a776",
+              runId: "post-fix",
+              hypothesisId: "B",
+              location: "e2e/sandbox-palette-buttons.spec.ts:prompt-cancel",
+              message: "prompt cancel locators",
+              data: {
+                dialogCount: dialogs.length,
+                dialogs,
+                cancelish: buttons.filter((b) => /cancel/i.test(b.name)),
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          return { dialogCount: dialogs.length };
+        });
+        if (cancelSnap.dialogCount < 1) throw new Error("palette prompt dialog missing");
+        // #endregion
+        await page.getByTestId("palette-prompt-cancel").click();
       }
 
       await expect(page.getByText("Application error")).toHaveCount(0);
@@ -96,6 +127,30 @@ test.describe("Sandbox palette buttons", () => {
     await expect(dock).toBeVisible();
 
     await page.getByRole("button", { name: "Export score" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    // #region agent log
+    const exportSnap = await page.evaluate(() => {
+      const dialogs = [...document.querySelectorAll('[role="dialog"]')].map((el) => ({
+        labelledBy: el.getAttribute("aria-labelledby"),
+        ariaModal: el.getAttribute("aria-modal"),
+        className: String((el as HTMLElement).className).slice(0, 90),
+      }));
+      fetch("http://127.0.0.1:7406/ingest/555ec36b-f260-4597-b685-d87aa80b5dde", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "73a776" },
+        body: JSON.stringify({
+          sessionId: "73a776",
+          runId: "post-fix",
+          hypothesisId: "A",
+          location: "e2e/sandbox-palette-buttons.spec.ts:export-dialog",
+          message: "export dialog roles",
+          data: { dialogCount: dialogs.length, dialogs },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      return dialogs;
+    });
+    // #endregion
+    await expect(page.getByRole("dialog", { name: "PDF preview" })).toBeVisible();
+    expect(exportSnap.filter((d) => d.ariaModal === "true")).toHaveLength(1);
   });
 });

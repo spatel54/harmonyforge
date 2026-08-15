@@ -74,7 +74,6 @@ export function HfModal({
             className,
           )}
           style={{ zIndex }}
-          role={role}
         >
           <motion.div
             aria-hidden="true"

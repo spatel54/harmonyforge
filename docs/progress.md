@@ -87,10 +87,13 @@ Jobs API: **Install / Test / Lint succeeded**. **Build** (`npm run build`) faile
 
 **`git` 128** is a **warning** (mapped to `.github`); it also appeared on last **green** run **#44**. Not the exit 1.
 
+Run **#47**: **verify Build succeeded**; **e2e** failed Playwright strict locators in `sandbox-palette-buttons.spec.ts` (nested `role="dialog"` on `HfModal` shell + panel; `Cancel` matching “Cancel accidentals”).
+
 ### Shipped
 - Optional `fallbackBeats` on `parseMeasureBeats`.
 - Restore `BeamTag`; tuplet `writtenBeats({ duration })`.
-- Debug ingest still in `next.config.ts` until CI is confirmed green.
+- **`HfModal`**: only the panel is `role="dialog"` (CI #47 nested-dialog strict mode).
+- Palette prompt **`data-testid="palette-prompt-cancel"`**; e2e locators no longer match “Cancel accidentals”.
 
 ### Gate
 - **`make build`** OK (post-fix).

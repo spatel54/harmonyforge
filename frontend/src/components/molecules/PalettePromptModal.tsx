@@ -126,6 +126,7 @@ export function PalettePromptModal({ state, onSubmit, onClose }: PalettePromptMo
       <div className="flex justify-end gap-2">
         <button
           type="button"
+          data-testid="palette-prompt-cancel"
           onClick={onClose}
           className="hf-pressable px-3 py-1.5 rounded-md border border-[var(--hf-detail)] font-mono text-xs"
           style={{ color: "var(--hf-text-primary)" }}
