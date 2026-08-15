@@ -90,6 +90,17 @@
   --hf-panel-bg: var(--neutral-50);
   /* Theory Inspector “This note” summary card — panel + detail for a touch more depth */
   --hf-inspector-note-bg: color-mix(in srgb, var(--hf-panel-bg) 82%, var(--hf-detail) 18%);
+
+  /* Motion tokens — MASTER.md §5, hf-motion.mdc */
+  --hf-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --hf-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --hf-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --hf-duration-press: 120ms;
+  --hf-duration-tooltip: 150ms;
+  --hf-duration-popover: 200ms;
+  --hf-duration-modal: 250ms;
+  --hf-duration-banner: 250ms;
+  --hf-panel-rail-width: 40px;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -131,6 +142,7 @@
    ───────────────────────────────────────────────────────────── */
 .font-brand {
   font-family: var(--font-fraunces), "Fraunces", serif;
+  letter-spacing: -0.02em;
 }
 .font-serif {
   font-family: var(--font-instrument), "Instrument Serif", serif;
@@ -197,7 +209,7 @@ body {
 .hf-pressable {
   cursor: pointer;
   transition:
-    transform 0.12s cubic-bezier(0.33, 1, 0.68, 1),
+    transform var(--hf-duration-press) var(--hf-ease-out),
     box-shadow 0.15s ease,
     background-color 0.15s ease,
     border-color 0.15s ease,
@@ -205,7 +217,7 @@ body {
     filter 0.15s ease;
 }
 .hf-pressable:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 button.hf-pressable:disabled,
 .hf-pressable[aria-disabled="true"] {
@@ -266,19 +278,134 @@ a.hf-pressable:active {
 }
 
 .hf-modal-animate {
-  animation: hf-modal-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hf-modal-in var(--hf-duration-modal) var(--hf-ease-out) both;
 }
 
 .hf-backdrop-animate {
   animation: hf-backdrop-in 0.18s ease-out both;
 }
 
+/** Interruptible modal/backdrop surfaces (HfModal, data-open transitions) */
+.hf-modal-surface {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: center;
+  transition:
+    opacity var(--hf-duration-modal) var(--hf-ease-out),
+    transform var(--hf-duration-modal) var(--hf-ease-out);
+}
+
+.hf-modal-surface[data-open="false"],
+.hf-modal-surface.hf-modal-surface--closed {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  pointer-events: none;
+}
+
+@starting-style {
+  .hf-modal-surface[data-open="true"] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+.hf-backdrop-surface {
+  opacity: 1;
+  transition: opacity var(--hf-duration-modal) var(--hf-ease-out);
+}
+
+.hf-backdrop-surface[data-open="false"],
+.hf-backdrop-surface.hf-backdrop-surface--closed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@starting-style {
+  .hf-backdrop-surface[data-open="true"] {
+    opacity: 0;
+  }
+}
+
+/** Popover / dropdown — origin-aware scale */
+.hf-popover-surface {
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: var(--hf-transform-origin, center);
+  transition:
+    opacity var(--hf-duration-popover) var(--hf-ease-out),
+    transform var(--hf-duration-popover) var(--hf-ease-out);
+}
+
+.hf-popover-surface[data-open="false"] {
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none;
+}
+
+@starting-style {
+  .hf-popover-surface[data-open="true"] {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/** Sandbox docked panel — click-open drawer motion (not keyboard F9) */
+.hf-drawer-panel {
+  opacity: 1;
+  transform: translateX(0);
+  transform-origin: right center;
+  transition:
+    opacity var(--hf-duration-popover) var(--hf-ease-drawer),
+    transform var(--hf-duration-popover) var(--hf-ease-drawer);
+}
+
+.hf-drawer-panel[data-motion="instant"] {
+  transition: none;
+}
+
+.hf-drawer-panel[data-open="false"] {
+  opacity: 0;
+  transform: translateX(12px);
+  pointer-events: none;
+}
+
+.hf-drawer-panel[data-open="false"][data-side="left"] {
+  transform: translateX(-12px);
+  transform-origin: left center;
+}
+
+@starting-style {
+  .hf-drawer-panel[data-open="true"]:not([data-motion="instant"]) {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.hf-panel-rail {
+  width: var(--hf-panel-rail-width);
+  flex-shrink: 0;
+}
+
 .hf-toast-animate {
-  animation: hf-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hf-toast-in 0.28s var(--hf-ease-out) both;
+}
+
+.hf-toast-surface {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--hf-duration-popover) var(--hf-ease-out),
+    transform var(--hf-duration-popover) var(--hf-ease-out);
+}
+
+.hf-toast-surface[data-open="false"] {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  pointer-events: none;
 }
 
 .hf-banner-animate {
-  animation: hf-banner-slide 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hf-banner-slide var(--hf-duration-banner) var(--hf-ease-out) both;
 }
 
 /** Theory Inspector dock — soft slide when opening sidebar */
@@ -304,7 +431,7 @@ a.hf-pressable:active {
 }
 
 .hf-inspector-enter-sidebar {
-  animation: hf-inspector-dock-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hf-inspector-dock-in 0.28s var(--hf-ease-out) both;
 }
 
 .hf-inspector-enter-float {
@@ -594,11 +721,27 @@ a.hf-pressable:active {
   transform-origin: 50% 96%;
 }
 
-.hf-dropzone-interactive:hover .hf-dropzone-stand-svg,
 .hf-dropzone-interactive.hf-dropzone-interactive--hot .hf-dropzone-stand-svg,
 .hf-dropzone-interactive:focus-visible .hf-dropzone-stand-svg {
   animation: hf-stand-hover-pulse 1.65s ease-in-out infinite;
   will-change: transform, filter;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hf-dropzone-interactive:hover .hf-dropzone-stand-svg {
+    animation: hf-stand-hover-pulse 1.65s ease-in-out infinite;
+    will-change: transform, filter;
+  }
+
+  .hf-dropzone-interactive:hover .hf-dropzone-dash-glow,
+  .hf-dropzone-interactive.hf-dropzone-interactive--hot .hf-dropzone-dash-glow,
+  .hf-dropzone-interactive:focus-visible .hf-dropzone-dash-glow {
+    animation-duration: 1.1s;
+  }
+
+  .hf-dropzone-note-aureole--pulse .hf-dropzone-note-aureole-blur {
+    animation: hf-note-aureole-breathe 2s ease-in-out infinite;
+  }
 }
 
 @keyframes hf-stand-hover-pulse {
@@ -623,10 +766,15 @@ a.hf-pressable:active {
   animation: hf-dropzone-glow 2.4s ease-in-out infinite;
 }
 
-.hf-dropzone-interactive:hover .hf-dropzone-dash-glow,
 .hf-dropzone-interactive.hf-dropzone-interactive--hot .hf-dropzone-dash-glow,
 .hf-dropzone-interactive:focus-visible .hf-dropzone-dash-glow {
   animation-duration: 1.1s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hf-dropzone-interactive:hover .hf-dropzone-dash-glow {
+    animation-duration: 1.1s;
+  }
 }
 
 @keyframes hf-dropzone-glow {
@@ -750,11 +898,20 @@ a.hf-pressable:active {
     border-color 0.25s ease;
 }
 
-/** Sandbox top bar — slight glass for depth over scrolling content */
+/** Sandbox top bar — translucent material over scrolling content */
 .hf-sandbox-header {
-  background-color: color-mix(in srgb, var(--hf-bg) 88%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background-color: color-mix(in srgb, var(--hf-bg) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid color-mix(in srgb, var(--hf-detail) 35%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
+    0 1px 0 color-mix(in srgb, var(--hf-detail) 12%, transparent);
+}
+
+.hf-sandbox-header-scroll-edge {
+  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -792,6 +949,24 @@ a.hf-pressable:active {
   background-color: color-mix(in srgb, #000 35%, rgba(30, 20, 18, 0.75));
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .hf-sandbox-header {
+    background-color: var(--hf-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .hf-overlay-backdrop {
+    background-color: color-mix(in srgb, var(--hf-bg) 92%, rgba(20, 14, 12, 0.85));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .dark .hf-overlay-backdrop {
+    background-color: color-mix(in srgb, var(--hf-bg) 95%, #000);
+  }
+}
+
 /** Panels: smooth scroll without fighting programmatic jumps */
 .hf-scroll-smooth {
   scroll-behavior: smooth;
@@ -824,13 +999,23 @@ a.hf-pressable:active {
   top: 8px;
 }
 
-/* Reduced motion guard — MASTER.md §5 */
+/* Reduced motion guard — MASTER.md §5; keep short opacity fades on chrome */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0ms !important;
-    animation-duration: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .hf-modal-surface,
+  .hf-backdrop-surface,
+  .hf-popover-surface,
+  .hf-toast-surface,
+  .hf-drawer-panel {
+    transition-duration: 200ms !important;
+    transition-property: opacity !important;
+    transform: none !important;
   }
 }
 

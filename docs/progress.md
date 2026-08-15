@@ -6,7 +6,8 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
-- [Work log — Session 2026-08-14 PM (export letters · palettes · ties)](#wl-session-2026-08-14-pm) — **canonical handover** (end goal / approach / steps / current failure) — OSMD letter labels; Noto Music + tooltip cleanup; MuseScore-like **Tie** + metadata persist; **RiffScore `renderTies`** staff-width fix — **`make test` 424** · **`make e2e` 5** · **`make lint` 0 errors** — **no blocking failure** (tie hanging-arc **resolved**)
+- [Work log — Apple-quality motion on HarmonyForge chrome (2026-08-14 late)](#wl-apple-motion-chrome-2026-08-14) — **canonical handover** — Emil + Apple motion law; **`HfModal`** + Sonner; sandbox **panel rails** + float-inspector spring; **`make test` 429** · **`make lint` 0 errors** · **`npm run build` OK** — **no blocking failure**; **open:** manual browser QA matrix (Export exit, F9 instant, rail drawer, Sonner toast)
+- [Work log — Session 2026-08-14 PM (export letters · palettes · ties)](#wl-session-2026-08-14-pm) — OSMD letter labels; Noto Music + tooltip cleanup; MuseScore-like **Tie** + metadata persist; **RiffScore `renderTies`** staff-width fix — **`make test` 424** · **`make e2e` 5** · **`make lint` 0 errors** — **no blocking failure** (tie hanging-arc **resolved**)
 - [Work log — Tie, palette persistence & tooltip cleanup (2026-08-14 PM)](#wl-tie-palette-persistence-2026-08-14-pm) — child detail: tooltips, `toggleTieOnSelection`, RS→HF merge, `renderTies` patch
 - [Work log — Export letter names, palette icons & actions (2026-08-14 PM)](#wl-export-palette-polish-2026-08-14-pm) — child detail: OSMD overlay hardening, Noto Music, notation badges
 - [Work log — Session 2026-08-14 (PDF I/O · palettes · Document live melody)](#wl-session-2026-08-14) — morning/midday tranche — **`make test` 412** · **`make e2e` 4** — **open:** E2E photo-PDF on real scan only
@@ -64,6 +65,72 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-apple-motion-chrome-2026-08-14"></a>
+
+## Work log — Apple-quality motion on HarmonyForge chrome (2026-08-14 late)
+
+Canonical handover for the **motion / chrome polish** tranche (builds on [Sandbox fluidity (2026-04-23)](#wl-sandbox-fluidity-2026-04-23) and [Session 2026-08-14 PM](#wl-session-2026-08-14-pm)). Pin this section + [plan.md](plan.md) for the next chat. Taste source: local **`skills/skills/apple-design/`** + **`emil-design-eng/`** (reference only — **not committed**).
+
+### End goal
+
+HarmonyForge chrome should feel **Apple-fluid and Emil-crisp** without rebranding Sonata/Nocturne: instant press feedback, symmetric modal/toast enter+exit, docked panels that **collapse to rails** instead of vanishing (less score reflow shock), keyboard toggles that stay **instant** (F9 palette), and **one** critically damped spring surface (floating Theory Inspector drag-release). **Score/theory stays 0ms** — note drag, Red Line paint, playhead, repair swaps must not animate.
+
+### Approach
+
+1. **Encode law in docs + agents** — Split [MASTER.md §5](design/MASTER.md) motion into layers (score vs chrome vs gestures vs keyboard); mirror sandbox overrides in [tactile-sandbox.md](design/pages/tactile-sandbox.md); add [`.cursor/rules/hf-motion.mdc`](../.cursor/rules/hf-motion.mdc) (frequency → purpose → tokens → reduced motion).
+2. **Tokenize motion in CSS** — [`globals.css`](../frontend/src/app/globals.css): `--hf-ease-out`, `--hf-ease-drawer`, `--hf-duration-*`, `.hf-drawer-panel`, `.hf-popover-surface`, `.hf-modal-surface`; stronger header glass + `prefers-reduced-transparency`; soften global reduced-motion nuke so opacity fades survive.
+3. **Shared chrome primitives** — [`HfModal`](../frontend/src/components/molecules/HfModal.tsx) (framer-motion enter/exit) for Export, Hotkeys, Reset, Credits, Onboarding; **Sonner** via [`HfToaster`](../frontend/src/components/atoms/HfToaster.tsx) + [`showSandboxToast`](../frontend/src/lib/sandbox/sandboxToast.ts); **tooltip session** ([`tooltipSession.ts`](../frontend/src/lib/ui/tooltipSession.ts)) so adjacent toolbar tooltips open instantly after the first.
+4. **Sandbox layout** — [`HfPanelRail`](../frontend/src/components/molecules/HfPanelRail.tsx): palette + inspector **collapse to ~40px rails** (parallel work, no scrim drawer); **F9** = instant; **click rail / ChatFAB** = 200ms drawer motion; floating inspector = rubber-band drag + spring settle ([`gestureMotion.ts`](../frontend/src/lib/ui/gestureMotion.ts)).
+5. **Sweep** — Remove `transition-all`; popover enter on VoiceDropdown + NotePalettePopover; `.hf-pressable` on ChatFAB / onboarding CTA.
+
+### Steps done so far
+
+| # | Step | Outcome |
+|---|------|---------|
+| 1 | **Design law** | MASTER §5 layered motion; tactile-sandbox rail/F9/spring notes; `hf-motion.mdc` |
+| 2 | **Motion tokens** | `--hf-ease-*`, `--hf-duration-*`, drawer/popover/modal surfaces, header blur 20px + saturate, hover-gated dropzone pulse |
+| 3 | **`HfModal`** | Export, Hotkeys, WorkspaceReset, OpenSourceCredits, OnboardingOverlay — symmetric enter/exit (no `return null` pop-out) |
+| 4 | **Sonner toasts** | Root `HfToaster`; sandbox custom bottom toast removed; playback/explain paths use `showSandboxToast` |
+| 5 | **Tooltip session** | `ActionTooltip` + token easing on `Tooltip`; Vitest [`tooltipSession.test.ts`](../frontend/src/lib/ui/tooltipSession.test.ts) |
+| 6 | **Sandbox rails** | Palette + inspector dock columns collapse to `HfPanelRail`; F9 instant via keyboard ctx; click expand uses drawer motion |
+| 7 | **Float inspector gesture** | Rubber-band at viewport edges; framer-motion spring on release (`bounce: 0`); Vitest [`gestureMotion.test.ts`](../frontend/src/lib/ui/gestureMotion.test.ts) |
+| 8 | **Polish sweep** | `transition-all` removed from ExportFormatCard, ScoreDropzone, inspector tabs; popover surfaces on VoiceDropdown + NotePalettePopover |
+
+**Gate:** **`make test` 429** (+5) · **`make lint` 0 errors** (7 pre-existing warnings) · **`npm run build`** OK · dev **`/`** returns 200.
+
+### Current failure
+
+**No blocking code failure** for this tranche.
+
+**Open (manual QA — not automated in CI):**
+
+| Check | Expected |
+|-------|----------|
+| Export modal | Backdrop + panel fade/scale **out** on close (not instant unmount) |
+| Sandbox **F9** | Palette rail ↔ dock **instant** (no slide) |
+| Sandbox **rail click** / **ChatFAB** | ~200ms drawer motion from trigger |
+| Sonner toast | Symmetric bottom enter/exit on playback error or inspector message |
+| Float inspector | Rubber-band past edge; spring settle on release |
+| `prefers-reduced-motion` | Opacity-only chrome; no transform slides |
+
+Browser MCP was unavailable during implementation; **`make e2e`** not re-run after rail layout (selectors should still pass — re-run **`make e2e`** after pull).
+
+**Program-level open (unchanged):** E2E photo-PDF on real scan; playback QA matrix; viola/tenor manual QA.
+
+### Learnings
+
+- **Frequency gate matters:** F9 and hotkey dialogs must stay instant; animation budget belongs on occasional modals and click-open drawers, not 100+/day toggles.
+- **Unmounting panels to zero width** caused the clunkiest musician-facing reflow; **40px rails** keep spatial memory without animating forbidden `width`.
+- **Enter-only keyframes + `return null`** on modal close was the pop-out clunk; **`AnimatePresence`** + shared `HfModal` fixes Export/Hotkeys/Reset in one place.
+- **MASTER §5 “no springs”** was too broad; split layers so float-inspector gesture can use critically damped springs while score stays 0ms.
+
+### Explicitly deferred (plan)
+
+- Vaul bottom-sheet inspector on `<768px`
+- Base UI rewrite of all dropdowns
+- Coachmark particle delight
+- Route-level StepBar transitions
 
 <a id="wl-session-2026-08-14-pm"></a>
 

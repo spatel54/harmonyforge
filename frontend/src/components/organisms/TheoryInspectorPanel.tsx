@@ -486,7 +486,7 @@ export const TheoryInspectorPanel = React.forwardRef<
                 aria-selected={inspectorActiveTab === id}
                 onClick={() => setInspectorActiveTab(id)}
                 className={cn(
-                  "hf-pressable rounded-full px-[14px] py-[6px] font-mono text-[11px] font-medium transition-all duration-200 ease-out shadow-sm",
+                  "hf-pressable rounded-full px-[14px] py-[6px] font-mono text-[11px] font-medium transition-[transform,background-color,color,box-shadow] duration-200 ease-out shadow-sm",
                   inspectorActiveTab === id
                     ? "bg-[var(--hf-accent)] text-[#1a0f0c] shadow-md"
                     : "bg-transparent text-[var(--hf-text-secondary)] border border-[var(--hf-detail)] hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_10%,transparent)]",

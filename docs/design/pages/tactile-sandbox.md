@@ -16,6 +16,9 @@ draggable note tokens, Red Line violation overlays, and playback controls.
 - Note drag snapping: discrete, `0ms` transition — no interpolation on note movement.
 - Red Line SVG overlays: `0ms` appear/disappear — no opacity fade.
 - Playhead cursor: linear `transform: translateX()` only, driven by Tone.js transport time.
+- **Palette / Theory Inspector:** Docked columns when open (parallel work, no scrim). Close collapses to a ~40px rail — do not unmount to zero width. **F9 / inspector hotkey:** instant rail↔dock. **Click rail or ChatFAB:** 200ms drawer motion (`--hf-ease-drawer`), origin at trigger; reduced motion = opacity only.
+- **Floating inspector:** Critically damped spring on drag release (`bounce: 0`), 1:1 pointer tracking, rubber-band at edges — the only spring surface on this page.
+- **Violation paint when inspector opens:** Instant (inherits Red Line 0ms rule); no stagger or fade on issue highlights.
 
 ## Iconography Override
 - Playback controls (play, pause, stop, rewind): Phosphor `fill` variant permitted for

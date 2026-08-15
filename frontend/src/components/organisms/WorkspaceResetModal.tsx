@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { HfModal } from "@/components/molecules/HfModal";
 
 export interface WorkspaceResetModalProps {
   open: boolean;
@@ -9,35 +10,15 @@ export interface WorkspaceResetModalProps {
 }
 
 export function WorkspaceResetModal({ open, onCancel, onConfirm }: WorkspaceResetModalProps) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
-
-  if (!open) return null;
-
   return (
-    <div
-      className="hf-backdrop-animate hf-overlay-backdrop fixed inset-0 z-[190] flex items-center justify-center px-6 py-10"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="hf-reset-workspace-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
+    <HfModal
+      isOpen={open}
+      onClose={onCancel}
+      zIndex={190}
+      panelClassName="max-w-md w-full rounded-xl border p-6 shadow-[0_20px_50px_rgba(45,24,23,0.2)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.4)] bg-[var(--hf-panel-bg)] border-[color-mix(in_srgb,var(--hf-detail)_72%,transparent)]"
+      labelledBy="hf-reset-workspace-title"
     >
-      <div
-        className="hf-modal-animate max-w-md w-full rounded-xl border p-6 shadow-[0_20px_50px_rgba(45,24,23,0.2)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.4)]"
-        style={{
-          backgroundColor: "var(--hf-panel-bg)",
-          borderColor: "color-mix(in srgb, var(--hf-detail) 72%, transparent)",
-        }}
-      >
-        <h2
+      <h2
           id="hf-reset-workspace-title"
           className="font-brand text-xl font-normal m-0 mb-3"
           style={{ color: "var(--hf-text-primary)" }}
@@ -73,10 +54,9 @@ export function WorkspaceResetModal({ open, onCancel, onConfirm }: WorkspaceRese
               color: "#1a0f0c",
             }}
           >
-            Reset
-          </button>
-        </div>
+          Reset
+        </button>
       </div>
-    </div>
+    </HfModal>
   );
 }

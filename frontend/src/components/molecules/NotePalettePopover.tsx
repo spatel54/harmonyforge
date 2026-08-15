@@ -121,13 +121,14 @@ export function NotePalettePopover({
     <div
       ref={popoverRef}
       className={cn(
-        "hf-print-hide absolute z-[40] pointer-events-auto",
+        "hf-print-hide absolute z-[40] pointer-events-auto hf-popover-surface",
         "overflow-y-auto overscroll-contain hf-scroll-smooth",
         "rounded-[8px] border border-[var(--hf-detail)]",
         "bg-[var(--hf-panel-bg)] shadow-lg",
         "w-[min(248px,calc(100vw-32px))]",
         className,
       )}
+      data-open="true"
       style={
         layout
           ? { left: layout.left, top: layout.top, maxHeight: layout.maxHeight, touchAction: "pan-y" }

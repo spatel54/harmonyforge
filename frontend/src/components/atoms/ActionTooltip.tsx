@@ -2,6 +2,10 @@
 
 import React from "react";
 import { Tooltip } from "./Tooltip";
+import {
+  beginTooltipSession,
+  isTooltipSessionActive,
+} from "@/lib/ui/tooltipSession";
 
 export interface ActionTooltipProps {
   content: string;
@@ -62,15 +66,18 @@ export function ActionTooltip({
   const openNow = React.useCallback(() => {
     clearShowTimer();
     measure();
+    beginTooltipSession();
     setVisible(true);
   }, [clearShowTimer, measure]);
 
   const scheduleOpenHover = React.useCallback(() => {
     clearShowTimer();
-    const delay = reducedMotion ? 0 : showDelayMs;
+    const instant = reducedMotion || isTooltipSessionActive();
+    const delay = instant ? 0 : showDelayMs;
     showTimerRef.current = setTimeout(() => {
       showTimerRef.current = null;
       measure();
+      beginTooltipSession();
       setVisible(true);
     }, delay);
   }, [clearShowTimer, measure, reducedMotion, showDelayMs]);
@@ -153,7 +160,7 @@ export function ActionTooltip({
         floatingPosition={floatingPosition}
         className={className}
         contentId={tooltipId}
-        instantTransition={reducedMotion}
+        instantTransition={reducedMotion || isTooltipSessionActive()}
       />
     </span>
   );
