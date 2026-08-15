@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — CI verify lint (2026-08-15)](#wl-ci-verify-lint-2026-08-15) — unused vars + inspector toast hook deps + Actions Node 24-ready checkout/setup-node
 - [Work log — Notation overlay placement (2026-08-15 late)](#wl-notation-overlay-placement-2026-08-15) — **canonical handover** — palette marks sit **above the staff**, aligned to the note; dynamics same lane; TR/turn/mordent use Noto Music Unicode; tempo larger — **`make test` 461** · **no blocking overlay failure**
 - [Work log — Notation glyphs on canvas (2026-08-15)](#wl-notation-glyphs-2026-08-15) — coda/segno as **Noto Music signs**, not `CODA` pills — Y-placement superseded by the overlay log above
 - [Work log — Palette QA leftovers (2026-08-15 late)](#wl-palette-qa-leftovers-2026-08-15) — OSMD export markings; toolbar BPM sync; RS Play expression patch — **`make test` 455**
@@ -70,6 +71,24 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-ci-verify-lint-2026-08-15"></a>
+
+## Work log — CI verify lint (2026-08-15)
+
+Fixes GitHub Actions **verify** annotations on **`89e80c4`** (“Ship palette overlay placement…”).
+
+### What failed
+- ESLint unused bindings (`partIndex`/`measureIndex` strip, `_container`, `finalizeChordTrack` import, `ts`, `_mIdx`/`_beat`, `downloadXml`) and missing `showInspectorToast` in two sandbox `useCallback` deps.
+- Node 20 deprecation on **`actions/checkout@v4`** / **`actions/setup-node@v4`** (action runtime, not app Node). **`git` 128** on that run is treated as the same checkout/action-runtime class; app Node stays **20** to match Docker.
+
+### Shipped
+- Drop unused locals; keep `partIndex` on sounding events; remove dead `downloadXml`; add toast deps.
+- CI: **`checkout@v5`**, **`setup-node@v5`**, **`node-version: "20"`**.
+
+### Gate
+- **`make lint`** exit 0 (no printed issues).
+- **`make test` 461**.
 
 <a id="wl-notation-overlay-placement-2026-08-15"></a>
 

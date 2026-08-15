@@ -219,6 +219,15 @@ export function realizeSoundingTimeline(
   const raw = collectRawEvents(score, beatsPerMeasure);
   const expanded = expandRepeats(score, raw);
   return expanded
-    .map(({ measureIndex, partIndex, ...rest }) => rest)
+    .map(
+      (ev): SoundingEvent => ({
+        startBeat: ev.startBeat,
+        pitch: ev.pitch,
+        durationBeats: ev.durationBeats,
+        velocity: ev.velocity,
+        partName: ev.partName,
+        partIndex: ev.partIndex,
+      }),
+    )
     .sort((a, b) => a.startBeat - b.startBeat);
 }

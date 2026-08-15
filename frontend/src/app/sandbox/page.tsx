@@ -1641,7 +1641,7 @@ function TactileSandboxPageInner({
         showInspectorToast("Harmony regenerate request failed.");
       }
     },
-    [applyScore, clearSelection, setInspectorScoreFocus],
+    [applyScore, clearSelection, setInspectorScoreFocus, showInspectorToast],
   );
 
   const handleInspectorSelectPart = React.useCallback(
@@ -1694,7 +1694,7 @@ function TactileSandboxPageInner({
         showInspectorToast("Couldn’t open a note explanation for this click.");
       });
     },
-    [isInspectorOpen, score, explainGeneratedNote],
+    [isInspectorOpen, score, explainGeneratedNote, showInspectorToast],
   );
 
   const handleEditorSelectionChange = React.useCallback(

@@ -39,7 +39,7 @@ export async function applyOsmdLetterLabelsWhenReady(
   await waitForElementLayout(container);
   await nextAnimationFrames(2);
 
-  let placements = collectLetterPlacementsFromOsmd(osmd, container);
+  let placements = collectLetterPlacementsFromOsmd(osmd);
   if (placements.length > 0) {
     applyOsmdLearnerLetterLabels(container, osmd);
     return placements.length;
@@ -51,7 +51,7 @@ export async function applyOsmdLetterLabelsWhenReady(
       setTimeout(resolve, 64);
     });
     await nextAnimationFrames(2);
-    placements = collectLetterPlacementsFromOsmd(osmd, container);
+    placements = collectLetterPlacementsFromOsmd(osmd);
   }
 
   if (placements.length > 0) {

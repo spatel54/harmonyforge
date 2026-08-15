@@ -174,7 +174,7 @@ describe("chordPlacement", () => {
       ],
     };
     const existing = [{ id: "c1", quant: beatToRiffQuant(2), symbol: "G7" }];
-    const out = ensureChordsOnMeasureDownbeats(score, existing, (_beat, _mIdx) => "C", () => "new");
+    const out = ensureChordsOnMeasureDownbeats(score, existing, () => "C", () => "new");
     const quants = out.map((c) => c.quant).sort((a, b) => a - b);
     expect(quants).toContain(0);
     expect(quants).toContain(beatToRiffQuant(4));

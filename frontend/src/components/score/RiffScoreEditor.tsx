@@ -61,9 +61,6 @@ import {
   getNoteById,
   transposeNotes,
 } from "@/lib/music/scoreUtils";
-import { scoreToMusicXML } from "@/lib/music/scoreToMusicXML";
-import { downloadBlob } from "@/lib/sandbox/exportFormats";
-import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import { useRiffScoreSync } from "@/hooks/useRiffScoreSync";
 import {
   extractNotePositions,
@@ -525,18 +522,6 @@ export function RiffScoreEditor({
   const onInspectorSelectMeasureRef = useRef(onInspectorSelectMeasure);
   onInspectorSelectMeasureRef.current = onInspectorSelectMeasure;
 
-  const downloadXml = () => {
-    const live = getLiveScoreAfterFlush(
-      { flushToZustand: () => flushToZustandRef.current() },
-      () => useScoreStore.getState().score ?? score,
-    );
-    if (!live) return;
-    downloadBlob(
-      new Blob([scoreToMusicXML(live)], { type: "application/xml" }),
-      "harmony-forge-score.xml",
-    );
-  };
-
   const runToolbarAction = useCallback(
     (actionId: SandboxToolbarActionId, fallback: () => void) => {
       const toolId = mapSandboxToolbarActionToToolId(actionId);
@@ -726,7 +711,7 @@ export function RiffScoreEditor({
 
       return plugins;
     },
-    // `applyOnSelection` / `downloadXml` are inline helpers
+    // `applyOnSelection` is an inline helper
     // closed over the state we already depend on; including them would force the
     // memo to recompute every render and fight RiffScore's toolbar identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
