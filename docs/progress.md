@@ -76,18 +76,24 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ## Work log — CI verify lint (2026-08-15)
 
-Fixes GitHub Actions **verify** annotations on **`89e80c4`** (“Ship palette overlay placement…”).
+Fixes GitHub Actions **verify** on **`89e80c4`** / **`81245e42`**.
 
-### What failed
-- ESLint unused bindings (`partIndex`/`measureIndex` strip, `_container`, `finalizeChordTrack` import, `ts`, `_mIdx`/`_beat`, `downloadXml`) and missing `showInspectorToast` in two sandbox `useCallback` deps.
-- Node 20 deprecation on **`actions/checkout@v4`** / **`actions/setup-node@v4`** (action runtime, not app Node). **`git` 128** on that run is treated as the same checkout/action-runtime class; app Node stays **20** to match Docker.
+### What actually failed
+Jobs API: **Install / Test / Lint succeeded**. **Build** (`npm run build`) failed. Local **`make build`** reproduced:
+
+- `playbackUtils.ts`: `parseMeasureBeats(ts, beats)` but the helper only accepted one arg.
+- `scoreToMusicXML.ts`: `BeamTag` type dropped in the overlay commit.
+- `tupletUtils.ts`: extra fields on `Pick<Note, "duration" | "dots">`.
+
+**`git` 128** is a **warning** (mapped to `.github`); it also appeared on last **green** run **#44**. Not the exit 1.
 
 ### Shipped
-- Drop unused locals; keep `partIndex` on sounding events; remove dead `downloadXml`; add toast deps.
-- CI: **`checkout@v5`**, **`setup-node@v5`**, **`node-version: "20"`**.
+- Optional `fallbackBeats` on `parseMeasureBeats`.
+- Restore `BeamTag`; tuplet `writtenBeats({ duration })`.
+- Debug ingest still in `next.config.ts` until CI is confirmed green.
 
 ### Gate
-- **`make lint`** exit 0 (no printed issues).
+- **`make build`** OK (post-fix).
 - **`make test` 461**.
 
 <a id="wl-notation-overlay-placement-2026-08-15"></a>

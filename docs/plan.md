@@ -6,7 +6,7 @@ Skim **Status at a glance** below, then use the numbered **Plan** checklist for 
 
 ### Status at a glance
 
-- **CI verify lint (2026-08-15):** **[progress.md](progress.md#wl-ci-verify-lint-2026-08-15)** — unused-var / hook-deps annotations from **`89e80c4`** cleared; Actions **`checkout@v5`** / **`setup-node@v5`**. **`make lint` 0**. **No remaining verify annotation from that run.**
+- **CI verify build (2026-08-15):** **[progress.md](progress.md#wl-ci-verify-lint-2026-08-15)** — **`npm run build`** TypeScript: `parseMeasureBeats` 2-arg fallback, restore `BeamTag`, tuplet `writtenBeats` pick. **`git` 128 is a checkout warning (also on last green run).**
 - **Notation overlay placement (2026-08-15 late):** **[progress.md](progress.md#wl-notation-overlay-placement-2026-08-15)** — palette marks **above the staff**, aligned to the note; dynamics same lane; Noto Music TR/turn/mordent; larger tempo. **`make test` 461**. **No blocking overlay failure.**
 - **Notation glyphs on canvas (2026-08-15):** **[progress.md](progress.md#wl-notation-glyphs-2026-08-15)** — coda/segno/ornaments render as Noto Music signs (not `CODA` pills). Y-placement finished in the overlay log.
 - **Palette QA leftovers (2026-08-15 late):** **[progress.md — leftovers](progress.md#wl-palette-qa-leftovers-2026-08-15)** — OSMD export emits sounding tuplets + `<tuplet>` + tempo words/metronome; RiffScore toolbar BPM follows `score.bpm`; sandbox Play uses `__HF_LOOKUP_PLAYBACK_*`. **`make test` 455** · **`make lint` 0 errors**. **No leftover from the 2026-08-15 palette QA list.**

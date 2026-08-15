@@ -175,6 +175,8 @@ function beamBeatLength(timeSignature: string): number {
   return 4 / beatType;
 }
 
+type BeamTag = { number: number; value: "begin" | "continue" | "end" };
+
 function formatBeamXml(tags: BeamTag[] | undefined): string {
   if (!tags?.length) return "";
   return `\n        ${tags.map((b) => `<beam number="${b.number}">${b.value}</beam>`).join("\n        ")}`;

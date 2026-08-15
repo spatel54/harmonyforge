@@ -57,12 +57,12 @@ export function innerDurationForTupletSlot(
   if (!ratio) return null;
   const perNoteSounding = slotBeats / actual;
   for (const d of DURATION_CHAIN) {
-    const written = writtenBeats({ id: "x", pitch: "C4", duration: d });
+    const written = writtenBeats({ duration: d });
     const sounding = written * (ratio.normal / ratio.actual);
     if (Math.abs(sounding - perNoteSounding) < 1e-6) return d;
   }
   for (const d of DURATION_CHAIN) {
-    const written = writtenBeats({ id: "x", pitch: "C4", duration: d });
+    const written = writtenBeats({ duration: d });
     const sounding = written * (ratio.normal / ratio.actual);
     if (sounding <= perNoteSounding + 1e-6) return d;
   }

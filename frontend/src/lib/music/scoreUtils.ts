@@ -98,13 +98,13 @@ export function noteWrittenBeats(note: Note): number {
   return base * factor;
 }
 
-export function parseMeasureBeats(timeSignature?: string): number {
-  if (!timeSignature) return 4;
+export function parseMeasureBeats(timeSignature?: string, fallbackBeats = 4): number {
+  if (!timeSignature) return fallbackBeats;
   const m = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
-  if (!m) return 4;
+  if (!m) return fallbackBeats;
   const num = Number.parseInt(m[1] ?? "4", 10);
   const den = Number.parseInt(m[2] ?? "4", 10);
-  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) return 4;
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) return fallbackBeats;
   return (num * 4) / den;
 }
 
