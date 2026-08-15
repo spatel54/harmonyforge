@@ -94,6 +94,7 @@ Run **#47**: **verify Build succeeded**; **e2e** failed Playwright strict locato
 - Restore `BeamTag`; tuplet `writtenBeats({ duration })`.
 - **`HfModal`**: only the panel is `role="dialog"` (CI #47 nested-dialog strict mode).
 - Palette prompt **`data-testid="palette-prompt-cancel"`**; e2e locators no longer match “Cancel accidentals”.
+- E2E **#48**: `tuplet-3` is unmounted until **Expand all** (default dock sections omit tuplets). Helper now always expands and waits for the triplet button.
 
 ### Gate
 - **`make build`** OK (post-fix).

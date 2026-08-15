@@ -84,8 +84,37 @@ export async function openSeededSandbox(page: Page, xml = PALETTE_QA_XML): Promi
   );
   await page.goto("/sandbox");
   await waitForRiffScoreReady(page);
-  const expand = page.getByRole("button", { name: "Expand all" });
-  if (await expand.isVisible()) await expand.click();
+  // Collapsed sections unmount their tools (default open: note-entry / articulations / dynamics).
+  await page.getByTestId("palette-expand-all").click();
+  await dockTool(page, "tuplet-3").waitFor({ state: "attached", timeout: 15_000 });
+  // #region agent log
+  await page.evaluate(() => {
+    const dock = document.querySelector("[data-testid=sandbox-palette-dock]");
+    const tup = dock?.querySelector('[data-tool-id="tuplet-3"]') as HTMLButtonElement | null;
+    const sections = [...(dock?.querySelectorAll("[aria-controls^='palette-section-']") ?? [])].map((el) => ({
+      id: el.getAttribute("aria-controls"),
+      expanded: el.getAttribute("aria-expanded"),
+    }));
+    fetch("http://127.0.0.1:7406/ingest/555ec36b-f260-4597-b685-d87aa80b5dde", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "73a776" },
+      body: JSON.stringify({
+        sessionId: "73a776",
+        runId: "post-fix",
+        hypothesisId: "A",
+        location: "e2e/helpers.ts:openSeededSandbox",
+        message: "dock after Expand all",
+        data: {
+          toolCount: dock?.querySelectorAll("[data-tool-id]").length ?? 0,
+          hasTuplet: Boolean(tup),
+          tupDisabled: tup?.disabled ?? null,
+          tupletsExpanded: sections.find((s) => s.id === "palette-section-tuplets")?.expanded ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  });
+  // #endregion
 }
 
 export function dockTool(page: Page, toolId: string) {

@@ -121,6 +121,7 @@ export function SandboxPalettePanel({
         <div className="flex gap-1.5">
           <button
             type="button"
+            data-testid="palette-expand-all"
             onClick={expandAll}
             className="hf-pressable flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] shadow-sm hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
             style={{ color: "var(--hf-text-primary)" }}
