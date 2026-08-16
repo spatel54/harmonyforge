@@ -33,21 +33,26 @@ jobs:
           COUNT=$(echo "$RESPONSE" | jq '.deployments | length')
 
           if [ "$COUNT" -eq 0 ]; then
-            TEXT="*Daily Vercel Digest — harmonyforge*\nNo deploy activity in the last 24 hours."
+            TEXT=$(printf '*Daily Vercel Digest — harmonyforge*\nNo deploy activity in the last 24 hours.')
           else
-            SUMMARY=$(echo "$RESPONSE" | jq -r '
-              .deployments
-              | group_by(.state)
-              | map("\(.[0].state): \(length)")
-              | join(", ")
-            ')
+            READY=$(echo "$RESPONSE" | jq '[.deployments[] | select(.state == "READY")] | length')
+            ERRORED=$(echo "$RESPONSE" | jq '[.deployments[] | select(.state == "ERROR")] | length')
+            OTHER=$((COUNT - READY - ERRORED))
 
             LINES=$(echo "$RESPONSE" | jq -r '
               .deployments[]
-              | "• \(.state) — <https://\(.url)|\(.meta.githubCommitMessage // .name // .uid)>"
+              | {
+                  icon: (if .state == "READY" then "✅" elif .state == "ERROR" then "❌" elif .state == "CANCELED" then "🚫" else "⏳" end),
+                  label: ((.meta.githubCommitMessage // .name // .uid) | split("\n")[0] | if length > 72 then .[0:69] + "..." else . end),
+                  url: .url
+                }
+              | "\(.icon) <https://\(.url)|\(.label)>"
             ')
 
-            TEXT="*Daily Vercel Digest — harmonyforge*\n${COUNT} deploy(s) in the last 24h (${SUMMARY}):\n${LINES}"
+            TEXT=$(printf '*Daily Vercel Digest — harmonyforge*\n%s deploy(s) in the last 24h — %s ready, %s failed%s\n%s' \
+              "$COUNT" "$READY" "$ERRORED" \
+              "$([ "$OTHER" -gt 0 ] && echo ", $OTHER other" || echo "")" \
+              "$LINES")
           fi
 
           jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$TEXT" \
