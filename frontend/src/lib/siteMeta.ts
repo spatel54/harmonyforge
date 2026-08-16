@@ -35,6 +35,15 @@ export const OPEN_SOURCE_NOTICES: OpenSourceNotice[] = [
   },
 ];
 
+const BRAND = {
+  ogImage: "/brand/og-image.png",
+  ogImageDark: "/brand/og-image-dark.png",
+  twitterCard: "/brand/twitter-card.png",
+  favicon16: "/brand/favicon-16x16.png",
+  favicon32: "/brand/favicon-32x32.png",
+  appleTouchIcon: "/brand/apple-touch-icon.png",
+} as const;
+
 export function buildRootMetadata(): Metadata {
   const title = `${PRODUCT_NAME} — Glass Box`;
   return {
@@ -42,15 +51,31 @@ export function buildRootMetadata(): Metadata {
     description: SITE_TAGLINE,
     applicationName: PRODUCT_NAME,
     authors: [{ name: COPYRIGHT_HOLDER }],
+    icons: {
+      icon: [
+        { url: BRAND.favicon16, sizes: "16x16", type: "image/png" },
+        { url: BRAND.favicon32, sizes: "32x32", type: "image/png" },
+      ],
+      apple: BRAND.appleTouchIcon,
+    },
     openGraph: {
       title,
       description: SITE_TAGLINE,
       type: "website",
+      images: [
+        {
+          url: BRAND.ogImage,
+          width: 1200,
+          height: 630,
+          alt: `${PRODUCT_NAME} — Glass Box harmony tools`,
+        },
+      ],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description: SITE_TAGLINE,
+      images: [BRAND.twitterCard],
     },
   };
 }

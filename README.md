@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/public/logo.svg" alt="HarmonyForge" width="112" height="112" />
+<img src="frontend/public/logo.png" alt="HarmonyForge" width="112" height="112" />
 
 # HarmonyForge
 

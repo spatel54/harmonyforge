@@ -10,7 +10,7 @@ import {
   TRANSITION_MIN_VISIBLE_MS,
 } from "@/components/organisms/TransitionOverlay";
 import { awaitMinElapsedSince } from "@/lib/ui/awaitMinElapsed";
-import { BrandTitle } from "@/components/atoms/BrandTitle";
+import { PlaygroundHeroBrand } from "@/components/organisms/PlaygroundHeroBrand";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { useUploadStore } from "@/store/useUploadStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
@@ -107,7 +107,7 @@ export function HomeViewOnboarding() {
 
         <main className="flex-1 flex flex-col items-center justify-between pb-0 overflow-y-auto">
           <div className="flex-1 flex items-center justify-center pt-8">
-            <BrandTitle className="text-center" />
+            <PlaygroundHeroBrand />
           </div>
 
           <div

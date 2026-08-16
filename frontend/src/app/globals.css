@@ -637,6 +637,13 @@ a.hf-pressable:active {
   }
 }
 
+.hf-playground-hero-mark {
+  animation: hf-playground-fade-up 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow:
+    0 12px 40px color-mix(in srgb, var(--hf-accent) 12%, transparent),
+    0 2px 8px color-mix(in srgb, var(--hf-bg-grad-start) 40%, transparent);
+}
+
 /* Cursor trail notes (playground) — slow float upward, ease-out settle */
 .hf-playground-cursor-trail-host {
   contain: layout style paint;
@@ -863,6 +870,10 @@ a.hf-pressable:active {
   .hf-playground-title-prestige {
     animation: hf-playground-fade-up 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
     filter: none !important;
+  }
+
+  .hf-playground-hero-mark {
+    animation: hf-playground-fade-up 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
 

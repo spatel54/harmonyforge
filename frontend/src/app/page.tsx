@@ -10,7 +10,7 @@ import {
   TRANSITION_MIN_VISIBLE_MS,
 } from "@/components/organisms/TransitionOverlay";
 import { awaitMinElapsedSince } from "@/lib/ui/awaitMinElapsed";
-import { BrandTitle } from "@/components/atoms/BrandTitle";
+import { PlaygroundHeroBrand } from "@/components/organisms/PlaygroundHeroBrand";
 import { useUploadStore } from "@/store/useUploadStore";
 import { OnboardingModal } from "@/components/organisms/OnboardingModal";
 import { completeOnboarding, isOnboardingComplete } from "@/lib/onboarding";
@@ -128,9 +128,9 @@ export default function Home() {
         <main className="flex-1 flex flex-col items-center justify-between pb-0 overflow-y-auto hf-scroll-smooth px-4 sm:px-6">
           {/* Title takes up the top empty space and centers vertically before the stand */}
           <div className="flex-1 flex items-center justify-center pt-6 sm:pt-10 pb-4 w-full">
-            <div className="hf-playground-title-wrap">
-              <BrandTitle className="hf-playground-title-prestige text-center text-[clamp(2.25rem,8vw,3.56rem)] leading-[1.12] tracking-[-0.02em]" />
-            </div>
+            <PlaygroundHeroBrand
+              titleClassName="hf-playground-title-prestige text-center text-[clamp(2.25rem,8vw,3.56rem)] leading-[1.12] tracking-[-0.02em]"
+            />
           </div>
 
           {/* Scaled down music stand (max 1000px) flush with the bottom */}
