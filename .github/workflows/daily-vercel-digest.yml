@@ -1,0 +1,58 @@
+name: Daily Vercel Deploy Digest
+
+on:
+  schedule:
+    - cron: "3 14 * * *" # 9:03am America/Chicago (UTC-5)
+  workflow_dispatch: {}
+
+env:
+  VERCEL_PROJECT_ID: prj_u2QWhLx1RdlNIqBb7UAoolELVcHL
+  VERCEL_ORG_ID: team_v8Qv48fgzQ2nvUj2wqwiauQ4
+  SLACK_CHANNEL_ID: C0BQMHAEVEV
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch deployments from the last 24h and post to Slack
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          SINCE_MS=$(( $(date -u +%s) * 1000 - 86400000 ))
+
+          RESPONSE=$(curl -sS -G "https://api.vercel.com/v6/deployments" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            --data-urlencode "projectId=${VERCEL_PROJECT_ID}" \
+            --data-urlencode "teamId=${VERCEL_ORG_ID}" \
+            --data-urlencode "since=${SINCE_MS}" \
+            --data-urlencode "limit=50")
+
+          COUNT=$(echo "$RESPONSE" | jq '.deployments | length')
+
+          if [ "$COUNT" -eq 0 ]; then
+            TEXT="*Daily Vercel Digest — harmonyforge*\nNo deploy activity in the last 24 hours."
+          else
+            SUMMARY=$(echo "$RESPONSE" | jq -r '
+              .deployments
+              | group_by(.state)
+              | map("\(.[0].state): \(length)")
+              | join(", ")
+            ')
+
+            LINES=$(echo "$RESPONSE" | jq -r '
+              .deployments[]
+              | "• \(.state) — <https://\(.url)|\(.meta.githubCommitMessage // .name // .uid)>"
+            ')
+
+            TEXT="*Daily Vercel Digest — harmonyforge*\n${COUNT} deploy(s) in the last 24h (${SUMMARY}):\n${LINES}"
+          fi
+
+          jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$TEXT" \
+            '{channel: $channel, text: $text}' \
+            | curl -sS -X POST "https://slack.com/api/chat.postMessage" \
+                -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+                -H "Content-Type: application/json; charset=utf-8" \
+                -d @-
