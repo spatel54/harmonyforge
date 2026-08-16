@@ -28,7 +28,17 @@ jobs:
             --data-urlencode "projectId=${VERCEL_PROJECT_ID}" \
             --data-urlencode "teamId=${VERCEL_ORG_ID}" \
             --data-urlencode "since=${SINCE_MS}" \
+            --data-urlencode "target=production" \
             --data-urlencode "limit=50")
+
+          # Keep only the most recent deployment per commit SHA, so a retried
+          # build for the same merge doesn't show up as two conflicting rows.
+          RESPONSE=$(echo "$RESPONSE" | jq '
+            .deployments |= (
+              sort_by(.createdAt) | reverse
+              | unique_by(.meta.githubCommitSha // .uid)
+            )
+          ')
 
           COUNT=$(echo "$RESPONSE" | jq '.deployments | length')
 
