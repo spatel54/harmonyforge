@@ -12,8 +12,6 @@ import {
   extractNotes,
   toggleNoteDots,
   toggleNoteRests,
-  addArticulation,
-  setNoteDynamics,
   insertMeasureBefore,
   insertMeasureAfter,
   deleteMeasure,
@@ -22,42 +20,50 @@ import {
   parseMeasureBeats,
   getInsertIndexAtBeat,
   getNoteById,
-  setMeasureBarline,
-  setMeasureRepeatMark,
-  setMeasureTempoText,
-  setOrnament,
-  setTuplet,
-  setLineOnSelection,
-  setNoteLyric,
-  setNoteChordSymbol,
   applySuggestion,
   applySuggestions,
   measureRangeForLocalizedHarmonyRegenerate,
   spliceHarmonyMeasuresFromAddonScore,
   collectPitchesForNoteIds,
+  toggleTieOnSelection as toggleTieOnNoteIds,
 } from "@/lib/music/scoreUtils";
+import {
+  applyPalettePromptResult,
+  applyPaletteScoreOp,
+  type PalettePromptKind,
+} from "@/lib/sandbox/paletteToolScoreOps";
+import { isPaletteItemPressed } from "@/lib/sandbox/palettePressedState";
+import {
+  PalettePromptModal,
+  palettePromptState,
+  type PalettePromptState,
+} from "@/components/molecules/PalettePromptModal";
+import type { PaletteItem } from "@/lib/palettes/paletteRegistry";
 import { useToolStore } from "@/store/useToolStore";
 import { useEditCursorStore } from "@/store/useEditCursorStore";
 import { parseMusicXML } from "@/lib/music/musicxmlParser";
 import { detectChordsFromScore } from "@/lib/music/detectChordsFromScore";
 import { shouldShowChordNotation } from "@/lib/music/riffscoreAdapter";
+import { findPaletteItem } from "@/lib/palettes/paletteRegistry";
 import { scoreToMusicXML, scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
 import { getLiveScoreAfterFlush } from "@/lib/music/liveScoreExport";
 import {
+  downloadBlob,
   isSandboxExportFormatId,
   runSandboxExport,
   scoreToBrandedExportMusicXML,
   scoreToExportMusicXML,
   type SandboxExportFormatId,
 } from "@/lib/sandbox/exportFormats";
-import { HF_SANDBOX_TOAST_EVENT } from "@/lib/sandbox/sandboxToast";
+import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 import { TheoryInspectorPanel } from "@/components/organisms/TheoryInspectorPanel";
 import { ExportModal } from "@/components/organisms/ExportModal";
 import { ExportPrintRoot, type PrintableScoreHandle } from "@/components/organisms/ExportPrintRoot";
 import { SandboxPalettePanel } from "@/components/organisms/SandboxPalettePanel";
 import { ChatFAB } from "@/components/atoms/ChatFAB";
 import { ConfigurationBackFAB } from "@/components/atoms/ConfigurationBackFAB";
-import { Palette as PaletteIcon } from "lucide-react";
+import { Palette as PaletteIcon, MessageCircle } from "lucide-react";
+import { animate } from "framer-motion";
 import { useTheoryInspector } from "@/hooks/useTheoryInspector";
 import { useTheoryInspectorStore } from "@/store/useTheoryInspectorStore";
 import {
@@ -75,6 +81,12 @@ import { OnboardingOverlay } from "@/components/organisms/OnboardingOverlay";
 import { TheoryInspectorFabHint } from "@/components/organisms/TheoryInspectorFabHint";
 import { WorkspaceResetModal } from "@/components/organisms/WorkspaceResetModal";
 import { SandboxHotkeysDialog } from "@/components/molecules/SandboxHotkeysDialog";
+import { HfPanelRail } from "@/components/molecules/HfPanelRail";
+import {
+  clampFloatInspectorPosition,
+  clampWithRubberband,
+  type PointerVelocitySample,
+} from "@/lib/ui/gestureMotion";
 import {
   completeOnboarding,
   dismissInspectorFabHint,
@@ -296,21 +308,9 @@ function TactileSandboxPageInner({
     (s) => s.patchSelectedNoteInsight,
   );
 
-  const [noteExplainToast, setNoteExplainToast] = React.useState<string | null>(null);
-
   const showInspectorToast = React.useCallback((message: string) => {
-    setNoteExplainToast(message);
-    window.setTimeout(() => setNoteExplainToast(null), 4000);
+    showSandboxToast(message);
   }, []);
-
-  React.useEffect(() => {
-    const onPlaybackToast = (e: Event) => {
-      const detail = (e as CustomEvent<{ message?: string }>).detail;
-      if (detail?.message) showInspectorToast(detail.message);
-    };
-    window.addEventListener(HF_SANDBOX_TOAST_EVENT, onPlaybackToast);
-    return () => window.removeEventListener(HF_SANDBOX_TOAST_EVENT, onPlaybackToast);
-  }, [showInspectorToast]);
 
   const handleAcceptIdeaAction = React.useCallback(
     (action: IdeaAction) => {
@@ -441,6 +441,7 @@ function TactileSandboxPageInner({
   const [inspectorFabHintDismissed, setInspectorFabHintDismissed] = React.useState(true);
   const [resetWorkspaceModalOpen, setResetWorkspaceModalOpen] = React.useState(false);
   const [hotkeysDialogOpen, setHotkeysDialogOpen] = React.useState(false);
+  const [palettePrompt, setPalettePrompt] = React.useState<PalettePromptState | null>(null);
   const openHotkeyHelp = React.useCallback(() => setHotkeysDialogOpen(true), []);
   const [inspectorWidth, setInspectorWidth] = React.useState(380);
   const [inspectorDockMode, setInspectorDockMode] = React.useState<"sidebar" | "floating">("sidebar");
@@ -450,7 +451,21 @@ function TactileSandboxPageInner({
 
   const [exportModalMusicXML, setExportModalMusicXML] = React.useState<string | null>(null);
   const printRootRef = React.useRef<PrintableScoreHandle>(null);
-  const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = React.useState(true);
+  const [paletteDrawerMotion, setPaletteDrawerMotion] = React.useState<"instant" | "drawer">(
+    "instant",
+  );
+  const [inspectorDrawerMotion, setInspectorDrawerMotion] = React.useState<"instant" | "drawer">(
+    "drawer",
+  );
+  const openInspectorFromClick = React.useCallback(() => {
+    setInspectorDrawerMotion("drawer");
+    setIsInspectorOpen(true);
+  }, []);
+  const closeInspectorFromClick = React.useCallback(() => {
+    setInspectorDrawerMotion("drawer");
+    setIsInspectorOpen(false);
+  }, []);
   const notationMode = "edit" as const;
   const [showExpressiveSovereigntyCallout, setShowExpressiveSovereigntyCallout] = React.useState(
     () =>
@@ -523,6 +538,7 @@ function TactileSandboxPageInner({
     pointerId: number;
     grabX: number;
     grabY: number;
+    samples: PointerVelocitySample[];
   } | null>(null);
   const inspectorFloatPosDuringDragRef = React.useRef<{ left: number; top: number } | null>(null);
   const inspectorFloatResizeRef = React.useRef<{
@@ -599,6 +615,7 @@ function TactileSandboxPageInner({
         pointerId: e.pointerId,
         grabX: e.clientX - left0,
         grabY: e.clientY - top0,
+        samples: [{ x: e.clientX, y: e.clientY, t: performance.now() }],
       };
       const el = e.currentTarget;
       el.setPointerCapture(e.pointerId);
@@ -607,11 +624,17 @@ function TactileSandboxPageInner({
         if (!d || ev.pointerId !== d.pointerId) return;
         const w = wrap.offsetWidth;
         const h = wrap.offsetHeight;
+        const pad = 8;
+        const minLeft = pad;
+        const maxLeft = window.innerWidth - w - pad;
+        const minTop = pad;
+        const maxTop = window.innerHeight - h - pad;
         let left = ev.clientX - d.grabX;
         let top = ev.clientY - d.grabY;
-        const pad = 8;
-        left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
-        top = Math.max(pad, Math.min(top, window.innerHeight - h - pad));
+        left = clampWithRubberband(left, minLeft, maxLeft, window.innerWidth);
+        top = clampWithRubberband(top, minTop, maxTop, window.innerHeight);
+        d.samples.push({ x: ev.clientX, y: ev.clientY, t: performance.now() });
+        if (d.samples.length > 6) d.samples.shift();
         const next = { left, top };
         inspectorFloatPosDuringDragRef.current = next;
         setInspectorFloatPos(next);
@@ -630,10 +653,26 @@ function TactileSandboxPageInner({
         el.removeEventListener("pointercancel", onUp);
         const last = inspectorFloatPosDuringDragRef.current;
         inspectorFloatPosDuringDragRef.current = null;
-        if (last) {
-          const { width, height } = inspectorFloatSizeRef.current;
-          persistInspectorFloatLayout({ ...last, width, height });
+        if (!last) return;
+        const { width, height } = inspectorFloatSizeRef.current;
+        const target = clampFloatInspectorPosition(last.left, last.top, width, height);
+        const needsSpring =
+          Math.abs(target.left - last.left) > 0.5 || Math.abs(target.top - last.top) > 0.5;
+        if (!needsSpring) {
+          persistInspectorFloatLayout({ ...target, width, height });
+          return;
         }
+        void animate(
+          { left: last.left, top: last.top },
+          { left: target.left, top: target.top },
+          {
+            type: "spring",
+            bounce: 0,
+            duration: 0.4,
+            onUpdate: (v) => setInspectorFloatPos({ left: v.left, top: v.top }),
+            onComplete: () => persistInspectorFloatLayout({ ...target, width, height }),
+          },
+        );
       };
       el.addEventListener("pointermove", onMove);
       el.addEventListener("pointerup", onUp);
@@ -727,14 +766,12 @@ function TactileSandboxPageInner({
   const downloadLiveXml = React.useCallback(() => {
     const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
     if (!live) return;
-    const blob = new Blob([scoreToExportMusicXML(live, sourceFileName)], {
-      type: "application/vnd.recordare.musicxml+xml",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "harmony-forge-score.musicxml";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(
+      new Blob([scoreToExportMusicXML(live, sourceFileName)], {
+        type: "application/vnd.recordare.musicxml+xml",
+      }),
+      "harmony-forge-score.musicxml",
+    );
   }, [sourceFileName]);
 
   /**
@@ -819,8 +856,8 @@ function TactileSandboxPageInner({
     return map[dur] ?? 1;
   }, []);
 
-  const withAccidental = React.useCallback((pitch: string, accidental: "#" | "b" | "natural") => {
-    const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  const withAccidental = React.useCallback((pitch: string, accidental: "#" | "b" | "natural" | "##" | "bb") => {
+    const m = pitch.match(/^([A-G])(#{1,2}|bb|b)?(\d+)$/);
     if (!m) return pitch;
     const step = m[1] ?? "C";
     const octave = m[3] ?? "4";
@@ -828,7 +865,7 @@ function TactileSandboxPageInner({
     return `${step}${accidental}${octave}`;
   }, []);
 
-  const applyAccidentalToSelection = React.useCallback((accidental: "#" | "b" | "natural") => {
+  const applyAccidentalToSelection = React.useCallback((accidental: "#" | "b" | "natural" | "##" | "bb") => {
     riffSessionRef.current?.flushToZustand?.();
     const live = useScoreStore.getState().score;
     if (!live) return;
@@ -849,47 +886,22 @@ function TactileSandboxPageInner({
   }, [selection, applyScore, withAccidental]);
 
   const toggleTieOnSelection = React.useCallback(() => {
-    if (!score || selection.length === 0) return;
-    const ids = new Set(selection.map((s) => s.noteId));
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      for (const measure of part.measures) {
-        for (const note of measure.notes) {
-          if (!ids.has(note.id) || note.isRest) continue;
-          note.tie = note.tie ? undefined : "start";
-        }
-      }
+    riffSessionRef.current?.flushToZustand?.();
+    const live = useScoreStore.getState().score;
+    if (!live) return;
+    // Overlay / Zustand selection — not the retained pitch-group (that can
+    // still include an earlier note after a duration click).
+    const fromStore = new Set(useToolStore.getState().selection.map((s) => s.noteId));
+    const durationTargets = riffSessionRef.current?.getDurationTargetNoteIds() ?? new Set();
+    const noteIds = fromStore.size > 0 ? fromStore : durationTargets;
+    if (noteIds.size === 0) return;
+    const { score: next, tied, untied } = toggleTieOnNoteIds(live, noteIds);
+    if (tied === 0 && untied === 0) {
+      showInspectorToast("Tie needs the next note to be the same pitch.");
+      return;
     }
     applyScore(next);
-  }, [score, selection, applyScore]);
-
-  const setMeasureTimeSignature = React.useCallback(() => {
-    if (!score) return;
-    const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-    const value = window.prompt("Enter time signature (e.g. 4/4):", "4/4");
-    if (!value) return;
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      const measure = part.measures[target];
-      if (measure) measure.timeSignature = value.trim();
-    }
-    applyScore(next);
-  }, [score, cursor, selection, applyScore]);
-
-  const setMeasureKeySignature = React.useCallback(() => {
-    if (!score) return;
-    const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-    const raw = window.prompt("Enter key signature fifths (-7 to 7):", "0");
-    if (raw === null) return;
-    const value = Number.parseInt(raw, 10);
-    if (!Number.isFinite(value) || value < -7 || value > 7) return;
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      const measure = part.measures[target];
-      if (measure) measure.keySignature = value;
-    }
-    applyScore(next);
-  }, [score, cursor, selection, applyScore]);
+  }, [applyScore, showInspectorToast]);
 
   const setSelectedPartClef = React.useCallback((clef: "treble" | "bass" | "alto" | "tenor") => {
     if (!score) return;
@@ -902,25 +914,58 @@ function TactileSandboxPageInner({
     applyScore(next);
   }, [score, cursor, selection, applyScore]);
 
-  const annotateSelection = React.useCallback((label: string) => {
-    if (!score || selection.length === 0) {
-      window.alert(`${label} requires selected notes.`);
-      return;
-    }
-    const text = window.prompt(`${label}: enter text`);
-    if (!text) return;
-    const ids = new Set(selection.map((s) => s.noteId));
-    const next = cloneScore(score);
-    for (const part of next.parts) {
-      for (const measure of part.measures) {
-        for (const note of measure.notes) {
-          if (!ids.has(note.id)) continue;
-          note.dynamics = text;
-        }
+  const selectedNoteIdSet = React.useMemo(
+    () => new Set(selection.map((s) => s.noteId)),
+    [selection],
+  );
+
+  const palettePressedCtx = React.useMemo(
+    () => ({
+      score,
+      selectedNoteIds: selectedNoteIdSet,
+      activeTool,
+      dottedInputMode: activeTool === "duration-dotted",
+    }),
+    [score, selectedNoteIdSet, activeTool],
+  );
+
+  const isPaletteButtonPressed = React.useCallback(
+    (item: PaletteItem) => isPaletteItemPressed(item, palettePressedCtx),
+    [palettePressedCtx],
+  );
+
+  const resolvePaletteOpContext = React.useCallback((dropNoteId?: string) => {
+    if (!score) return null;
+    riffSessionRef.current?.flushToZustand?.();
+    const live = useScoreStore.getState().score ?? score;
+    const noteIds = dropNoteId
+      ? new Set([dropNoteId])
+      : new Set(riffSessionRef.current?.getPitchGroupNoteIds() ?? selectedNoteIdSet);
+    const measureIndex = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
+    return { score: live, noteIds, measureIndex };
+  }, [score, selectedNoteIdSet, cursor, selection]);
+
+  const handlePalettePromptSubmit = React.useCallback(
+    (kind: PalettePromptKind, value: string) => {
+      const liveCtx = resolvePaletteOpContext();
+      if (!liveCtx && !palettePrompt) {
+        setPalettePrompt(null);
+        return;
       }
-    }
-    applyScore(next);
-  }, [score, selection, applyScore]);
+      const snapIds = palettePrompt?.noteIds;
+      const ctx = {
+        score: liveCtx?.score ?? score!,
+        noteIds: new Set(
+          snapIds && snapIds.length > 0 ? snapIds : (liveCtx?.noteIds ?? []),
+        ),
+        measureIndex: palettePrompt?.measureIndex ?? liveCtx?.measureIndex ?? 0,
+      };
+      const next = applyPalettePromptResult(kind, value, ctx);
+      if (next) applyScore(next);
+      setPalettePrompt(null);
+    },
+    [resolvePaletteOpContext, applyScore, palettePrompt, score],
+  );
 
   const resolveInsertionTarget = React.useCallback(() => {
     if (!score) return null;
@@ -974,7 +1019,17 @@ function TactileSandboxPageInner({
   }, [cursor, score, selection]);
 
   const handleToolSelect = React.useCallback(
-    (toolId: string) => {
+    (toolId: string, options?: { dropNoteId?: string }) => {
+      const paletteItem = findPaletteItem(toolId);
+      if (
+        paletteItem?.requiresSelection &&
+        selection.length === 0 &&
+        !options?.dropNoteId
+      ) {
+        showInspectorToast("Select a note first.");
+        return;
+      }
+
       const editHandlers: Record<string, () => void> = {
         "edit-undo": () => riffSessionRef.current?.editorUndo(),
         "edit-redo": () => riffSessionRef.current?.editorRedo(),
@@ -1076,14 +1131,17 @@ function TactileSandboxPageInner({
         const noteIds =
           riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
         applyScore(toggleNoteRests(live, noteIds));
-      } else if (toolId === "duration-dotted" && selection.length > 0) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        const next = toggleNoteDots(live, noteIds);
-        applyScore(next);
+      } else if (toolId === "duration-dotted") {
+        if (selection.length > 0) {
+          riffSessionRef.current?.flushToZustand?.();
+          const live = useScoreStore.getState().score;
+          if (!live) return;
+          const noteIds =
+            riffSessionRef.current?.getPitchGroupNoteIds() ?? selectedNoteIdSet;
+          applyScore(toggleNoteDots(live, noteIds));
+        } else {
+          setActiveTool(activeTool === "duration-dotted" ? "duration-quarter" : "duration-dotted");
+        }
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
       } else if (pitchHandlers[toolId] !== undefined) {
@@ -1098,55 +1156,20 @@ function TactileSandboxPageInner({
         applyAccidentalToSelection("b");
       } else if (toolId === "pitch-accidental-natural") {
         applyAccidentalToSelection("natural");
-      } else if (
-        ["artic-slur", "artic-staccato", "artic-tenuto", "artic-accent", "artic-strong-accent", "artic-staccatissimo"].includes(toolId) &&
-        score &&
-        selection.length > 0
-      ) {
-        const articMap: Record<string, string> = {
-          "artic-slur": "slur",
-          "artic-staccato": "a.",
-          "artic-tenuto": "a-",
-          "artic-accent": "a>",
-          "artic-strong-accent": "a^",
-          "artic-staccatissimo": "staccatissimo",
-        };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        const next = addArticulation(score, noteIds, articMap[toolId] ?? "a.");
-        applyScore(next);
-      } else if (toolId === "dynamics-expression-text") {
-        annotateSelection("Expression text");
-      } else if (
-        ["dynamics-piano", "dynamics-forte", "dynamics-cresc", "dynamics-decresc"].includes(toolId) &&
-        selection.length > 0
-      ) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const dynMap: Record<string, string> = {
-          "dynamics-piano": "p",
-          "dynamics-forte": "f",
-          "dynamics-cresc": "crescendo",
-          "dynamics-decresc": "decrescendo",
-        };
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        const next = setNoteDynamics(live, noteIds, dynMap[toolId] ?? "p");
-        applyScore(next);
+      } else if (toolId === "pitch-accidental-dsharp" && score && selection.length > 0) {
+        applyAccidentalToSelection("##");
+      } else if (toolId === "pitch-accidental-dflat" && score && selection.length > 0) {
+        applyAccidentalToSelection("bb");
       } else if (toolId === "measure-insert-before" && score) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
         applyScore(insertMeasureBefore(score, mIdx));
       } else if (toolId === "measure-insert-after" && score) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        applyScore(insertMeasureAfter(score, mIdx + 1));
+        applyScore(insertMeasureAfter(score, mIdx));
       } else if (toolId === "measure-delete" && score && (selection.length > 0 || cursor)) {
         const mIdx = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
         applyScore(deleteMeasure(score, mIdx));
         clearSelection();
-      } else if (toolId === "measure-change-time") {
-        setMeasureTimeSignature();
-      } else if (toolId === "measure-change-key") {
-        setMeasureKeySignature();
       } else if (toolId === "measure-clef-treble") {
         setSelectedPartClef("treble");
       } else if (toolId === "measure-clef-bass") {
@@ -1155,180 +1178,6 @@ function TactileSandboxPageInner({
         setSelectedPartClef("alto");
       } else if (toolId === "measure-clef-tenor") {
         setSelectedPartClef("tenor");
-      } else if (toolId.startsWith("measure-change-key-") && score) {
-        const raw = toolId.slice("measure-change-key-".length);
-        const fifths = Number.parseInt(raw, 10);
-        if (Number.isFinite(fifths) && fifths >= -7 && fifths <= 7) {
-          const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-          const next = cloneScore(score);
-          for (const part of next.parts) {
-            const measure = part.measures[target];
-            if (measure) measure.keySignature = fifths;
-          }
-          applyScore(next);
-        }
-      } else if (toolId.startsWith("measure-change-time-") && score) {
-        const raw = toolId.slice("measure-change-time-".length);
-        const match = raw.match(/^(\d+)-(\d+)$/);
-        if (match) {
-          const ts = `${match[1]}/${match[2]}`;
-          const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-          const next = cloneScore(score);
-          for (const part of next.parts) {
-            const measure = part.measures[target];
-            if (measure) measure.timeSignature = ts;
-          }
-          applyScore(next);
-        }
-      } else if (toolId.startsWith("measure-barline-") && score) {
-        const style = toolId.slice("measure-barline-".length) as Parameters<typeof setMeasureBarline>[2];
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        applyScore(setMeasureBarline(score, target, style));
-      } else if (toolId.startsWith("measure-repeat-") && score) {
-        const kind = toolId.slice("measure-repeat-".length);
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        if (kind === "clear") {
-          applyScore(setMeasureRepeatMark(score, target, null));
-        } else if (["segno", "coda", "dc", "ds", "fine"].includes(kind)) {
-          applyScore(
-            setMeasureRepeatMark(
-              score,
-              target,
-              kind as "segno" | "coda" | "dc" | "ds" | "fine",
-            ),
-          );
-        }
-      } else if (toolId === "measure-rehearsal-mark" && score) {
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        const text = window.prompt("Rehearsal mark:", "A");
-        if (text !== null) {
-          const next = cloneScore(score);
-          for (const part of next.parts) {
-            const measure = part.measures[target];
-            if (measure) {
-              if (text.trim() === "") delete measure.rehearsalMark;
-              else measure.rehearsalMark = text.trim();
-            }
-          }
-          applyScore(next);
-        }
-      } else if (toolId.startsWith("tempo-preset-") && score) {
-        const kind = toolId.slice("tempo-preset-".length);
-        const presets: Record<string, { text: string; bpm: number }> = {
-          largo: { text: "Largo", bpm: 40 },
-          adagio: { text: "Adagio", bpm: 66 },
-          andante: { text: "Andante", bpm: 76 },
-          moderato: { text: "Moderato", bpm: 108 },
-          allegro: { text: "Allegro", bpm: 132 },
-          presto: { text: "Presto", bpm: 168 },
-        };
-        const target = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
-        if (kind === "custom") {
-          const raw = window.prompt("Tempo BPM (quarter note):", String(score.bpm ?? 120));
-          if (raw) {
-            const bpm = Number.parseFloat(raw);
-            if (Number.isFinite(bpm) && bpm > 0) {
-              applyScore(setMeasureTempoText(score, target, `♩ = ${Math.round(bpm)}`, bpm));
-            }
-          }
-        } else if (kind in presets) {
-          const { text, bpm } = presets[kind]!;
-          applyScore(setMeasureTempoText(score, target, `${text} ♩ = ${bpm}`, bpm));
-        }
-      } else if (toolId.startsWith("ornament-") && score && selection.length > 0) {
-        const ornament = toolId.slice("ornament-".length);
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(setOrnament(score, noteIds, ornament));
-      } else if (toolId.startsWith("tuplet-") && score && selection.length > 0) {
-        const rest = toolId.slice("tuplet-".length);
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        if (rest === "clear") {
-          applyScore(setTuplet(score, noteIds, null));
-        } else {
-          const n = Number.parseInt(rest, 10);
-          if (Number.isFinite(n) && n > 0) applyScore(setTuplet(score, noteIds, n));
-        }
-      } else if (
-        (toolId === "line-slur" ||
-          toolId === "line-cresc-hairpin" ||
-          toolId === "line-decresc-hairpin" ||
-          toolId === "line-8va" ||
-          toolId === "line-8vb") &&
-        score &&
-        selection.length > 0
-      ) {
-        const kindMap: Record<string, string> = {
-          "line-slur": "slur",
-          "line-cresc-hairpin": "cresc-hairpin",
-          "line-decresc-hairpin": "decresc-hairpin",
-          "line-8va": "8va",
-          "line-8vb": "8vb",
-        };
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(setLineOnSelection(score, noteIds, kindMap[toolId] ?? "slur"));
-      } else if (toolId === "pitch-accidental-dsharp" && score && selection.length > 0) {
-        applyAccidentalToSelection("#");
-        applyAccidentalToSelection("#");
-      } else if (toolId === "pitch-accidental-dflat" && score && selection.length > 0) {
-        applyAccidentalToSelection("b");
-        applyAccidentalToSelection("b");
-      } else if (
-        (toolId === "dynamics-ppp" ||
-          toolId === "dynamics-pp" ||
-          toolId === "dynamics-mp" ||
-          toolId === "dynamics-mf" ||
-          toolId === "dynamics-f" ||
-          toolId === "dynamics-ff" ||
-          toolId === "dynamics-fff" ||
-          toolId === "dynamics-sfz" ||
-          toolId === "dynamics-fp") &&
-        selection.length > 0
-      ) {
-        riffSessionRef.current?.flushToZustand?.();
-        const live = useScoreStore.getState().score;
-        if (!live) return;
-        const map: Record<string, string> = {
-          "dynamics-ppp": "ppp",
-          "dynamics-pp": "pp",
-          "dynamics-mp": "mp",
-          "dynamics-mf": "mf",
-          "dynamics-f": "f",
-          "dynamics-ff": "ff",
-          "dynamics-fff": "fff",
-          "dynamics-sfz": "sfz",
-          "dynamics-fp": "fp",
-        };
-        const noteIds =
-          riffSessionRef.current?.getPitchGroupNoteIds() ?? new Set(selection.map((s) => s.noteId));
-        applyScore(setNoteDynamics(live, noteIds, map[toolId] ?? "mp"));
-      } else if (toolId === "artic-fermata" && score && selection.length > 0) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(addArticulation(score, noteIds, "fermata"));
-      } else if (
-        (toolId === "breath-mark" || toolId === "breath-caesura") &&
-        score &&
-        selection.length > 0
-      ) {
-        const noteIds = new Set(selection.map((s) => s.noteId));
-        applyScore(
-          addArticulation(
-            score,
-            noteIds,
-            toolId === "breath-mark" ? "breath-mark" : "caesura",
-          ),
-        );
-      } else if (toolId === "text-lyrics" && score && selection.length > 0) {
-        const text = window.prompt("Lyric syllable:");
-        if (text !== null) {
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          applyScore(setNoteLyric(score, noteIds, text.trim() === "" ? null : text));
-        }
-      } else if (toolId === "text-chord-symbol" && score && selection.length > 0) {
-        const text = window.prompt("Chord symbol (e.g. Cmaj7):");
-        if (text !== null) {
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          applyScore(setNoteChordSymbol(score, noteIds, text.trim() === "" ? null : text));
-        }
       } else if (toolId === "score-copy") {
         const live = getLiveScoreAfterFlush(riffSessionRef.current, () => useScoreStore.getState().score);
         if (live) navigator.clipboard?.writeText(scoreToMusicXML(live));
@@ -1342,25 +1191,48 @@ function TactileSandboxPageInner({
         openExportModal();
       } else if (toolId === "score-parts" || toolId === "score-layers") {
         setLayersPanelOpen((o) => !o);
-      } else if (toolId === "text-lyrics") {
-        annotateSelection("Lyrics");
-      } else if (toolId === "text-performance") {
-        annotateSelection("Performance text");
-      } else if (toolId === "text-expression") {
-        annotateSelection("Expression text");
-      } else if (toolId === "text-chord-symbol") {
-        annotateSelection("Chord symbol");
       } else {
-        if (
-          toolId.startsWith("duration-") ||
-          toolId.startsWith("pitch-") ||
-          toolId.startsWith("edit-")
-        ) {
+        const measureIndex = cursor?.measureIndex ?? selection[0]?.measureIndex ?? 0;
+        const peekIds = options?.dropNoteId
+          ? new Set([options.dropNoteId])
+          : selectedNoteIdSet;
+        if (score) {
+          const peek = applyPaletteScoreOp(toolId, {
+            score,
+            noteIds: peekIds,
+            measureIndex,
+          });
+          if (peek?.kind === "prompt") {
+            const defaults =
+              peek.promptKind === "tempo"
+                ? { tempo: String(score.bpm ?? 120) }
+                : peek.promptKind === "time"
+                  ? { time: "4/4" }
+                  : peek.promptKind === "key"
+                    ? { key: "0" }
+                    : undefined;
+            // Open the modal before any RS flush — flush/loadScore was closing HfModal.
+            setPalettePrompt(
+              palettePromptState(peek.promptKind, defaults, {
+                noteIds: peekIds,
+                measureIndex,
+              }),
+            );
+            return;
+          }
+        }
+        const opCtx = resolvePaletteOpContext(options?.dropNoteId);
+        if (opCtx) {
+          const opResult = applyPaletteScoreOp(toolId, opCtx);
+          if (opResult?.kind === "score") {
+            applyScore(opResult.score);
+            return;
+          }
         }
         setActiveTool(toolId);
       }
     },
-    [score, selection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, annotateSelection, setMeasureTimeSignature, setMeasureKeySignature, setSelectedPartClef, printScoreOnly, downloadLiveXml]
+    [score, selection, clearSelection, applyScore, setActiveTool, openExportModal, setLayersPanelOpen, cursor, resolveInsertionTarget, activeTool, toggleTieOnSelection, applyAccidentalToSelection, selectedNoteIdSet, resolvePaletteOpContext, printScoreOnly, downloadLiveXml, showInspectorToast, setSelectedPartClef]
   );
 
   const handleToolbarAction = React.useCallback(
@@ -1627,7 +1499,10 @@ function TactileSandboxPageInner({
       clearSelection,
       setSelection,
       setActiveTool,
-      setIsPaletteOpen,
+      setIsPaletteOpen: (next: boolean | ((open: boolean) => boolean)) => {
+        setPaletteDrawerMotion("instant");
+        setIsPaletteOpen(next);
+      },
       handleToolSelect,
       applyScore,
       resolveInsertionTarget,
@@ -1683,8 +1558,7 @@ function TactileSandboxPageInner({
       riffSessionRef.current?.flushToZustand();
       const live = useScoreStore.getState().score;
       if (!live || live.parts.length <= 1) {
-        setNoteExplainToast("Add harmony parts first, or generate from Document.");
-        window.setTimeout(() => setNoteExplainToast(null), 4000);
+        showInspectorToast("Add harmony parts first, or generate from Document.");
         return;
       }
       const start = Math.min(startMeasure, endMeasure);
@@ -1712,23 +1586,20 @@ function TactileSandboxPageInner({
         });
         if (!res.ok) {
           const err = (await res.json().catch(() => ({}))) as { error?: string };
-          setNoteExplainToast(
+          showInspectorToast(
             typeof err.error === "string" ? err.error : `Harmony regenerate failed (${res.status})`,
           );
-          window.setTimeout(() => setNoteExplainToast(null), 5000);
           return;
         }
         const outXml = await res.text();
         const addon = parseMusicXML(outXml);
         if (!addon) {
-          setNoteExplainToast("Could not parse generated harmony slice.");
-          window.setTimeout(() => setNoteExplainToast(null), 4000);
+          showInspectorToast("Could not parse generated harmony slice.");
           return;
         }
         const merged = spliceHarmonyMeasuresFromAddonScore(live, addon, start);
         if (!merged.ok) {
-          setNoteExplainToast(merged.reason);
-          window.setTimeout(() => setNoteExplainToast(null), 6000);
+          showInspectorToast(merged.reason);
           return;
         }
         applyScore(merged.score);
@@ -1749,10 +1620,9 @@ function TactileSandboxPageInner({
           }
         }
         if (merged.partialMerge && merged.skippedHarmonyPartNames?.length) {
-          setNoteExplainToast(
+          showInspectorToast(
             `Harmony updated for bars ${start + 1}–${end + 1}; unchanged staves: ${merged.skippedHarmonyPartNames.join(", ")}`,
           );
-          window.setTimeout(() => setNoteExplainToast(null), 6000);
         }
         queueMicrotask(() => {
           const s = useScoreStore.getState().score;
@@ -1768,11 +1638,10 @@ function TactileSandboxPageInner({
           });
         });
       } catch {
-        setNoteExplainToast("Harmony regenerate request failed.");
-        window.setTimeout(() => setNoteExplainToast(null), 4000);
+        showInspectorToast("Harmony regenerate request failed.");
       }
     },
-    [applyScore, clearSelection, setInspectorScoreFocus],
+    [applyScore, clearSelection, setInspectorScoreFocus, showInspectorToast],
   );
 
   const handleInspectorSelectPart = React.useCallback(
@@ -1822,11 +1691,10 @@ function TactileSandboxPageInner({
       lastExplainedRef.current = { noteId: sel.noteId, at: now };
       void explainGeneratedNote(score, sel.noteId, sel.partId).then((ok) => {
         if (ok) return;
-        setNoteExplainToast("Couldn’t open a note explanation for this click.");
-        window.setTimeout(() => setNoteExplainToast(null), 4000);
+        showInspectorToast("Couldn’t open a note explanation for this click.");
       });
     },
-    [isInspectorOpen, score, explainGeneratedNote],
+    [isInspectorOpen, score, explainGeneratedNote, showInspectorToast],
   );
 
   const handleEditorSelectionChange = React.useCallback(
@@ -1904,19 +1772,6 @@ function TactileSandboxPageInner({
         showChordSymbolsToggle={Boolean(score && shouldShowChordNotation(score))}
       />
       <AudioUnlockBanner />
-      {noteExplainToast && (
-        <div
-          className="hf-toast-animate hf-print-hide fixed bottom-4 left-1/2 -translate-x-1/2 z-[180] px-4 py-2.5 rounded-xl font-mono text-xs max-w-md text-center shadow-[0_8px_30px_rgba(45,24,23,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.35)] border backdrop-blur-sm"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--hf-panel-bg) 92%, transparent)",
-            color: "var(--hf-text-primary)",
-            borderColor: "color-mix(in srgb, var(--hf-detail) 55%, transparent)",
-          }}
-          role="status"
-        >
-          {noteExplainToast}
-        </div>
-      )}
 
       {!reviewerStudyArm && score && score.parts.length > 1 && showExpressiveSovereigntyCallout && (
         <div
@@ -1994,9 +1849,10 @@ function TactileSandboxPageInner({
               }
               onRiffScoreSessionReady={handleRiffScoreSessionReady}
               noteInputPitchLabelEnabled={isNoteInputMode || isRepitchMode}
-              onPaletteSymbolDrop={(toolId) => {
-                handleToolSelect(toolId);
+              onPaletteSymbolDrop={(toolId, dropNoteId) => {
+                handleToolSelect(toolId, { dropNoteId });
               }}
+              paletteIsItemPressed={isPaletteButtonPressed}
               onToolbarAction={handleToolbarAction}
               onToolbarPrint={printScoreOnly}
               onRestInputCommit={handleRestInputCommit}
@@ -2050,55 +1906,145 @@ function TactileSandboxPageInner({
                   !sandboxIntroOpen && (
                     <TheoryInspectorFabHint onDismiss={dismissInspectorFabHintCallout} />
                   )}
-                <ChatFAB onClick={() => setIsInspectorOpen(true)} />
+                <ChatFAB onClick={openInspectorFromClick} />
               </div>
-            )}
-            {/* Palette panel toggle — shown when the panel is hidden (edit mode only) */}
-            {!isPaletteOpen && notationMode === "edit" && (
-              <button
-                type="button"
-                onClick={() => setIsPaletteOpen(true)}
-                title="Show notation panel (F9)"
-                aria-label="Show notation panel (beta)"
-                className="hf-print-hide hf-pressable absolute top-[72px] right-[16px] z-[70] flex items-center gap-1.5 h-[32px] px-3 rounded-[6px] border border-[var(--hf-detail)] bg-[var(--hf-panel-bg)] shadow-sm hover:shadow-md hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,var(--hf-panel-bg))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-canvas-bg)]"
-              >
-                <PaletteIcon className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
-                <span className="font-mono text-[11px]" style={{ color: "var(--hf-text-primary)" }}>
-                  Notation (beta)
-                </span>
-              </button>
             )}
           </div>
         </div>
 
-        {/* Middle column: Palette panel */}
-        {isPaletteOpen && notationMode === "edit" && (
-          <SandboxPalettePanel
-            className="hf-print-hide"
-            hasSelection={selection.length > 0}
-            onActivate={(toolId) => handleToolSelect(toolId)}
-            onClose={() => setIsPaletteOpen(false)}
-          />
+        {/* Middle column: Palette panel or collapsed rail */}
+        {notationMode === "edit" &&
+          (isPaletteOpen ? (
+            <div
+              className="hf-drawer-panel hf-print-hide shrink-0 h-full"
+              data-open="true"
+              data-motion={paletteDrawerMotion}
+              data-side="left"
+            >
+              <SandboxPalettePanel
+                className="h-full"
+                hasSelection={selection.length > 0}
+                isItemPressed={isPaletteButtonPressed}
+                onActivate={(toolId) => handleToolSelect(toolId)}
+                onClose={() => {
+                  setPaletteDrawerMotion("drawer");
+                  setIsPaletteOpen(false);
+                }}
+              />
+            </div>
+          ) : (
+            <HfPanelRail
+              side="left"
+              icon={<PaletteIcon className="w-3.5 h-3.5" style={{ color: "var(--hf-text-primary)" }} />}
+              ariaLabel="Show notation panel (beta)"
+              title="Show notation panel (F9)"
+              onExpand={() => {
+                setPaletteDrawerMotion("drawer");
+                setIsPaletteOpen(true);
+              }}
+            />
+          ))}
+
+        {/* Theory Inspector — sidebar panel, collapsed rail, or floating card */}
+        {inspectorDockMode === "sidebar" && isInspectorOpen && (
+            <div
+              className="hf-drawer-panel hf-print-hide hf-inspector-enter-sidebar relative shrink-0 h-full overflow-hidden flex"
+              data-open="true"
+              data-motion={inspectorDrawerMotion}
+              data-side="right"
+              data-coachmark="step-4"
+              style={{ width: inspectorWidth }}
+            >
+              <div
+                className="absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-10 group"
+                onMouseDown={handleResizeStart}
+                title="Drag to resize"
+              >
+                <div
+                  className="absolute left-[2px] top-[50%] -translate-y-[50%] w-[1px] h-[40px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: "var(--hf-accent)" }}
+                />
+              </div>
+              <TheoryInspectorPanel
+                className="h-full flex-1"
+                inspectorDockMode={inspectorDockMode}
+                onInspectorDockModeChange={setInspectorDockModePersisted}
+                messages={inspectorMessages}
+                inputValue={inspectorInputValue}
+                onInputChange={setInspectorInputValue}
+                onSend={() => {
+                  void sendInspectorMessage(inspectorInputValue);
+                }}
+                onChipClick={(chip) => handleInspectorChipClick(chip, score)}
+                isStreaming={isStreaming}
+                streamingMessageId={inspectorStreamingMessageId}
+                noteInsight={selectedNoteInsight}
+                inspectorScoreFocus={inspectorScoreFocus}
+                onClose={closeInspectorFromClick}
+                suggestionBatches={suggestionBatchMap}
+                correctionStatuses={suggestionStore.correctionStatuses}
+                onAcceptCorrection={handleAcceptCorrection}
+                onRejectCorrection={handleRejectCorrection}
+                onAcceptAllCorrections={handleAcceptAll}
+                onRejectAllCorrections={handleRejectAll}
+                onExplainMore={(msgId) => explainViolationMore(msgId)}
+                onSuggestFix={
+                  score ? (msgId) => suggestFixForViolation(score, msgId) : undefined
+                }
+                onAcceptIdeaAction={handleAcceptIdeaAction}
+                onRejectIdeaAction={handleRejectIdeaAction}
+                onStarterPromptClick={(prompt) => {
+                  if (prompt === CHAT_STYLIST_SEED_PROMPT) {
+                    void requestRegionSuggestion();
+                    return;
+                  }
+                  void sendInspectorMessage(prompt);
+                }}
+                onEditFocusedRegion={
+                  score
+                    ? (payload) => {
+                        if (payload.scope === "measure") {
+                          const { startMeasure, endMeasure } =
+                            measureRangeForLocalizedHarmonyRegenerate(
+                              useToolStore.getState().selection,
+                              payload.measureIndex,
+                            );
+                          void handleRegenerateHarmonyForRange(startMeasure, endMeasure);
+                        }
+                        void requestRegionSuggestion(score);
+                      }
+                    : undefined
+                }
+                onApplyIntent={handleApplyIntent}
+                onDismissIntent={handleDismissIntent}
+                editorSelection={selection}
+              />
+            </div>
         )}
 
-        {/* Theory Inspector — sidebar (resizable) or floating card */}
-        {isInspectorOpen && (
+        {!isInspectorOpen && (
+            <HfPanelRail
+              side="right"
+              icon={<MessageCircle className="w-3.5 h-3.5" style={{ color: "var(--hf-accent)" }} />}
+              ariaLabel="Open Theory Inspector"
+              title="Open Theory Inspector"
+              onExpand={openInspectorFromClick}
+            />
+        )}
+
+        {inspectorDockMode === "floating" && isInspectorOpen && (
           <div
-            ref={inspectorDockMode === "floating" ? inspectorFloatWrapRef : undefined}
+            ref={inspectorFloatWrapRef}
             data-coachmark="step-4"
-            className={
-              inspectorDockMode === "floating"
-                ? `hf-print-hide hf-inspector-enter-float fixed z-[100] flex flex-col rounded-[6px] overflow-visible shadow-2xl border${
-                    inspectorFloatPos == null ? " bottom-5 right-5" : ""
-                  }`
-                : "hf-print-hide hf-inspector-enter-sidebar relative shrink-0 h-full overflow-hidden flex"
-            }
+            className={`hf-print-hide hf-inspector-enter-float fixed z-[100] flex flex-col rounded-[6px] overflow-visible shadow-2xl border${
+              inspectorFloatPos == null ? " bottom-5 right-5" : ""
+            }`}
             style={{
-              width: inspectorDockMode === "floating" ? inspectorFloatSize.width : inspectorWidth,
-              height: inspectorDockMode === "floating" ? inspectorFloatSize.height : undefined,
+              width: inspectorFloatSize.width,
+              height: inspectorFloatSize.height,
               borderColor: "var(--hf-detail)",
               backgroundColor: "var(--hf-panel-bg)",
-              ...(inspectorDockMode === "floating" && inspectorFloatPos != null
+              ...(inspectorFloatPos != null
                 ? {
                     left: inspectorFloatPos.left,
                     top: inspectorFloatPos.top,
@@ -2108,8 +2054,6 @@ function TactileSandboxPageInner({
                 : {}),
             }}
           >
-            {inspectorDockMode === "floating" && (
-              <>
                 <div
                   className="absolute -top-1.5 left-4 right-4 h-3 z-[110] cursor-ns-resize touch-none rounded-sm hover:bg-[color-mix(in_srgb,var(--hf-accent)_18%,transparent)]"
                   onPointerDown={handleInspectorFloatResizePointerDown("n")}
@@ -2162,56 +2106,29 @@ function TactileSandboxPageInner({
                   title="Resize"
                   aria-hidden
                 />
-              </>
-            )}
-            {inspectorDockMode === "sidebar" && (
-              <div
-                className="absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-10 group"
-                onMouseDown={handleResizeStart}
-                title="Drag to resize"
-              >
-                <div
-                  className="absolute left-[2px] top-[50%] -translate-y-[50%] w-[1px] h-[40px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ backgroundColor: "var(--hf-accent)" }}
-                />
-              </div>
-            )}
-
-            <div
-              className={
-                inspectorDockMode === "floating"
-                  ? "flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden rounded-[6px] h-full"
-                  : "contents"
-              }
-            >
+            <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden rounded-[6px] h-full">
               <TheoryInspectorPanel
-                className={
-                  inspectorDockMode === "floating" ? "h-full min-h-0 flex-1" : "h-full flex-1"
-                }
+                className="h-full min-h-0 flex-1"
                 inspectorDockMode={inspectorDockMode}
                 onInspectorDockModeChange={setInspectorDockModePersisted}
-                floatingHeaderDrag={
-                  inspectorDockMode === "floating"
-                    ? {
-                        onPointerDown: handleInspectorFloatHeaderPointerDown,
-                        className: "cursor-grab active:cursor-grabbing select-none",
-                        title:
-                          "Drag header to move. Drag edges or corners to resize. Dock, Float, and Close still click normally.",
-                      }
-                    : undefined
-                }
-              messages={inspectorMessages}
-              inputValue={inspectorInputValue}
-              onInputChange={setInspectorInputValue}
-              onSend={() => {
-                void sendInspectorMessage(inspectorInputValue);
-              }}
-              onChipClick={(chip) => handleInspectorChipClick(chip, score)}
-              isStreaming={isStreaming}
-              streamingMessageId={inspectorStreamingMessageId}
-              noteInsight={selectedNoteInsight}
-              inspectorScoreFocus={inspectorScoreFocus}
-              onClose={() => setIsInspectorOpen(false)}
+                floatingHeaderDrag={{
+                  onPointerDown: handleInspectorFloatHeaderPointerDown,
+                  className: "cursor-grab active:cursor-grabbing select-none",
+                  title:
+                    "Drag header to move. Drag edges or corners to resize. Dock, Float, and Close still click normally.",
+                }}
+                messages={inspectorMessages}
+                inputValue={inspectorInputValue}
+                onInputChange={setInspectorInputValue}
+                onSend={() => {
+                  void sendInspectorMessage(inspectorInputValue);
+                }}
+                onChipClick={(chip) => handleInspectorChipClick(chip, score)}
+                isStreaming={isStreaming}
+                streamingMessageId={inspectorStreamingMessageId}
+                noteInsight={selectedNoteInsight}
+                inspectorScoreFocus={inspectorScoreFocus}
+                onClose={closeInspectorFromClick}
               suggestionBatches={suggestionBatchMap}
               correctionStatuses={suggestionStore.correctionStatuses}
               onAcceptCorrection={handleAcceptCorrection}
@@ -2298,6 +2215,12 @@ function TactileSandboxPageInner({
           const xml = useUploadStore.getState().workspaceBaselineXml;
           if (xml) hydrateSandboxFromMusicXml(xml);
         }}
+      />
+
+      <PalettePromptModal
+        state={palettePrompt}
+        onSubmit={handlePalettePromptSubmit}
+        onClose={() => setPalettePrompt(null)}
       />
 
       {/* Modals */}

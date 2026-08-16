@@ -30,3 +30,45 @@ export function tightNoteHighlightRect(
     height: outH,
   };
 }
+
+/** Notehead-centered box (no pad) for glyphs that must sit on the head, not the stem. */
+export function noteheadAnchor(pos: NotePosition): {
+  cx: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+} {
+  const r = tightNoteHighlightRect(pos, 0, 0);
+  return {
+    cx: r.left + r.width / 2,
+    top: r.top,
+    bottom: r.top + r.height,
+    width: r.width,
+    height: r.height,
+  };
+}
+
+/** Just above the staff, or above a note that already sits above the top line. */
+export function notationAboveStaffY(
+  staffTop: number | null | undefined,
+  headTop: number,
+  gap = 10,
+): number {
+  const ceiling =
+    staffTop != null && Number.isFinite(staffTop) ? Math.min(staffTop, headTop) : headTop;
+  return ceiling - gap;
+}
+
+/** Just below the staff, or below a note that already sits under the bottom line. */
+export function notationBelowStaffY(
+  staffBottom: number | null | undefined,
+  headBottom: number,
+  gap = 10,
+): number {
+  const floor =
+    staffBottom != null && Number.isFinite(staffBottom)
+      ? Math.max(staffBottom, headBottom)
+      : headBottom;
+  return floor + gap;
+}

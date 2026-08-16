@@ -18,6 +18,8 @@ import { mapRiffSelectedNotesToHFSelections } from "@/lib/music/riffscorePositio
 import { useToolStore } from "@/store/useToolStore";
 
 interface UseRiffScoreSyncReturn {
+  /** True while `loadScore` is in flight (and for one animation frame after). */
+  isPushingToEditor: () => boolean;
   /** Push current Zustand score to RiffScore. Call after load or Zustand-driven mutations. */
   pushToRiffScore: () => void;
   /** Pull editor state into Zustand via `replaceScoreFromEditor` (no HF history growth). */
@@ -50,9 +52,10 @@ export function useRiffScoreSync(
   apiRef: React.RefObject<MusicEditorAPI | null>,
   score: EditableScore | null,
   getPitchGroupNoteIds?: () => Set<string>,
-  options?: { showChordTrack?: boolean },
+  options?: { showChordTrack?: boolean; persistToStore?: boolean },
 ): UseRiffScoreSyncReturn {
   const showChordTrack = options?.showChordTrack !== false;
+  const persistToStore = options?.persistToStore !== false;
   const isPushingRef = useRef(false);
   const hfToRsRef = useRef<IdMap>(new Map());
   const rsToHfRef = useRef<IdMap>(new Map());
@@ -127,7 +130,7 @@ export function useRiffScoreSync(
     if (!api || isPushingRef.current) return;
 
     const rsScore: RsScore = api.getScore();
-    const currentScore = useScoreStore.getState().score;
+    const currentScore = persistToStore ? (useScoreStore.getState().score ?? score) : score;
     const hfMerged = riffScoreToEditableScore(
       rsScore,
       rsToHfRef.current,
@@ -137,12 +140,14 @@ export function useRiffScoreSync(
     const selectedIds = resolvePropagationNoteIds(api, currentScore);
     const hfScore = propagateMultiSelectPitchDelta(currentScore, hfMerged, selectedIds);
 
-    useScoreStore.getState().replaceScoreFromEditor(hfScore);
+    if (persistToStore) {
+      useScoreStore.getState().replaceScoreFromEditor(hfScore);
+    }
 
     const maps = buildIdMap(hfScore, rsScore);
     hfToRsRef.current = maps.hfToRs;
     rsToHfRef.current = maps.rsToHf;
-  }, [apiRef, resolvePropagationNoteIds]);
+  }, [apiRef, persistToStore, resolvePropagationNoteIds, score]);
 
   const syncMultiPitchFromBaseline = useCallback(
     (baseline: EditableScore, groupIds: Set<string>) => {
@@ -167,16 +172,21 @@ export function useRiffScoreSync(
       if (fp === curFp) return;
 
       lastMultiPitchFpRef.current = fp;
-      useScoreStore.getState().replaceScoreFromEditor(hfScore);
+      if (persistToStore) {
+        useScoreStore.getState().replaceScoreFromEditor(hfScore);
+      }
 
       const maps = buildIdMap(hfScore, rsScore);
       hfToRsRef.current = maps.hfToRs;
       rsToHfRef.current = maps.rsToHf;
     },
-    [apiRef],
+    [apiRef, persistToStore],
   );
 
+  const isPushingToEditor = useCallback(() => isPushingRef.current, []);
+
   return {
+    isPushingToEditor,
     pushToRiffScore,
     pullFromRiffScore,
     flushToZustand: pullFromRiffScore,

@@ -16,6 +16,9 @@ draggable note tokens, Red Line violation overlays, and playback controls.
 - Note drag snapping: discrete, `0ms` transition — no interpolation on note movement.
 - Red Line SVG overlays: `0ms` appear/disappear — no opacity fade.
 - Playhead cursor: linear `transform: translateX()` only, driven by Tone.js transport time.
+- **Palette / Theory Inspector:** Docked columns when open (parallel work, no scrim). Close collapses to a ~40px rail — do not unmount to zero width. **F9 / inspector hotkey:** instant rail↔dock. **Click rail or ChatFAB:** 200ms drawer motion (`--hf-ease-drawer`), origin at trigger; reduced motion = opacity only.
+- **Floating inspector:** Critically damped spring on drag release (`bounce: 0`), 1:1 pointer tracking, rubber-band at edges — the only spring surface on this page.
+- **Violation paint when inspector opens:** Instant (inherits Red Line 0ms rule); no stagger or fade on issue highlights.
 
 ## Iconography Override
 - Playback controls (play, pause, stop, rewind): Phosphor `fill` variant permitted for
@@ -31,3 +34,5 @@ draggable note tokens, Red Line violation overlays, and playback controls.
 ## Implementation note (RiffScore-first, 2026-04)
 
 The live **`/sandbox`** surface is **RiffScore**-centric (`EditableScore` in Zustand), not the legacy VexFlow layout described above for historical tokens. **Rest → note** affordances include keyboard **A–G** and a **hover ghost** (pitch from pointer Y on the staff; commit preserves the rest’s duration) — see **[progress.md — Sandbox score UX](../progress.md#wl-sandbox-score-ux-2026-04-22)**.
+
+**Palette notation overlay (2026-08-15):** Articulations, ornaments, dynamics, and measure words (tempo / D.S. / coda) are drawn in [`RiffScoreEditor`](../../frontend/src/components/score/RiffScoreEditor.tsx) **above the top staff line**, X-aligned to the notehead (`noteheadAnchor` + `staffLineYsFiveInContainer`). Glyphs use bundled **Noto Music** Unicode (TR U+1D196, turn U+1D197) — not SMuFL PUA. See **[progress.md — overlay placement](../progress.md#wl-notation-overlay-placement-2026-08-15)**.

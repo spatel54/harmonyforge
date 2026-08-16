@@ -2,7 +2,7 @@
  * Vertical sonority chord detection (melody + harmony, ≥2 staves).
  */
 
-import { buildChordTrackFromScore, finalizeChordTrack } from "./chordSymbolDetect";
+import { buildChordTrackFromScore } from "./chordSymbolDetect";
 import type { ChordSymbolEntry, EditableScore } from "./scoreTypes";
 import { shouldShowChordNotation } from "./riffscoreAdapter";
 

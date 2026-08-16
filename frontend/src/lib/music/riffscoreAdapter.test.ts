@@ -234,4 +234,132 @@ describe("riffscoreAdapter", () => {
     expect(rsToHf.get(eventId)).toBe("rest-a");
     expect(rsToHf.get("rs-rest-a")).toBe("rest-a");
   });
+
+  it("does not emit a hanging RiffScore tie without a same-pitch partner", () => {
+    const hanging: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              notes: [
+                { id: "n1", pitch: "C4", duration: "h", tie: "start" },
+                { id: "n2", pitch: "E4", duration: "h" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(hanging);
+    expect(rs.staves[0]!.measures[0]!.events[0]!.notes[0]!.tied).toBe(false);
+  });
+
+  it("emits a RiffScore tie when the next sounding note is the same pitch", () => {
+    const paired: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              notes: [
+                { id: "n1", pitch: "C4", duration: "h", tie: "start" },
+                { id: "n2", pitch: "C4", duration: "h", tie: "stop" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(paired);
+    expect(rs.staves[0]!.measures[0]!.events[0]!.notes[0]!.tied).toBe(true);
+    expect(rs.staves[0]!.measures[0]!.events[1]!.notes[0]!.tied).toBe(false);
+  });
+
+  it("preserves notation metadata across RS flush when previousScore is provided", () => {
+    const annotated: EditableScore = {
+      divisions: 1,
+      bpm: 96,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              barline: "light-heavy",
+              notes: [
+                {
+                  id: "n1",
+                  pitch: "C4",
+                  duration: "q",
+                  articulations: ["staccato"],
+                  words: "dolce",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(annotated);
+    const { rsToHf } = buildIdMap(annotated, rs);
+    const roundTrip = riffScoreToEditableScore(rs, rsToHf, annotated.parts, annotated);
+    const note = roundTrip.parts[0]!.measures[0]!.notes[0]!;
+    expect(note.articulations).toEqual(["staccato"]);
+    expect(note.words).toBe("dolce");
+    expect(roundTrip.parts[0]!.measures[0]!.barline).toBe("light-heavy");
+  });
+
+  it("maps HF tuplet numbers to RiffScore ratio objects (not a bare number)", () => {
+    const score: EditableScore = {
+      divisions: 4,
+      parts: [
+        {
+          id: "P1",
+          name: "Melody",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              notes: [
+                { id: "n1", pitch: "C4", duration: "8", tuplet: 3 },
+                { id: "n2", pitch: "D4", duration: "8", tuplet: 3 },
+                { id: "n3", pitch: "E4", duration: "8", tuplet: 3 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rs = editableScoreToRsScore(score);
+    const events = rs.staves[0]!.measures[0]!.events;
+    expect(events[0]!.tuplet).toEqual({
+      ratio: [3, 2],
+      groupSize: 3,
+      position: 0,
+      baseDuration: "eighth",
+      id: "tup-n1",
+    });
+    expect(events[1]!.tuplet?.position).toBe(1);
+    expect(events[2]!.tuplet?.position).toBe(2);
+    expect(typeof events[0]!.tuplet).toBe("object");
+  });
 });

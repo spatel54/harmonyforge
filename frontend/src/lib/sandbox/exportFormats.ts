@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import { Code, FileText, Headphones, Music2 } from "lucide-react";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
@@ -28,11 +27,18 @@ export function isSandboxExportFormatId(
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
+  if (typeof document === "undefined") return;
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  window.setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 200);
 }
 
 /** Partwise MusicXML + branding; harmony kept for export-preview toggles. */

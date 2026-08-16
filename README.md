@@ -1,8 +1,23 @@
+<div align="center">
+
+<img src="frontend/public/logo.svg" alt="HarmonyForge" width="112" height="112" />
+
 # HarmonyForge
 
-> Upload a melody, get rule-based harmonies you can **edit**, **hear**, and **ask questions about** — with a transparent engine, not a black-box model.
+<img src="https://readme-typing-svg.demolab.com?font=Inter&weight=500&size=18&duration=3200&pause=900&color=6B7280&center=true&vCenter=true&multiline=true&width=560&height=56&lines=Upload+a+melody.+Get+rule-based+harmonies.;Edit+%C2%B7+Hear+%C2%B7+Ask+%E2%80%94+transparent+engine." alt="tagline" />
+
+<br />
+
+[![CI](https://github.com/spatel54/harmonyforge/actions/workflows/ci.yml/badge.svg)](https://github.com/spatel54/harmonyforge/actions/workflows/ci.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vitest](https://img.shields.io/badge/Vitest-tested-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![License](https://img.shields.io/badge/license-Private-lightgrey)](#license)
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/salt-family/harmonyforge&root-directory=frontend)
+
+</div>
 
 ---
 
@@ -33,13 +48,20 @@
 └──────────────────────────┴──────────────────────────┴───────────────────┘
 ```
 
-- **Single deployable** — engine lives in Next.js route handlers. No separate API host.
-- **You stay the author** — harmonies from theory rules; the LLM **explains** and **suggests** when enabled.
-- **Inputs** — MusicXML, MIDI, MXL, PDF (preview everywhere; full OMR on self-hosted Docker — [deployment.md](docs/deployment.md)).
+| | |
+|:--|:--|
+| **Single deployable** | Engine lives in Next.js route handlers. No separate API host. |
+| **You stay the author** | Harmonies from theory rules; the LLM **explains** and **suggests** when enabled. |
+| **Inputs** | MusicXML, MIDI, MXL, PDF (preview everywhere; full OMR on self-hosted Docker — [deployment.md](docs/deployment.md)). |
 
 ---
 
 ## Your journey
+
+```mermaid
+flowchart LR
+  A["/  Upload"] --> B["/document  Configure"] --> C["/sandbox  Edit · Play · Ask"]
+```
 
 | Step | URL | What happens |
 |------|-----|----------------|

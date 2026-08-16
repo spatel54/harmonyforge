@@ -56,7 +56,7 @@ export const ScoreDropzone = React.forwardRef<
         className={cn(
           "relative flex flex-col items-center justify-center w-full max-w-[1439px]",
           "h-[648px] rounded-t-[20px] z-10",
-          "border-2 border-dashed transition-all duration-300",
+          "border-2 border-dashed transition-[border-color,background-color,transform] duration-300",
           isHovered
             ? "border-[#2d1817] bg-[#7a6b69]/5 dark:border-white"
             : "border-[#7a6b69] border-opacity-50 hover:border-opacity-100",

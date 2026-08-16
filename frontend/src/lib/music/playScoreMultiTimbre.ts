@@ -88,11 +88,12 @@ export async function playScoreMultiTimbre(
   }
 
   const part = new Tone.Part(
-    (time, ev: { pitch: string; duration: number; partName: string }) => {
+    (time, ev: { pitch: string; duration: number; partName: string; velocity?: number }) => {
       const kind = partNameToTimbreKind(ev.partName);
       const syn = synths[kind] ?? synths.other!;
       try {
-        syn.triggerAttackRelease(ev.pitch, ev.duration, time);
+        const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+        syn.triggerAttackRelease(ev.pitch, ev.duration, time, vel);
       } catch {
         /* drop bad pitch */
       }
@@ -102,6 +103,7 @@ export async function playScoreMultiTimbre(
       duration: e.duration,
       pitch: e.pitch,
       partName: e.partName,
+      velocity: e.velocity,
     })),
   );
 

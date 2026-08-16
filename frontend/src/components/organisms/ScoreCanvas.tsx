@@ -1,7 +1,7 @@
 import React from "react";
 import { Music, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
+import type { PaletteItem } from "@/lib/palettes/paletteRegistry";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import type { NoteSelection } from "@/store/useScoreStore";
 import type { ScoreCorrection } from "@/lib/music/suggestionTypes";
@@ -10,6 +10,27 @@ import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext"
 import type { MusicEditorAPI } from "riffscore";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
 import type { SandboxToolbarActionId } from "@/components/score/toolbarActionMap";
+import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
+
+class RiffScoreRenderBoundary extends React.Component<
+  { onError: (err: Error) => void; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error): void {
+    this.props.onError(error);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   staveLabels?: [string, string, string, string];
@@ -43,7 +64,8 @@ export interface ScoreCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   onEditorApiReady?: (api: MusicEditorAPI) => void;
   noteInputPitchLabelEnabled?: boolean;
   /** Dropped notation-panel symbols apply the same tool id as a palette click. */
-  onPaletteSymbolDrop?: (toolId: string) => void;
+  onPaletteSymbolDrop?: (toolId: string, dropNoteId?: string) => void;
+  paletteIsItemPressed?: (item: PaletteItem) => boolean;
   /** Commit note-input ghost over a selected rest (pitch + duration handled by parent). */
   onRestInputCommit?: (selection: NoteSelection, pitch: string) => void;
   /** Route editor toolbar actions to sandbox command bus (optional). */
@@ -80,6 +102,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
       onEditorApiReady,
       noteInputPitchLabelEnabled = false,
       onPaletteSymbolDrop,
+      paletteIsItemPressed,
       onRestInputCommit,
       onToolbarAction,
       onToolbarPrint,
@@ -439,6 +462,7 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
             key={`riff-mount-${riffRetryNonce}`}
             className="absolute inset-0 pointer-events-auto min-h-[280px]"
           >
+            <RiffScoreRenderBoundary onError={handleRiffScoreError}>
             <RiffScoreEditor
               score={score}
               className="w-full h-full"
@@ -460,12 +484,14 @@ export const ScoreCanvas = React.forwardRef<HTMLDivElement, ScoreCanvasProps>(
               noteInputPitchLabelEnabled={noteInputPitchLabelEnabled}
               showNoteNameLabels={showNoteNameLabels}
               onPaletteSymbolDrop={onPaletteSymbolDrop}
+              paletteIsItemPressed={paletteIsItemPressed}
               onRestInputCommit={onRestInputCommit}
               onToolbarAction={onToolbarAction}
               onToolbarPrint={onToolbarPrint}
               enableScoreEditing={enableScoreEditing}
               onScoreBackgroundInteract={onCanvasClick}
             />
+            </RiffScoreRenderBoundary>
           </div>
         )}
       </div>

@@ -4,61 +4,53 @@
  */
 
 import type { EditableScore, Note } from "./scoreTypes";
+import { noteBeats, parseMeasureBeats } from "./scoreUtils";
 import { ensureStrictlyIncreasingPartTimes } from "./playbackPartSchedule";
-
-/** Duration type → beats (quarter = 1) */
-const DURATION_BEATS: Record<string, number> = {
-  w: 4,
-  h: 2,
-  q: 1,
-  "8": 0.5,
-  "16": 0.25,
-  "32": 0.125,
-};
+import { realizeSoundingTimeline } from "./realizeSoundingTimeline";
 
 export interface ScheduledNote {
   startBeat: number;
   pitch: string;
   durationBeats: number;
+  velocity?: number;
 }
 
 const PITCH_RE = /^[A-G](?:#{1,2}|b{1,2})?\d+$/;
 
-export function parseBeatsPerMeasure(timeSignature?: string, fallback = 4): number {
-  if (!timeSignature) return fallback;
-  const match = timeSignature.match(/^(\d+)\s*\/\s*(\d+)$/);
-  if (!match) return fallback;
-  const numerator = Number.parseInt(match[1], 10);
-  const denominator = Number.parseInt(match[2], 10);
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
-    return fallback;
-  }
-  // quarter note = 1 beat in this app's beat model
-  return numerator * (4 / denominator);
-}
+export { parseMeasureBeats, parseMeasureBeats as parseBeatsPerMeasure };
 
 export function noteDurationInBeats(note: Note): number {
-  let durationBeats = DURATION_BEATS[note.duration] ?? 1;
-  if (note.dots) {
-    durationBeats *= 1.5;
-  }
-  return durationBeats;
+  return noteBeats(note);
 }
 
 /**
- * Extract all notes from score with timing (startBeat, durationBeats).
- * Merges all parts; notes from different parts at same beat play together.
+ * Extract sounding notes (dynamics, articulations, ornaments, repeats) for playback/export.
  */
 export function scoreToScheduledNotes(
   score: EditableScore,
-  beatsPerMeasure = 4
+  beatsPerMeasure = 4,
+): ScheduledNote[] {
+  return realizeSoundingTimeline(score, beatsPerMeasure).map((e) => ({
+    startBeat: e.startBeat,
+    pitch: e.pitch,
+    durationBeats: e.durationBeats,
+    velocity: e.velocity,
+  }));
+}
+
+/**
+ * Legacy flat scheduler (no expression) — kept for tests that need simple timing.
+ */
+export function scoreToScheduledNotesFlat(
+  score: EditableScore,
+  beatsPerMeasure = 4,
 ): ScheduledNote[] {
   const events: ScheduledNote[] = [];
 
   for (const part of score.parts) {
     let partBeatCursor = 0;
     part.measures.forEach((measure) => {
-      const measureBeats = parseBeatsPerMeasure(measure.timeSignature, beatsPerMeasure);
+      const measureBeats = parseMeasureBeats(measure.timeSignature, beatsPerMeasure);
       const measureStartBeat = partBeatCursor;
       let currentBeat = measureStartBeat;
       for (const note of measure.notes) {
@@ -82,20 +74,18 @@ export function scoreToScheduledNotes(
 
 /**
  * Convert scheduled notes to seconds for Tone.js.
- * Ensures strictly increasing times (Tone.Part requires this for chords/simultaneous notes).
- * @param events Scheduled notes in beats
- * @param bpm Tempo (beats per minute)
  */
 export function scheduledNotesToSeconds(
   events: ScheduledNote[],
-  bpm: number
-): Array<{ time: number; pitch: string; duration: number }> {
+  bpm: number,
+): Array<{ time: number; pitch: string; duration: number; velocity?: number }> {
   const secondsPerBeat = 60 / bpm;
   const raw = events
     .map((e) => ({
       time: e.startBeat * secondsPerBeat,
       pitch: e.pitch,
       duration: e.durationBeats * secondsPerBeat,
+      velocity: e.velocity,
     }))
     .sort((a, b) => a.time - b.time);
 

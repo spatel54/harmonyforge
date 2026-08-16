@@ -64,7 +64,21 @@ build_audiveris() {
   migrate_legacy_build
   clone_audiveris
 
-  if [[ -x "$AUDIVERIS_BIN" ]]; then
+  local needs_rebuild=0
+  if [[ -d "$AUDIVERIS_DIR/.git" ]]; then
+    (
+      cd "$AUDIVERIS_DIR"
+      if ! git describe --tags --exact-match "$AUDIVERIS_BRANCH" >/dev/null 2>&1; then
+        echo "Checking out Audiveris $AUDIVERIS_BRANCH..."
+        git fetch --depth 1 origin "refs/tags/$AUDIVERIS_BRANCH" 2>/dev/null || \
+          git fetch --depth 1 origin "$AUDIVERIS_BRANCH"
+        git checkout "$AUDIVERIS_BRANCH"
+        needs_rebuild=1
+      fi
+    )
+  fi
+
+  if [[ -x "$AUDIVERIS_BIN" && "$needs_rebuild" -eq 0 ]]; then
     echo "Audiveris already built."
     return 0
   fi

@@ -25,27 +25,40 @@ const GENERIC_NON_XML_HINT =
   "The app converts these files on the server (POST /api/to-preview-musicxml). If you’re local, confirm `npm run dev` is running; use plain .xml/.musicxml for the fastest path.";
 
 /** Stable anchor in-repo (for contributors); shown in Playground error panel. */
-export const INTAKE_TROUBLESHOOTING_PATH = "docs/progress.md#wl-export-audiveris-2026-06-03";
+export const INTAKE_TROUBLESHOOTING_PATH = "docs/progress.md#wl-pdf-io-2026-08-14";
+
+function isPdfRasterDepsFailure(message: string): boolean {
+  const m = message.toLowerCase();
+  if (m.includes("@napi-rs/canvas") || m.includes("skia.darwin")) return true;
+  if (m.includes("could not create 2d canvas")) return true;
+  if (m.includes("module_not_found") && m.includes("canvas")) return true;
+  if (m.includes("preview failed: 500") || m === "500") return true;
+  // pdf-raster: success lines ("rendered N page(s)") must not trigger canvas hint.
+  if (m.includes("pdf-raster:")) {
+    if (m.includes("rendered") && m.includes("page")) return false;
+    return true;
+  }
+  return false;
+}
 
 function classifyPdfError(message: string): string {
   const m = message.toLowerCase();
-  if (
-    m.includes("@napi-rs/canvas") ||
-    m.includes("skia.darwin") ||
-    m.includes("pdf-raster:") ||
-    (m.includes("module_not_found") && m.includes("canvas"))
-  ) {
+  if (isPdfRasterDepsFailure(message)) {
     return PDF_RASTER_DEPS_HINT;
   }
   if (m.includes("no musicxml") || m.includes("no readable notation") || m.includes("no .omr")) {
     return PDF_NO_OUTPUT_HINT;
+  }
+  if (m.includes("binary not found")) {
+    return PDF_AUDIVERIS_HINT;
   }
   if (
     m.includes("java") &&
     (m.includes("not installed") ||
       m.includes("required") ||
       m.includes("no java runtime") ||
-      m.includes("could not detect java"))
+      m.includes("could not detect java") ||
+      m.includes("could not run"))
   ) {
     return PDF_JAVA_HINT;
   }
@@ -54,9 +67,6 @@ function classifyPdfError(message: string): string {
   }
   if (m.includes("audiveris")) {
     return PDF_AUDIVERIS_HINT;
-  }
-  if (m.includes("preview failed: 500") || m === "500") {
-    return PDF_RASTER_DEPS_HINT;
   }
   return PDF_AUDIVERIS_HINT;
 }

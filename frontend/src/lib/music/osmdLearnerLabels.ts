@@ -267,7 +267,6 @@ function appendFromGraphicalMeasure(
 
 export function collectLetterPlacementsFromOsmd(
   osmd: OpenSheetMusicDisplay,
-  _container?: HTMLElement,
 ): OsmdLetterPlacement[] {
   const placements: OsmdLetterPlacement[] = [];
   const measureList = (osmd as OsmdWithGraphic).graphic?.MeasureList;

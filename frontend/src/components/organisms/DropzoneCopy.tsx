@@ -93,6 +93,7 @@ export const DropzoneCopy = React.forwardRef<HTMLDivElement, DropzoneCopyProps>(
           className="sr-only"
           aria-hidden="true"
           tabIndex={-1}
+          data-testid="hf-file-input"
           onChange={handleInputChange}
         />
         <div

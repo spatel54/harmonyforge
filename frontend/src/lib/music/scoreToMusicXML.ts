@@ -5,6 +5,7 @@
 import type { BarlineStyle, EditableScore, Note } from "./scoreTypes";
 import { chordSymbolToHarmonyXml } from "./chordSymbolFormat";
 import { noteBeats } from "./scoreUtils";
+import { getTupletRatio } from "./tupletUtils";
 import { riffQuantsForMeasure } from "./playbackScrub";
 
 function measureGlobalQuantStart(score: EditableScore, measureIndex: number): number {
@@ -33,10 +34,12 @@ function esc(s: string): string {
 
 /** "C4" -> step, alter, octave */
 function pitchFromStr(pitch: string): { step: string; alter: number; octave: number } {
-  const m = pitch.match(/^([A-G])(#|b)?(\d+)$/);
+  const m = pitch.match(/^([A-G])(#{1,2}|bb|b)?(\d+)$/);
   if (!m) return { step: "C", alter: 0, octave: 4 };
   const step = m[1] ?? "C";
-  const alter = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
+  const acc = m[2] ?? "";
+  const alter =
+    acc === "##" ? 2 : acc === "#" ? 1 : acc === "bb" ? -2 : acc === "b" ? -1 : 0;
   const octave = parseInt(m[3] ?? "4", 10);
   return { step, alter, octave };
 }
@@ -97,25 +100,58 @@ function musicXmlBarlineLines(barline: BarlineStyle | undefined): string[] {
 // ── partwise serialization helpers ───────────────────────────────────────────
 
 /**
- * DIVISIONS=8 lets us represent every duration down to 32nd notes as integers.
- * w=32  h=16  q=8  8th=4  16th=2  32nd=1
+ * DIVISIONS=24 keeps 32nds integer and makes 3:2 tuplets exact
+ * (triplet eighth sounding = 8; three fill one quarter = 24).
+ * w=96  h=48  q=24  8th=12  16th=6  32nd=3
  */
+const PW_DIVISIONS = 24;
 const PW_DIVS: Record<string, number> = {
-  w: 32, h: 16, q: 8, "8": 4, "16": 2, "32": 1,
+  w: 96, h: 48, q: 24, "8": 12, "16": 6, "32": 3,
 };
 const PW_TYPES: Record<string, string> = {
   w: "whole", h: "half", q: "quarter", "8": "eighth", "16": "16th", "32": "32nd",
 };
 
-function pwNoteDivs(note: Note): number {
-  const base = PW_DIVS[note.duration] ?? 8;
+function pwWrittenDivs(note: Note): number {
+  const base = PW_DIVS[note.duration] ?? PW_DIVISIONS;
   if (!note.dots) return base;
   if (note.dots === 1) return Math.round(base * 1.5);
   if (note.dots >= 2) return Math.round(base * 1.75);
   return base;
 }
 
-type BeamTag = { number: number; value: "begin" | "continue" | "end" };
+/** MusicXML `<duration>` is sounding length (written × normal/actual for tuplets). */
+function pwNoteDivs(note: Note): number {
+  const written = pwWrittenDivs(note);
+  const ratio = getTupletRatio(note.tuplet);
+  if (!ratio) return written;
+  return Math.max(1, Math.round((written * ratio.normal) / ratio.actual));
+}
+
+function buildTupletXml(note: Note): string {
+  const ratio = getTupletRatio(note.tuplet);
+  if (!ratio) return "";
+  const normalType = PW_TYPES[note.duration];
+  const normalTypeEl = normalType ? `\n          <normal-type>${normalType}</normal-type>` : "";
+  return `
+        <time-modification>
+          <actual-notes>${ratio.actual}</actual-notes>
+          <normal-notes>${ratio.normal}</normal-notes>${normalTypeEl}
+        </time-modification>`;
+}
+
+type TupletBracketKind = "start" | "stop" | "both";
+
+function tupletBracketKind(notes: Note[], index: number): TupletBracketKind | null {
+  const note = notes[index];
+  if (!note?.tuplet || !getTupletRatio(note.tuplet)) return null;
+  const prevSame = index > 0 && notes[index - 1]?.tuplet === note.tuplet;
+  const nextSame = index + 1 < notes.length && notes[index + 1]?.tuplet === note.tuplet;
+  if (!prevSame && !nextSame) return "both";
+  if (!prevSame) return "start";
+  if (!nextSame) return "stop";
+  return null;
+}
 
 const BEAM_LEVEL_BY_DURATION: Record<string, number> = {
   "8": 1,
@@ -138,6 +174,8 @@ function beamBeatLength(timeSignature: string): number {
   if (beatType === 8 && beats % 3 === 0) return 1.5;
   return 4 / beatType;
 }
+
+type BeamTag = { number: number; value: "begin" | "continue" | "end" };
 
 function formatBeamXml(tags: BeamTag[] | undefined): string {
   if (!tags?.length) return "";
@@ -208,7 +246,7 @@ function computeMeasureBeams(notes: Note[], timeSignature: string): Map<number, 
  * Build the <notations> element string for a note.
  * Covers: tied, slur, fermata, articulations, ornaments.
  */
-function buildNotations(note: Note): string {
+function buildNotations(note: Note, tupletKind?: TupletBracketKind | null): string {
   const items: string[] = [];
 
   // Tied (notation counterpart to <tie> note attribute)
@@ -248,6 +286,7 @@ function buildNotations(note: Note): string {
   const ornamentXmlTag: Record<string, string> = {
     trill: "trill-mark",
     mordent: "mordent",
+    "mordent-upper": "inverted-mordent",
     "inverted-mordent": "inverted-mordent",
     turn: "turn",
     "inverted-turn": "inverted-turn",
@@ -255,6 +294,13 @@ function buildNotations(note: Note): string {
   };
   if (note.ornament && ornamentXmlTag[note.ornament]) {
     items.push(`<ornaments><${ornamentXmlTag[note.ornament]}/></ornaments>`);
+  }
+
+  if (tupletKind === "start" || tupletKind === "both") {
+    items.push('<tuplet type="start" number="1" bracket="yes"/>');
+  }
+  if (tupletKind === "stop" || tupletKind === "both") {
+    items.push('<tuplet type="stop" number="1"/>');
   }
 
   if (items.length === 0) return "";
@@ -269,7 +315,7 @@ function buildNotations(note: Note): string {
  * Pass `title` to override the work title shown by OSMD.
  */
 export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | null): string {
-  const DIVISIONS = 8;
+  const DIVISIONS = PW_DIVISIONS;
 
   const partList = score.parts
     .map(
@@ -324,23 +370,28 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
       }
 
       // Tempo — first part / first measure only (standard engraving placement).
+      // Palette tempos set both tempoText and score.bpm; emit words + metronome/sound.
       if (pIdx === 0 && isFirst) {
-        if (measure.tempoText) {
-          lines.push(`      <direction placement="above">
-        <direction-type>
-          <words>${esc(measure.tempoText)}</words>
-        </direction-type>
-      </direction>`);
-        } else if (score.bpm != null && score.bpm > 0) {
-          const bpm = Math.round(score.bpm);
-          lines.push(`      <direction placement="above">
+        const bpm = score.bpm != null && score.bpm > 0 ? Math.round(score.bpm) : null;
+        const metronomeBlock =
+          bpm != null
+            ? `
         <direction-type>
           <metronome>
             <beat-unit>quarter</beat-unit>
             <per-minute>${bpm}</per-minute>
           </metronome>
         </direction-type>
-        <sound tempo="${bpm}"/>
+        <sound tempo="${bpm}"/>`
+            : "";
+        if (measure.tempoText) {
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          <words>${esc(measure.tempoText)}</words>
+        </direction-type>${metronomeBlock}
+      </direction>`);
+        } else if (bpm != null) {
+          lines.push(`      <direction placement="above">${metronomeBlock}
       </direction>`);
         }
       } else if (measure.tempoText) {
@@ -442,7 +493,19 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
             lines.push(`      <direction placement="below">
         <direction-type><dynamics>${dynEl}</dynamics></direction-type>
       </direction>`);
+          } else if (note.dynamics === "cresc." || note.dynamics === "dim.") {
+            lines.push(`      <direction placement="below">
+        <direction-type><words>${esc(note.dynamics)}</words></direction-type>
+      </direction>`);
           }
+        }
+
+        if (note.words && !note.isRest) {
+          lines.push(`      <direction placement="above">
+        <direction-type>
+          <words>${esc(note.words)}</words>
+        </direction-type>
+      </direction>`);
         }
 
         // Chord symbol (harmony element precedes the note)
@@ -469,18 +532,20 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           ? "\n        " + tieAttrs.join("\n        ")
           : "";
 
-        const notationsStr = buildNotations(note);
+        const notationsStr = buildNotations(note, tupletBracketKind(noteEls, noteIdx));
         const beamStr = formatBeamXml(measureBeams.get(noteIdx));
         const lyricStr =
           note.lyric && !note.isRest
             ? `\n        <lyric number="1"><syllabic>single</syllabic><text>${esc(note.lyric)}</text></lyric>`
             : "";
 
+        const tupletStr = buildTupletXml(note);
+
         if (note.isRest) {
           lines.push(`      <note>
         <rest/>
         <duration>${divs}</duration>${tieAttrStr}
-        <type>${noteType}</type>${dotsEl}${beamStr}${notationsStr}${lyricStr}
+        <type>${noteType}</type>${dotsEl}${tupletStr}${beamStr}${notationsStr}${lyricStr}
       </note>`);
         } else {
           const { step, alter, octave } = pitchFromStr(note.pitch);
@@ -491,7 +556,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           <octave>${octave}</octave>
         </pitch>
         <duration>${divs}</duration>${tieAttrStr}
-        <type>${noteType}</type>${dotsEl}${beamStr}${notationsStr}${lyricStr}
+        <type>${noteType}</type>${dotsEl}${tupletStr}${beamStr}${notationsStr}${lyricStr}
       </note>`);
         }
 

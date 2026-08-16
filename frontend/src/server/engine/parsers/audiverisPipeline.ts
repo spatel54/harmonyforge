@@ -111,6 +111,44 @@ export function checkJavaForAudiveris(details: string[]): boolean {
   return true;
 }
 
+export type OmrStatus = {
+  audiveris: boolean;
+  java: boolean;
+  ready: boolean;
+  details: string[];
+};
+
+/** Whether Audiveris + Java 25+ are available for PDF/image OMR on this host. */
+export function getOmrStatus(): OmrStatus {
+  const details: string[] = [];
+  const bin = resolveAudiverisBin();
+  const audiveris = bin != null;
+  if (!audiveris) {
+    details.push(
+      "audiveris: binary not found — run `make audiveris-setup` from repo root or set AUDIVERIS_BIN",
+    );
+  }
+  const javaDetails: string[] = [];
+  const java = checkJavaForAudiveris(javaDetails);
+  if (!java) details.push(...javaDetails);
+  return { audiveris, java, ready: audiveris && java, details };
+}
+
+/** Fail fast before raster or batch OMR when tooling is missing. */
+export function preflightAudiverisForOm(): { ok: true } | { ok: false; details: string[] } {
+  const status = getOmrStatus();
+  if (status.ready) return { ok: true };
+  return {
+    ok: false,
+    details:
+      status.details.length > 0
+        ? status.details
+        : [
+            "audiveris: binary not found — run `make audiveris-setup` from repo root or set AUDIVERIS_BIN",
+          ],
+  };
+}
+
 function resolveScriptRootDir(): string {
   const main = process.argv[1];
   if (typeof main === "string" && main.length > 0) {
@@ -448,6 +486,11 @@ export async function tryAudiverisOnPdfBuffer(
   buffer: Buffer,
   timeoutMs: number = DEFAULT_AUDIVERIS_MS,
 ): Promise<{ parsed: ParsedScore | null; details: string[] }> {
+  const preflight = preflightAudiverisForOm();
+  if (!preflight.ok) {
+    return { parsed: null, details: preflight.details };
+  }
+
   const details: string[] = [];
   const preferRasterFirst = isLikelyRasterImagePdf(buffer);
 
@@ -492,6 +535,11 @@ export function tryAudiverisOnImageBuffer(
   ext: "png" | "jpg" | "jpeg",
   timeoutMs: number = DEFAULT_AUDIVERIS_MS,
 ): { parsed: ParsedScore | null; details: string[] } {
+  const preflight = preflightAudiverisForOm();
+  if (!preflight.ok) {
+    return { parsed: null, details: preflight.details };
+  }
+
   const details: string[] = [];
   const tmpDir = mkdtempSync(join(tmpdir(), "hf-audiveris-img-"));
   const imagePath = join(tmpDir, `input.${ext === "jpeg" ? "jpg" : ext}`);

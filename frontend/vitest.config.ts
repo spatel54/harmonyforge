@@ -14,6 +14,7 @@ export default defineConfig({
       ["**/useGenerationConfigStore.test.ts", "happy-dom"],
       ["**/riffscorePositions.test.ts", "happy-dom"],
       ["**/osmdLearnerLabels.test.ts", "happy-dom"],
+      ["**/osmdLetterLabelApply.test.ts", "happy-dom"],
     ],
     include: ["src/**/*.test.ts"],
   },

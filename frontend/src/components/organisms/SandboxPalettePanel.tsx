@@ -5,16 +5,20 @@ import { ChevronDown, ChevronRight, PanelRightClose } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PaletteButton } from "@/components/atoms/PaletteButton";
 import {
+  MAX_POPOVER_SECTIONS,
   PALETTE_SECTIONS,
   type PaletteItem,
   type PaletteSection,
 } from "@/lib/palettes/paletteRegistry";
+import { useNotePalettePopoverStore } from "@/store/useNotePalettePopoverStore";
 
 export interface SandboxPalettePanelProps {
   /** Same tool ids as the score toolbar / keyboard path (`handleToolSelect`). */
   onActivate: (toolId: string, item: PaletteItem) => void;
   /** True when the sandbox has an active note selection — enables selection-required items. */
   hasSelection: boolean;
+  /** Optional pressed-state resolver for MuseScore-style toggle feedback. */
+  isItemPressed?: (item: PaletteItem) => boolean;
   /** Ask the parent to close this column. */
   onClose?: () => void;
   className?: string;
@@ -32,6 +36,7 @@ export interface SandboxPalettePanelProps {
 export function SandboxPalettePanel({
   onActivate,
   hasSelection,
+  isItemPressed,
   onClose,
   className,
 }: SandboxPalettePanelProps) {
@@ -44,6 +49,9 @@ export function SandboxPalettePanel({
     return initial;
   });
   const [filter, setFilter] = React.useState("");
+  const popoverSectionIds = useNotePalettePopoverStore((s) => s.sectionIds);
+  const togglePopoverSection = useNotePalettePopoverStore((s) => s.toggleSection);
+  const canAddPopoverSection = useNotePalettePopoverStore((s) => s.canAddSection);
 
   const toggleSection = (id: string) => {
     setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -85,6 +93,7 @@ export function SandboxPalettePanel({
         className,
       )}
       aria-label="Notation and symbols (beta)"
+      data-testid="sandbox-palette-dock"
     >
       <div className="flex items-center justify-between h-[52px] px-3 border-b border-[var(--hf-detail)] shrink-0">
         <div className="flex flex-col leading-tight">
@@ -112,6 +121,7 @@ export function SandboxPalettePanel({
         <div className="flex gap-1.5">
           <button
             type="button"
+            data-testid="palette-expand-all"
             onClick={expandAll}
             className="hf-pressable flex-1 h-[26px] rounded-[6px] text-[10px] font-mono border border-[var(--hf-detail)] shadow-sm hover:border-[var(--hf-accent)] hover:bg-[color-mix(in_srgb,var(--hf-accent)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hf-panel-bg)]"
             style={{ color: "var(--hf-text-primary)" }}
@@ -141,6 +151,9 @@ export function SandboxPalettePanel({
           style={{ color: "var(--hf-text-primary)" }}
           aria-label="Filter notation symbols"
         />
+        <p className="text-[10px] font-mono leading-snug opacity-70" style={{ color: "var(--hf-text-secondary)" }}>
+          Up to {MAX_POPOVER_SECTIONS} sections appear on the note popover when you select a note.
+        </p>
       </div>
 
       <div className="hf-scroll-smooth flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
@@ -164,11 +177,47 @@ export function SandboxPalettePanel({
                 >
                   {section.label}
                 </span>
-                {isOpen ? (
-                  <ChevronDown className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
-                ) : (
-                  <ChevronRight className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {(() => {
+                    const onNote = popoverSectionIds.includes(section.id);
+                    const canToggleOnNote = onNote || canAddPopoverSection(section.id);
+                    return (
+                      <span
+                        role="presentation"
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <span
+                          className="text-[9px] font-mono uppercase tracking-wide opacity-60"
+                          style={{ color: "var(--hf-text-secondary)" }}
+                        >
+                          On note
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={onNote}
+                          disabled={!canToggleOnNote}
+                          title={
+                            onNote
+                              ? "Remove from note popover"
+                              : canToggleOnNote
+                                ? "Show in note popover"
+                                : `Maximum ${MAX_POPOVER_SECTIONS} popover sections`
+                          }
+                          aria-label={`${onNote ? "Remove" : "Add"} ${section.label} on note popover`}
+                          onChange={() => togglePopoverSection(section.id)}
+                          className="rounded scale-90"
+                        />
+                      </span>
+                    );
+                  })()}
+                  {isOpen ? (
+                    <ChevronDown className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
+                  ) : (
+                    <ChevronRight className="w-[14px] h-[14px]" style={{ color: "var(--hf-text-primary)" }} />
+                  )}
+                </div>
               </button>
               {isOpen && (
                 <div id={`palette-section-${section.id}`} className="px-2 pb-2 pt-0">
@@ -186,6 +235,7 @@ export function SandboxPalettePanel({
                       key={item.id}
                       item={item}
                       disabled={Boolean(item.requiresSelection) && !hasSelection}
+                      pressed={isItemPressed?.(item) ?? false}
                       onActivate={(it) => onActivate(it.toolId, it)}
                     />
                   ))}

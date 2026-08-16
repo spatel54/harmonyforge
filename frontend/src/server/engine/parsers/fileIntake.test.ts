@@ -19,6 +19,7 @@ import {
   isProbablyZip,
   looksLikeMusicXml,
 } from "./fileIntake";
+import * as audiverisPipeline from "./audiverisPipeline";
 
 const mockSpawnSync = vi.hoisted(() => vi.fn());
 
@@ -221,6 +222,33 @@ describe("intakeFileToParsedScore", () => {
       allowPdfOm: false,
     });
     expect(r.ok).toBe(true);
+  });
+
+  it("returns 501 immediately when Audiveris binary is missing (no batch OMR)", async () => {
+    const pdfSpy = vi.spyOn(audiverisPipeline, "tryAudiverisOnPdfBuffer").mockResolvedValue({
+      parsed: null,
+      details: [
+        "audiveris: binary not found — run `make audiveris-setup` from repo root or set AUDIVERIS_BIN",
+      ],
+    });
+    mockSpawnSync.mockReset();
+    try {
+      const r = await intake(
+        Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"),
+        "score.pdf",
+        { allowPdfOm: true },
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.failure.status).toBe(501);
+        expect(r.failure.error).toMatch(/binary not found/i);
+        expect(r.failure.error).not.toMatch(/pdf-raster: rendered/i);
+        expect(r.failure.error).not.toMatch(/audiveris import/i);
+      }
+      expect(mockSpawnSync.mock.calls).toHaveLength(0);
+    } finally {
+      pdfSpy.mockRestore();
+    }
   });
 
   it("runs Audiveris when PDF and tools fail → 501 with setup hints", async () => {

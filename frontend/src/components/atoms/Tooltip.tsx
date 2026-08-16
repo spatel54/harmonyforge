@@ -56,13 +56,17 @@ export const Tooltip: React.FC<TooltipProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 4 }}
-          transition={{ duration: instantTransition ? 0.04 : 0.15, ease: "easeOut" }}
+          transition={{
+            duration: instantTransition ? 0.04 : 0.15,
+            ease: [0.23, 1, 0.32, 1],
+          }}
           className={cn("fixed z-[10000] -translate-x-1/2", tooltipBoxClass, className)}
           style={{
             top: floatingPosition.top,
             left: floatingPosition.left,
             backgroundColor: "rgba(var(--hf-surface-rgb, 158, 75, 62), 0.95)",
             boxShadow: "var(--hf-shadow-xl)",
+            transformOrigin: "center top",
           }}
         >
           <span className="font-body text-[12px] font-medium text-[#f8f8f8] leading-snug whitespace-pre-line break-words">

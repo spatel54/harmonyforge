@@ -14,7 +14,7 @@ AUDIVERIS_BIN="$AUDIVERIS_DIR/app/build/install/app/bin/Audiveris"
 TESSDATA_DIR="$SCRIPT_DIR/tessdata"
 TESSDATA_TAG="4.1.0"
 AUDIVERIS_REPO="https://github.com/Audiveris/audiveris.git"
-AUDIVERIS_BRANCH="development"
+AUDIVERIS_BRANCH="5.9.0"
 MIN_JAVA_VERSION=25
 
 # Homebrew openjdk@25 is keg-only; shell sessions from the IDE often lack it on PATH.
@@ -33,6 +33,7 @@ if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
 fi
 
 export TESSDATA_PREFIX="$TESSDATA_DIR"
+export AUDIVERIS_BIN
 
 require_audiveris_bin() {
   if [[ ! -x "$AUDIVERIS_BIN" ]]; then

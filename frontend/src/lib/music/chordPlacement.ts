@@ -16,7 +16,7 @@
 
 import type { ChordSymbolEntry, EditableScore } from "./scoreTypes";
 import { beatToRiffQuant } from "./chordSymbolFormat";
-import { effectiveMeasureTimeSignature, measureLengthBeats, noteBeats } from "./scoreUtils";
+import { measureLengthBeats, noteBeats } from "./scoreUtils";
 
 /** Beats between chord symbols — mirrors server `getChordStepSize`. */
 export function harmonicRhythmStepBeats(timeSignature?: string): number {
@@ -127,8 +127,6 @@ export function collectSoundingNotes(
   let measureStart = 0;
 
   for (let mIdx = 0; mIdx < (score.parts[0]?.measures.length ?? 0); mIdx++) {
-    const ts = effectiveMeasureTimeSignature(score, mIdx);
-
     for (let partIndex = 0; partIndex < score.parts.length; partIndex++) {
       const part = score.parts[partIndex]!;
       const measure = part.measures[mIdx];

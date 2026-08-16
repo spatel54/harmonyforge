@@ -162,12 +162,35 @@ The VexFlow SVG target `div` must NOT use fixed pixel widths. Use `w-full h-full
 
 ## 5. Motion & Interaction Rules
 
+Motion is split by **layer**. Score and theory feedback stay instant; chrome (headers, modals, toasts, popovers, press states) uses the tokenized rules below. See `.cursor/rules/hf-motion.mdc` for agent gates.
+
+### Score & theory (zero latency)
+
 - **Note Drag Behavior:** Discrete snapping to semitones/diatonic steps. Continuous analog-style interpolation is forbidden.
 - **Violation Reveal Timing:** Zero latency. Red Line systems appear simultaneously with the drop/keyboard event. No fade-in permitted.
 - **Repair Transitions:** `0ms` crisp swap between user state and recommended repair state. Linear interpolation (`100ms max`) reserved strictly for programmatic voice-leading SVG paths only.
-- **Forbidden Animation:** No bouncing, spring physics, or easing that implies physical weight.
-- **Micro-interaction budget:** `150–300ms` for all hover/focus state transitions using `transform` and `opacity` only (never `width`/`height`).
-- **`prefers-reduced-motion`:** All transitions must be wrapped in a `@media (prefers-reduced-motion: no-preference)` guard or a `useReducedMotion` hook.
+
+### Chrome (modals, toasts, popovers, press)
+
+- **Tokens:** Use `--hf-ease-out`, `--hf-ease-in-out`, `--hf-ease-drawer`, and `--hf-duration-*` from `globals.css`. Never `transition: all`.
+- **Properties:** Animate `transform` and `opacity` only (never `width`/`height`/`margin`/`padding`).
+- **Physicality:** Never animate from `scale(0)` — use `scale(0.95–0.97)` + opacity. Popovers scale from their trigger (`transform-origin`); modals stay centered.
+- **Easing:** Enter/exit use `ease-out` or `--hf-ease-out`. Never `ease-in` on UI.
+- **Duration:** UI chrome stays **≤300ms** (press 100–160ms, tooltips 125–200ms, popovers 150–250ms, modals 200–500ms).
+- **Press feedback:** `:active { transform: scale(0.97) }` on pressable elements (`.hf-pressable`).
+- **Keyboard-initiated chrome:** No open/close animation (F9, hotkey dialogs, command-style toggles) — instant state change.
+- **Interruptibility:** Use CSS transitions or `@starting-style` for enter/exit; avoid one-shot keyframes on dismissable surfaces.
+
+### Gestures (floating inspector only)
+
+- **Springs:** Critically damped only (`bounce: 0`), velocity handoff on release, interruptible mid-flight. No bounce on menus or modals.
+- **Direct manipulation:** 1:1 pointer tracking with grab offset; rubber-band at viewport edges.
+
+### Accessibility
+
+- **`prefers-reduced-motion`:** Cross-fade or static transitions — not zero feedback. Drop transform-based motion; keep opacity/color that aids comprehension.
+- **`prefers-reduced-transparency`:** Solid header/backdrop fills; drop `backdrop-filter` blur.
+- **Hover motion:** Gate decorative `:hover` transforms behind `@media (hover: hover) and (pointer: fine)`; `:active` press stays ungated.
 
 ---
 

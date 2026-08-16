@@ -8,6 +8,7 @@ import type { ParsedScore } from "../types";
 import {
   audiverisPipelineFailureMessage,
   DEFAULT_AUDIVERIS_MS,
+  preflightAudiverisForOm,
   tryAudiverisOnImageBuffer,
   tryAudiverisOnPdfBuffer,
 } from "./audiverisPipeline";
@@ -208,6 +209,16 @@ export function intakeImagePagesToParsedScore(
     return {
       ok: false,
       failure: { status: 400, error: "No page images uploaded" },
+    };
+  }
+  const preflight = preflightAudiverisForOm();
+  if (!preflight.ok) {
+    return {
+      ok: false,
+      failure: {
+        status: 501,
+        error: audiverisPipelineFailureMessage(preflight.details),
+      },
     };
   }
   const timeoutMs = effectiveAudiverisTimeoutMs(options);

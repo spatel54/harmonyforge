@@ -124,7 +124,8 @@ export async function scoreToWavBuffer(
     }).toDestination();
 
     for (const ev of timed) {
-      synth.triggerAttackRelease(ev.pitch, ev.duration, ev.time);
+      const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+      synth.triggerAttackRelease(ev.pitch, ev.duration, ev.time, vel);
     }
   }, totalSec);
 

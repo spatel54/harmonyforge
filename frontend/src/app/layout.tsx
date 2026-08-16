@@ -12,6 +12,7 @@ import { StudySessionProvider } from "@/components/study/StudySessionProvider";
 import { StudyConsentGate } from "@/components/study/StudyConsentGate";
 import { NonBlockingFontshareLink } from "@/components/atoms/NonBlockingFontshareLink";
 import { CoachmarkOverlayLazy } from "@/components/organisms/CoachmarkOverlayLazy";
+import { HfToaster } from "@/components/atoms/HfToaster";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const instrumentSerif = Instrument_Serif({
@@ -58,6 +59,7 @@ export default function RootLayout({
                 {children}
               </main>
               <CoachmarkOverlayLazy />
+              <HfToaster />
             </StudyConsentGate>
           </StudySessionProvider>
         </ThemeProvider>

@@ -33,9 +33,9 @@ export const ChatFAB = React.forwardRef<HTMLButtonElement, ChatFABProps>(
         aria-label="Open Theory Inspector"
         data-hf-theory-inspector-cta="true"
         className={cn(
-          "flex items-center gap-3 min-h-[52px] pl-3 pr-6 rounded-full",
+          "hf-pressable flex items-center gap-3 min-h-[52px] pl-3 pr-6 rounded-full",
           "transition-[transform,box-shadow,filter] duration-200 ease-out",
-          "hover:scale-[1.03] active:scale-[0.98]",
+          "active:scale-[0.97] hover:scale-[1.03]",
           "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--hf-accent)] focus-visible:ring-offset-[3px] focus-visible:ring-offset-[var(--hf-bg)]",
           className,
         )}

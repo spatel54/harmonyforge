@@ -1,9 +1,7 @@
 import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import { applyOsmdLetterLabelsWhenReady } from "./osmdLetterLabelApply";
 import { applyOsmdPrintEngravingRules } from "./osmdPrintLayout";
-import {
-  applyOsmdLearnerLetterLabels,
-  removeOsmdLearnerLetterLabels,
-} from "./osmdLearnerLabels";
+import { removeOsmdLearnerLetterLabels } from "./osmdLearnerLabels";
 
 export type OsmdExportRenderOptions = {
   /** Letter names above noteheads (PDF preview / print only). */
@@ -33,6 +31,7 @@ export async function renderOsmdExportScore(
     backend: "svg",
     drawTitle: true,
     drawingParameters: "default",
+    autoResize: false,
   });
   applyOsmdPrintEngravingRules(osmd.EngravingRules);
   await osmd.load(xml);
@@ -40,10 +39,7 @@ export async function renderOsmdExportScore(
   stripOsmdPageLabels(container);
 
   if (options?.showLetterNames) {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-    applyOsmdLearnerLetterLabels(container, osmd);
+    await applyOsmdLetterLabelsWhenReady(container, osmd);
   } else {
     removeOsmdLearnerLetterLabels(container);
   }

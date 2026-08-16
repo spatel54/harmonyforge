@@ -1,0 +1,26 @@
+---
+alwaysApply: false
+description: HarmonyForge motion gates — Apple fluid interfaces + Emil frequency/easing rules for chrome only.
+globs: "frontend/**/*.{tsx,ts,css}"
+---
+
+### Motion gates (apply in order)
+
+1. **Frequency** — 100+/day (keyboard shortcuts, F9, hotkey dialogs): **no animation**. Tens/day: near-imperceptible or none. Occasional (modals, toasts): standard. Rare (onboarding): delight budget only.
+2. **Purpose** — Must be feedback, spatial consistency, state indication, preventing jarring change, or explanation. "Looks cool" on frequent UI is a reject.
+3. **Layer** — Score/theory/violations: **0ms** (see `docs/design/pages/tactile-sandbox.md`). Chrome: tokens below. Floating inspector drag: critically damped spring only.
+4. **Tokens** — Use `--hf-ease-out`, `--hf-ease-drawer`, `--hf-duration-*` from `globals.css`. Never invent parallel curves or `transition: all`.
+5. **A11y** — `prefers-reduced-motion`: cross-fade, drop transform motion. `prefers-reduced-transparency`: solid headers/backdrops. Hover transforms: `@media (hover: hover) and (pointer: fine)`.
+
+### Never ship on chrome
+
+- `transition: all`, `ease-in` on UI, `scale(0)` entrances, animating width/height
+- Keyframes-only enter with instant unmount exit (`if (!open) return null` without exit transition)
+- Bounce on modals/menus; springs anywhere except floating-inspector gesture release
+- Motion on keyboard-initiated panel toggles (F9 palette, hotkey-opened dialogs)
+
+### References
+
+- `docs/design/MASTER.md` §5
+- `docs/design/pages/tactile-sandbox.md` (sandbox overrides)
+- `frontend/src/app/globals.css` (`.hf-pressable`, `.hf-modal-*`, material classes)

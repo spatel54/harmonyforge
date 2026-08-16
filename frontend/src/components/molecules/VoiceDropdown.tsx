@@ -238,11 +238,16 @@ export const VoiceDropdown = React.forwardRef<
           aria-multiselectable="true"
           onKeyDown={handleDropdownKeyDown}
           className={cn(
-            "absolute left-0 right-0 z-[var(--z-tooltip)] mt-1",
+            "absolute left-0 right-0 z-[var(--z-tooltip)] mt-1 hf-popover-surface",
             "rounded-[6px] border border-[var(--hf-detail)]",
             "shadow-md overflow-hidden",
           )}
-          style={{ backgroundColor: "var(--hf-bg)" }}
+          data-open="true"
+          style={{
+            backgroundColor: "var(--hf-bg)",
+            transformOrigin: "top center",
+            ["--hf-transform-origin" as string]: "top center",
+          }}
         >
           {FAMILY_ORDER.map((family) => {
             const items = instruments.filter((i) => instrumentFamily(i) === family);
