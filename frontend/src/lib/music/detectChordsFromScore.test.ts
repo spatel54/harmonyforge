@@ -49,6 +49,20 @@ describe("detectChordsFromScore", () => {
     expect(chords[0]?.quant).toBe(0);
   });
 
+  it("labels C from inner voices when the melody is a passing D", () => {
+    const score: EditableScore = {
+      divisions: 1,
+      parts: [
+        { id: "P1", name: "S", clef: "treble", measures: [{ ...measure, notes: [{ id: "n1", pitch: "D5", duration: "w" as const }] }] },
+        { id: "P2", name: "A", clef: "treble", measures: [{ ...measure, notes: [{ id: "n2", pitch: "E4", duration: "w" as const }] }] },
+        { id: "P3", name: "T", clef: "treble", measures: [{ ...measure, notes: [{ id: "n3", pitch: "G3", duration: "w" as const }] }] },
+        { id: "P4", name: "B", clef: "bass", measures: [{ ...measure, notes: [{ id: "n4", pitch: "C3", duration: "w" as const }] }] },
+      ],
+    };
+    const chords = detectChordsFromScore(score);
+    expect(chords[0]?.symbol).toBe("C");
+  });
+
   it("places a chord on every measure downbeat across two bars", () => {
     const score: EditableScore = {
       divisions: 1,

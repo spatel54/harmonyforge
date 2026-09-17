@@ -68,6 +68,8 @@ export interface Measure {
   rehearsalMark?: string;
   /** Tempo text ("Andante", "q = 120", etc.) attached to this measure. */
   tempoText?: string;
+  /** Playback BPM for this measure onward, until the next marking. */
+  tempoBpm?: number;
 }
 
 export interface Part {

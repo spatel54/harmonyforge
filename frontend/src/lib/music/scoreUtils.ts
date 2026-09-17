@@ -1579,17 +1579,26 @@ export function setMeasureTempoText(
   score: EditableScore,
   measureIndex: number,
   text: string | null,
-  bpm?: number,
+  bpm?: number | null,
 ): EditableScore {
   const next = cloneScore(score);
   for (const part of next.parts) {
     const measure = part.measures[measureIndex];
-    if (measure) {
-      if (text === null) delete measure.tempoText;
-      else measure.tempoText = text;
+    if (!measure) continue;
+    if (text === null) {
+      delete measure.tempoText;
+      delete measure.tempoBpm;
+    } else {
+      measure.tempoText = text;
+      if (typeof bpm === "number" && bpm > 0) measure.tempoBpm = bpm;
+      else if (bpm === null) delete measure.tempoBpm;
     }
   }
-  if (bpm && bpm > 0) next.bpm = bpm;
+  // Only measure 0 owns score.bpm (toolbar / starting tempo). Later markings stay local.
+  if (measureIndex === 0) {
+    if (typeof bpm === "number" && bpm > 0 && text !== null) next.bpm = bpm;
+    else delete next.bpm;
+  }
   return next;
 }
 

@@ -3,6 +3,7 @@ import {
   chordSymbolToHarmonyXml,
   normalizeLeadSheetChordSymbol,
   romanToChordSymbol,
+  simplifyLeadSheetChordSymbol,
 } from "./chordSymbolFormat";
 
 describe("romanToChordSymbol", () => {
@@ -37,6 +38,18 @@ describe("normalizeLeadSheetChordSymbol", () => {
     expect(normalizeLeadSheetChordSymbol("G7")).toBe("G7");
     expect(normalizeLeadSheetChordSymbol("Cmaj7")).toBe("Cmaj7");
     expect(normalizeLeadSheetChordSymbol("Dm7")).toBe("Dm7");
+  });
+
+  it("simplifies detect junk to triad or seventh", () => {
+    expect(simplifyLeadSheetChordSymbol("C6")).toBe("C");
+    expect(simplifyLeadSheetChordSymbol("Cadd9")).toBe("C");
+    expect(simplifyLeadSheetChordSymbol("Cmaj9")).toBe("Cmaj7");
+    expect(simplifyLeadSheetChordSymbol("Am9")).toBe("Am7");
+  });
+
+  it("drops slash inversions", () => {
+    expect(normalizeLeadSheetChordSymbol("C/E")).toBe("C");
+    expect(normalizeLeadSheetChordSymbol("G7/B")).toBe("G7");
   });
 });
 

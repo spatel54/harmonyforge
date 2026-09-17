@@ -8,6 +8,7 @@ import type { EditableScore, Note, Measure, Part } from "./scoreTypes";
 import { generateId } from "./scoreTypes";
 import { looksLikeMusicXml } from "./musicXmlMarkers";
 import { attachChordsFromFirstPartXml } from "./parseHarmonyFromMusicXml";
+import { isUsableScoreTitle } from "./scoreDisplayTitle";
 
 /** Fallback when part name is generic SATB (engine default labels). */
 const PART_CLEFS: Record<string, string> = {
@@ -150,8 +151,13 @@ function applyTransposition(pitch: string, semitones: number): string {
   return midiToPitch(pitchToMidi(pitch) + semitones);
 }
 
+function localText(parent: Document | Element, localName: string): string {
+  return findByLocalName(parent, localName)?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
 /**
- * Extract metadata from MusicXML (work-title, part count, etc.).
+ * Extract metadata from MusicXML (work-title, credits, part count, etc.).
+ * Uses local names so namespaced Audiveris / MuseScore files still resolve.
  */
 export function extractMusicXMLMetadata(xml: string): { title: string; meta: string } {
   if (typeof window === "undefined") return { title: "Score", meta: "" };
@@ -160,32 +166,48 @@ export function extractMusicXMLMetadata(xml: string): { title: string; meta: str
   const parseError = doc.querySelector("parsererror");
   if (parseError) return { title: "Score", meta: "" };
 
-  const root = doc.querySelector("score-timewise, score-partwise");
+  const root =
+    findByLocalName(doc, "score-partwise") ?? findByLocalName(doc, "score-timewise");
   if (!root) return { title: "Score", meta: "" };
 
-  const workTitle =
-    root.querySelector("work work-title")?.textContent?.trim() ??
-    root.querySelector("movement-title")?.textContent?.trim() ??
-    "Score";
+  const workTitle = localText(root, "work-title");
+  const movementTitle = localText(root, "movement-title");
 
-  const partCount =
-    root.querySelectorAll("part").length || root.querySelectorAll("score-part").length || 4;
-  const partList = root.querySelector("part-list");
-  const partNames: string[] = [];
-  if (partList) {
-    partList.querySelectorAll("score-part part-name").forEach((el) => {
-      const name = el.textContent?.trim();
-      if (name) partNames.push(name);
-    });
+  let creditTitle = "";
+  for (const credit of findAllByLocalName(root, "credit")) {
+    const type = localText(credit, "credit-type").toLowerCase();
+    const words = localText(credit, "credit-words");
+    if (type === "title" && words) {
+      creditTitle = words;
+      break;
+    }
   }
+  if (!creditTitle) {
+    for (const credit of findAllByLocalName(root, "credit")) {
+      const words = localText(credit, "credit-words");
+      if (isUsableScoreTitle(words)) {
+        creditTitle = words;
+        break;
+      }
+    }
+  }
+
+  const workTitleFinal =
+    [workTitle, movementTitle, creditTitle].find((t) => isUsableScoreTitle(t)) ?? "Score";
+
+  const partNameEls = findAllByLocalName(root, "part-name");
+  const partNames = partNameEls
+    .map((el) => el.textContent?.replace(/\s+/g, " ").trim() ?? "")
+    .filter((name) => name.length > 0);
+  const partCount =
+    findAllByLocalName(root, "part").length ||
+    findAllByLocalName(root, "score-part").length ||
+    4;
   const voices = partNames.length > 0 ? partNames.join(", ") : `${partCount} voices`;
-  const software =
-    root.querySelector("encoding software")?.textContent?.trim() ??
-    root.querySelector('creator[type="software"]')?.textContent?.trim() ??
-    null;
+  const software = localText(root, "software") || null;
 
   return {
-    title: workTitle,
+    title: workTitleFinal,
     meta: software ? `${voices} · ${software}` : `${voices} · Page 1`,
   };
 }

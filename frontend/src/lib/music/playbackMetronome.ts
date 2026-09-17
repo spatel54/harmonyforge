@@ -4,6 +4,8 @@
  */
 
 import { hfLogPlayback } from "./playbackDebugLog";
+import { beatsToSeconds, secondsToBeat, type TempoMapEntry } from "./playbackTempoMap";
+import { getCachedTempoMap } from "./playbackExpressionBridge";
 
 export type PlaybackMetronomeOptions = {
   bpm: number;
@@ -81,24 +83,26 @@ export function schedulePlaybackMetronome(
   Tone: ToneModule,
   opts: PlaybackMetronomeOptions,
 ): void {
-  const bpm = Math.max(20, Math.min(300, opts.bpm));
   const startTimeOffset = Math.max(0, opts.startTimeOffset);
   const totalEnd = Math.max(0, opts.totalEnd);
   const beatsPerMeasure = beatsPerMeasureFromTimeSignature(opts.timeSignature);
+  const map: TempoMapEntry[] =
+    getCachedTempoMap().length > 0
+      ? getCachedTempoMap()
+      : [{ startBeat: 0, bpm: Math.max(20, Math.min(300, opts.bpm)) }];
 
   clearPlaybackMetronome(Tone);
   if (totalEnd <= startTimeOffset) return;
 
   ensureClickSynths(Tone);
-  const secondsPerBeat = 60 / bpm;
-  const lastAbsBeat = Math.floor((totalEnd + 1e-6) / secondsPerBeat);
+  const startBeat = secondsToBeat(startTimeOffset, map);
+  const lastAbsBeat = Math.floor(secondsToBeat(totalEnd, map) + 1e-6);
 
   let lastTransportTime = -Infinity;
   for (let beatIndex = 0; beatIndex <= lastAbsBeat; beatIndex++) {
-    const absTime = beatIndex * secondsPerBeat;
-    if (absTime + 1e-6 < startTimeOffset) continue;
+    if (beatIndex + 1e-6 < startBeat) continue;
+    const absTime = beatsToSeconds(beatIndex, map);
     const transportTime = absTime - startTimeOffset;
-    // Tone.Transport and MembraneSynth require strictly increasing schedule/trigger times.
     if (transportTime <= lastTransportTime + 1e-9) continue;
     lastTransportTime = transportTime;
 
@@ -121,7 +125,7 @@ export function schedulePlaybackMetronome(
     message: "metronome scheduled",
     data: {
       clickCount: scheduledTransportIds.length,
-      bpm,
+      bpm: opts.bpm,
       startTimeOffset,
       totalEnd,
       beatsPerMeasure,

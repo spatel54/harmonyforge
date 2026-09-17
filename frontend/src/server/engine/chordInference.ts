@@ -5,64 +5,115 @@
 
 import type { ParsedScore, ChordSlot, MelodyNote, Genre } from "./types";
 import { parseChord } from "./chordParser";
+import { pitchStringToMidi } from "../../lib/music/pitchMidi";
 
-const MAJOR_TRIADS = ["I", "ii", "iii", "IV", "V", "vi", "vii°"] as const;
-const MINOR_TRIADS = ["i", "ii°", "III", "iv", "v", "VI", "VII"] as const;
+const MAJOR_TRIADS = ["I", "ii", "iii", "IV", "V", "V7", "vi", "vii°"] as const;
+/** Harmonic minor: V / V7 (not only modal v) so cadences resolve. */
+const MINOR_TRIADS = ["i", "ii°", "III", "iv", "V", "V7", "v", "VI", "VII"] as const;
 /** Jazz: 7th chords as foundational unit */
 const MAJOR_JAZZ = ["I", "ii7", "iii7", "IV", "V7", "vi7", "viiø7"] as const;
-const MINOR_JAZZ = ["i7", "iiø7", "III7", "iv7", "v7", "VI7", "VII7"] as const;
+const MINOR_JAZZ = ["i7", "iiø7", "III7", "iv7", "V7", "v7", "VI7", "VII7"] as const;
 /** Pop: cyclical schemas, plagal motion, modal borrowing (bVII, bVI) */
-const MAJOR_POP = ["I", "ii", "iii", "IV", "V", "vi", "vii°", "bVII"] as const;
-const MINOR_POP = ["i", "ii°", "III", "iv", "v", "VI", "VII", "bVI"] as const;
+const MAJOR_POP = ["I", "ii", "iii", "IV", "V", "V7", "vi", "bVII"] as const;
+const MINOR_POP = ["i", "ii°", "III", "iv", "V", "V7", "VI", "VII", "bVI"] as const;
 
 const TRANSITION_BONUS: Record<string, string[]> = {
-  I: ["ii", "iii", "IV", "V", "vi"],
-  ii: ["V", "vii°"],
+  I: ["ii", "IV", "V", "V7", "vi"],
+  ii: ["V", "V7"],
   iii: ["vi", "IV"],
-  IV: ["I", "ii", "V", "vii°"],
+  IV: ["I", "ii", "V", "V7"],
   V: ["I", "vi"],
-  vi: ["ii", "IV", "V"],
-  "vii°": ["I", "iii"],
-  i: ["ii°", "III", "iv", "v", "VI", "VII"],
-  "ii°": ["v", "VII"],
+  V7: ["I", "vi"],
+  vi: ["ii", "IV", "V", "V7"],
+  "vii°": ["I"],
+  i: ["ii°", "iv", "V", "V7", "VI"],
+  "ii°": ["V", "V7"],
   III: ["VI", "iv"],
-  iv: ["i", "ii°", "v", "VII"],
+  iv: ["i", "ii°", "V", "V7"],
   v: ["i", "VI"],
-  VI: ["ii°", "iv", "v"],
+  VI: ["ii°", "iv", "V", "V7"],
   VII: ["i", "III"],
 };
 
-/** Jazz ii–V–I and pop cyclical schemas (I–vi–IV–V, vi–IV–I–V) */
+/** Jazz ii–V–I and pop cyclical schemas (I–V–vi–IV, I–vi–IV–V) */
 const JAZZ_TRANSITION_BONUS: Record<string, string[]> = {
   ...TRANSITION_BONUS,
-  ii7: ["V7", "viiø7"],
+  I: ["ii7", "IV", "vi7", "V7"],
+  ii7: ["V7"],
+  iii7: ["vi7", "IV"],
+  IV: ["V7", "I", "ii7"],
   V7: ["I", "vi7"],
+  vi7: ["ii7", "IV", "V7"],
+  "viiø7": ["I"],
+  i7: ["iiø7", "iv7", "V7"],
+  "iiø7": ["V7"],
 };
 const POP_TRANSITION_BONUS: Record<string, string[]> = {
   ...TRANSITION_BONUS,
-  I: ["vi", "IV", "V"],
+  I: ["V", "vi", "IV"],
   vi: ["IV", "I", "V"],
   IV: ["I", "V", "vi"],
   V: ["I", "vi"],
+  V7: ["I", "vi"],
   bVII: ["I", "IV"],
-  bVI: ["i", "V"],
+  bVI: ["V", "i"],
 };
 
+const FUNCTION_WEIGHT: Record<string, number> = {
+  I: 4,
+  i: 4,
+  i7: 3,
+  V: 4,
+  V7: 5,
+  IV: 3,
+  iv: 3,
+  iv7: 2,
+  ii: 3,
+  ii7: 4,
+  "ii°": 2,
+  "iiø7": 3,
+  vi: 2,
+  vi7: 2,
+  VI: 2,
+  VI7: 1,
+  iii: 0,
+  iii7: 0,
+  III: 1,
+  III7: 1,
+  v: -1,
+  v7: 0,
+  "vii°": -2,
+  "viiø7": -1,
+  VII: 1,
+  VII7: 1,
+  bVII: 1,
+  bVI: 1,
+};
+
+function schemaCycle(genre: Genre | undefined, useMinor: boolean): string[] {
+  if (genre === "jazz") return useMinor ? ["i7", "iiø7", "V7", "i7"] : ["I", "ii7", "V7", "I"];
+  if (genre === "pop") return useMinor ? ["i", "VI", "III", "VII"] : ["I", "V", "vi", "IV"];
+  return useMinor ? ["i", "iv", "V", "i"] : ["I", "IV", "V", "I"];
+}
+
 function pitchToPc(pitch: string): number {
-  const match = pitch.match(/^([A-G])(#?)/);
+  const midi = pitchStringToMidi(pitch);
+  if (midi !== null) return ((midi % 12) + 12) % 12;
+  const match = pitch.match(/^([A-G])(#{1,2}|b{1,2})?/);
   if (!match) return 0;
-  const step = match[1];
-  const sharp = match[2] === "#" ? 1 : 0;
-  const base = {
-    C: 0,
-    D: 2,
-    E: 4,
-    F: 5,
-    G: 7,
-    A: 9,
-    B: 11,
-  }[step] ?? 0;
-  return (base + sharp) % 12;
+  const base = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[match[1] ?? "C"] ?? 0;
+  const acc = match[2] ?? "";
+  const alter = acc === "#" || acc === "##" ? acc.length : acc === "b" || acc === "bb" ? -acc.length : 0;
+  return ((base + alter) % 12 + 12) % 12;
+}
+
+function isTonicRoman(roman: string, useMinor: boolean): boolean {
+  if (useMinor) return roman === "i" || roman === "i7";
+  return roman === "I";
+}
+
+function isDominantRoman(roman: string): boolean {
+  return roman === "V" || roman === "V7" || roman === "vii°" || roman === "viiø7";
 }
 
 function getActiveMelodyNote(melody: MelodyNote[], beat: number): MelodyNote | undefined {
@@ -160,21 +211,33 @@ export function inferChords(
     if (genre === "pop") return useMinor ? [...MINOR_POP] : [...MAJOR_POP];
     return useMinor ? [...MINOR_TRIADS] : [...MAJOR_TRIADS];
   })();
-  const transitionBonus = genre === "jazz" ? JAZZ_TRANSITION_BONUS : genre === "pop" ? POP_TRANSITION_BONUS : TRANSITION_BONUS;
+  const transitionBonus =
+    genre === "jazz" ? JAZZ_TRANSITION_BONUS : genre === "pop" ? POP_TRANSITION_BONUS : TRANSITION_BONUS;
+  const schema = schemaCycle(genre, useMinor);
+  const tonicRoman = useMinor ? "i" : "I";
+  const tonicTones = new Set(
+    parseChord(tonicRoman, {
+      tonic: parsed.key.tonic,
+      mode: useMinor ? "minor" : "major",
+    }).chordTones,
+  );
+  const windowFitsTonic = (window: Set<number>) =>
+    window.size > 0 && [...window].every((pc) => tonicTones.has(pc));
   const chords: ChordSlot[] = [];
   const beatsPerChord = resolveAdaptiveBeatsPerChord(parsed, lastBeat);
-  // Anacrusis (per Iter2 §1): start chord inference on the first downbeat so
-  // generated harmonies land in phase with the notated meter instead of the
-  // pickup's partial bar. If no pickup was detected this reduces to `beat = 0`.
   const pickupBeats = Math.max(0, parsed.pickupBeats ?? 0);
   let beat = pickupBeats;
   let previousRoman: string | undefined;
+  let slotIndex = 0;
+  const estimatedSlots = Math.max(1, Math.ceil((lastBeat - pickupBeats) / beatsPerChord));
 
   while (beat < lastBeat || chords.length === 0) {
     const endBeat = Math.min(beat + beatsPerChord, lastBeat || beat + beatsPerChord);
     const activeNote = getActiveMelodyNote(melody, beat);
     const activePc = activeNote ? pitchToPc(activeNote.pitch) : undefined;
     const windowPitchClasses = getWindowPitchClassesFromParsed(parsed, beat, endBeat);
+    const isLast = slotIndex >= estimatedSlots - 1;
+    const isPenult = slotIndex === estimatedSlots - 2;
 
     const ranked = candidates
       .map((roman) => {
@@ -183,19 +246,38 @@ export function inferChords(
           mode: useMinor ? "minor" : "major",
         });
         const chordTones = new Set(parsedChord.chordTones);
-        const containsActive = activePc === undefined || chordTones.has(activePc);
-        let score = containsActive ? 20 : -100;
+        let score = FUNCTION_WEIGHT[roman] ?? 0;
+
+        if (activePc !== undefined) {
+          score += chordTones.has(activePc) ? 12 : -6;
+        }
 
         for (const pitchClass of windowPitchClasses) {
-          score += chordTones.has(pitchClass) ? 4 : -2;
+          score += chordTones.has(pitchClass) ? 5 : -1;
         }
 
         if (previousRoman) {
-          if (roman === previousRoman) score += 2;
-          if (transitionBonus[previousRoman]?.includes(roman)) score += 3;
-        } else if (roman === (useMinor ? "i" : "I")) {
-          score += 2;
+          if (roman === previousRoman) {
+            const allFit =
+              windowPitchClasses.size > 0 &&
+              [...windowPitchClasses].every((pc) => chordTones.has(pc));
+            score += allFit ? 8 : -5;
+          }
+          if (transitionBonus[previousRoman]?.includes(roman)) {
+            score += isDominantRoman(previousRoman) && isTonicRoman(roman, useMinor) ? 12 : 8;
+          }
+        } else if (isTonicRoman(roman, useMinor)) {
+          score += 8;
         }
+
+        if (windowFitsTonic(windowPitchClasses)) {
+          score += isTonicRoman(roman, useMinor) ? 10 : -8;
+        }
+
+        if (schema[slotIndex % schema.length] === roman) score += 4;
+        if (isLast && isTonicRoman(roman, useMinor)) score += 10;
+        if (isPenult && isDominantRoman(roman) && !windowFitsTonic(windowPitchClasses)) score += 8;
+        if (roman === "v" && useMinor) score -= 3;
 
         return { roman, score };
       })
@@ -205,6 +287,7 @@ export function inferChords(
     chords.push({ roman: selected, beat });
     previousRoman = selected;
     beat += beatsPerChord;
+    slotIndex += 1;
   }
 
   return chords;

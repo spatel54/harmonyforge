@@ -260,4 +260,33 @@ describe("scoreToPartwiseMusicXML", () => {
     expect(xml).toContain("<per-minute>76</per-minute>");
     expect(xml).toContain('tempo="76"');
   });
+
+  it("emits a second metronome when a later bar has its own tempo", () => {
+    const score: EditableScore = {
+      ...withChord,
+      parts: [
+        {
+          ...withChord.parts[0]!,
+          measures: [
+            {
+              ...withChord.parts[0]!.measures[0]!,
+              tempoText: "Adagio ♩ = 66",
+              tempoBpm: 66,
+            },
+            {
+              id: "m2",
+              timeSignature: "4/4",
+              tempoText: "Allegro ♩ = 132",
+              tempoBpm: 132,
+              notes: [{ id: "n2", pitch: "C5", duration: "q" }],
+            },
+          ],
+        },
+      ],
+    };
+    const xml = scoreToPartwiseMusicXML(score);
+    expect(xml).toContain("<per-minute>66</per-minute>");
+    expect(xml).toContain("<per-minute>132</per-minute>");
+    expect(xml).toContain('tempo="132"');
+  });
 });

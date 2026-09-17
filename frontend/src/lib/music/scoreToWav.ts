@@ -4,8 +4,7 @@
 
 import type { EditableScore } from "./scoreTypes";
 import { scoreToScheduledNotes, scheduledNotesToSeconds } from "./playbackUtils";
-
-const DEFAULT_BPM = 120;
+import { buildTempoMap, midiVelocityToSamplerGain } from "./playbackTempoMap";
 
 function interleaveChannels(
   ch0: Float32Array,
@@ -101,9 +100,8 @@ export async function scoreToWavBuffer(
   score: EditableScore,
   options?: ScoreToWavOptions,
 ): Promise<ArrayBuffer> {
-  const bpm = score.bpm ?? DEFAULT_BPM;
   const events = scoreToScheduledNotes(score);
-  const timed = scheduledNotesToSeconds(events, bpm);
+  const timed = scheduledNotesToSeconds(events, buildTempoMap(score));
   if (timed.length === 0) {
     return silentWav(44100, options);
   }
@@ -124,7 +122,7 @@ export async function scoreToWavBuffer(
     }).toDestination();
 
     for (const ev of timed) {
-      const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+      const vel = ev.velocity !== undefined ? midiVelocityToSamplerGain(ev.velocity) : undefined;
       synth.triggerAttackRelease(ev.pitch, ev.duration, ev.time, vel);
     }
   }, totalSec);

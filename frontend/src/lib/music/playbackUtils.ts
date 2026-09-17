@@ -7,6 +7,7 @@ import type { EditableScore, Note } from "./scoreTypes";
 import { noteBeats, parseMeasureBeats } from "./scoreUtils";
 import { ensureStrictlyIncreasingPartTimes } from "./playbackPartSchedule";
 import { realizeSoundingTimeline } from "./realizeSoundingTimeline";
+import { beatsToSeconds, bpmAtBeat, type TempoMapEntry } from "./playbackTempoMap";
 
 export interface ScheduledNote {
   startBeat: number;
@@ -77,14 +78,14 @@ export function scoreToScheduledNotesFlat(
  */
 export function scheduledNotesToSeconds(
   events: ScheduledNote[],
-  bpm: number,
+  tempo: number | TempoMapEntry[],
 ): Array<{ time: number; pitch: string; duration: number; velocity?: number }> {
-  const secondsPerBeat = 60 / bpm;
+  const map: TempoMapEntry[] = typeof tempo === "number" ? [{ startBeat: 0, bpm: tempo }] : tempo;
   const raw = events
     .map((e) => ({
-      time: e.startBeat * secondsPerBeat,
+      time: beatsToSeconds(e.startBeat, map),
       pitch: e.pitch,
-      duration: e.durationBeats * secondsPerBeat,
+      duration: (e.durationBeats * 60) / bpmAtBeat(e.startBeat, map),
       velocity: e.velocity,
     }))
     .sort((a, b) => a.time - b.time);

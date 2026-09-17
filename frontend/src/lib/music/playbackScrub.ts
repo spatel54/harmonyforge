@@ -4,6 +4,7 @@
  */
 
 import type { EditableScore, NotePosition } from "./scoreTypes";
+import { noteBeats } from "./scoreUtils";
 
 /** Mirrors riffscore TIME_SIGNATURES (quants per full measure). */
 const TIME_SIG_QUANTS: Record<string, number> = {
@@ -97,9 +98,14 @@ function measureQuantInSpan(
 }
 
 /** Map RiffScore measure + quant back to horizontal content X for the scrub overlay. */
-/** Seconds per RiffScore quant (16 quants per quarter) at the score BPM. */
-export function secondsPerQuantForScore(score: EditableScore): number {
-  const bpm = score.bpm ?? 120;
+/** Seconds per RiffScore quant (16 quants per quarter) at the live playback BPM. */
+export function secondsPerQuantForScore(score: EditableScore, liveBpm?: number): number {
+  const bpm =
+    liveBpm != null && liveBpm > 0
+      ? liveBpm
+      : score.bpm != null && score.bpm > 0
+        ? score.bpm
+        : 120;
   return 60 / bpm / 16;
 }
 
@@ -113,18 +119,30 @@ export function contentXForPlaybackTick(
   quant: number,
   segmentDurationSec: number,
   elapsedSecSinceTick: number,
+  liveBpm?: number,
 ): number {
-  const maxQ = riffQuantsForMeasure(score, measureIndex);
-  const spq = secondsPerQuantForScore(score);
-  const quantAdvance =
+  const spq = secondsPerQuantForScore(score, liveBpm);
+  let measureNow = Math.max(0, measureIndex);
+  let quantNow =
     segmentDurationSec > 0 && spq > 0
-      ? Math.floor(elapsedSecSinceTick / spq)
-      : 0;
-  const quantNow = Math.min(
-    quant + Math.max(0, quantAdvance),
-    Math.max(0, maxQ - 1),
-  );
-  return contentXForMeasureQuant(measureIndex, quantNow, spans, score);
+      ? quant + Math.max(0, Math.floor(elapsedSecSinceTick / spq))
+      : quant;
+  while (measureNow < spans.length) {
+    const maxQ = riffQuantsForMeasure(score, measureNow);
+    if (quantNow < maxQ) break;
+    quantNow -= maxQ;
+    measureNow += 1;
+  }
+  if (measureNow >= spans.length) {
+    const last = Math.max(0, spans.length - 1);
+    return contentXForMeasureQuant(
+      last,
+      Math.max(0, riffQuantsForMeasure(score, last) - 1),
+      spans,
+      score,
+    );
+  }
+  return contentXForMeasureQuant(measureNow, Math.max(0, quantNow), spans, score);
 }
 
 export function contentXForMeasureQuant(
@@ -205,4 +223,109 @@ export function clampContentX(
   const lo = spans[0]!.startX;
   const hi = spans[spans.length - 1]!.endX;
   return Math.min(hi, Math.max(lo, x));
+}
+
+export type PlaybackMeasureQuant = { measureIndex: number; quant: number };
+
+/** Total RiffScore quants across every measure (16 per quarter). */
+export function totalPlaybackQuants(score: EditableScore): number {
+  const n = score.parts[0]?.measures.length ?? 0;
+  let total = 0;
+  for (let i = 0; i < n; i++) total += riffQuantsForMeasure(score, i);
+  return Math.max(1, total);
+}
+
+export function measureQuantToAbsQuant(
+  score: EditableScore,
+  measureIndex: number,
+  quant: number,
+): number {
+  let abs = 0;
+  const n = score.parts[0]?.measures.length ?? 0;
+  const m = Math.max(0, Math.min(measureIndex, Math.max(0, n - 1)));
+  for (let i = 0; i < m; i++) abs += riffQuantsForMeasure(score, i);
+  const maxQ = riffQuantsForMeasure(score, m);
+  return abs + Math.max(0, Math.min(quant, Math.max(0, maxQ - 1)));
+}
+
+export function absQuantToMeasureQuant(
+  score: EditableScore,
+  absQuant: number,
+): PlaybackMeasureQuant {
+  const n = score.parts[0]?.measures.length ?? 0;
+  if (n <= 0) return { measureIndex: 0, quant: 0 };
+  let remaining = Math.max(0, absQuant);
+  for (let i = 0; i < n; i++) {
+    const maxQ = riffQuantsForMeasure(score, i);
+    if (i === n - 1 || remaining < maxQ) {
+      return { measureIndex: i, quant: Math.min(Math.floor(remaining), Math.max(0, maxQ - 1)) };
+    }
+    remaining -= maxQ;
+  }
+  const last = n - 1;
+  return { measureIndex: last, quant: Math.max(0, riffQuantsForMeasure(score, last) - 1) };
+}
+
+/** 0–1 position along the whole piece for a measure + quant. */
+export function measureQuantToFraction(
+  score: EditableScore,
+  measureIndex: number,
+  quant: number,
+): number {
+  const total = totalPlaybackQuants(score);
+  return Math.min(1, Math.max(0, measureQuantToAbsQuant(score, measureIndex, quant) / total));
+}
+
+export function fractionToMeasureQuant(
+  score: EditableScore,
+  fraction: number,
+): PlaybackMeasureQuant {
+  const total = totalPlaybackQuants(score);
+  return absQuantToMeasureQuant(score, fraction * total);
+}
+
+/** Advance a parked/playing tick by elapsed wall time at the live BPM. */
+export function advancePlaybackTick(
+  score: EditableScore,
+  measureIndex: number,
+  quant: number,
+  segmentDurationSec: number,
+  elapsedSecSinceTick: number,
+  liveBpm?: number,
+): PlaybackMeasureQuant {
+  const spq = secondsPerQuantForScore(score, liveBpm);
+  const n = score.parts[0]?.measures.length ?? 0;
+  let measureNow = Math.max(0, measureIndex);
+  let quantNow =
+    segmentDurationSec > 0 && spq > 0
+      ? quant + Math.max(0, Math.floor(elapsedSecSinceTick / spq))
+      : quant;
+  while (measureNow < n) {
+    const maxQ = riffQuantsForMeasure(score, measureNow);
+    if (quantNow < maxQ) break;
+    quantNow -= maxQ;
+    measureNow += 1;
+  }
+  if (measureNow >= n) {
+    const last = Math.max(0, n - 1);
+    return { measureIndex: last, quant: Math.max(0, riffQuantsForMeasure(score, last) - 1) };
+  }
+  return { measureIndex: measureNow, quant: Math.max(0, quantNow) };
+}
+
+/** Start quant of a note inside its measure (16 quants per quarter). */
+export function noteStartQuantInMeasure(
+  score: EditableScore,
+  partId: string,
+  measureIndex: number,
+  noteIndex: number,
+): number {
+  const part = score.parts.find((p) => p.id === partId) ?? score.parts[0];
+  const measure = part?.measures[measureIndex];
+  if (!measure) return 0;
+  let beats = 0;
+  const last = Math.max(0, Math.min(noteIndex, measure.notes.length));
+  for (let i = 0; i < last; i++) beats += noteBeats(measure.notes[i]!);
+  const maxQ = riffQuantsForMeasure(score, measureIndex);
+  return Math.max(0, Math.min(Math.round(beats * 16), Math.max(0, maxQ - 1)));
 }

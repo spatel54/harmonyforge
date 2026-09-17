@@ -1,4 +1,5 @@
 import { generateSATB, SolverBudgetExceededError } from "./solver";
+import { pitchToMidi } from "./types";
 
 describe("solver", () => {
   it("generates SATB for I-IV-V-I in C major", () => {
@@ -26,6 +27,12 @@ describe("solver", () => {
     expect(bassNotes[1]).toMatch(/F[23]/);
     expect(bassNotes[2]).toMatch(/G[23]/);
     expect(bassNotes[3]).toMatch(/C[23]/);
+
+    for (const slot of result!.slots) {
+      expect(pitchToMidi(slot.voices.soprano)).toBeGreaterThan(pitchToMidi(slot.voices.alto));
+      expect(pitchToMidi(slot.voices.alto)).toBeGreaterThan(pitchToMidi(slot.voices.tenor));
+      expect(pitchToMidi(slot.voices.tenor)).toBeGreaterThan(pitchToMidi(slot.voices.bass));
+    }
   });
 
   it("returns null for invalid chord", () => {

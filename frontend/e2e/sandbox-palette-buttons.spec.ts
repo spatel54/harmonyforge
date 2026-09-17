@@ -74,33 +74,6 @@ test.describe("Sandbox palette buttons", () => {
     await selectFirstNotehead(page);
     const before = await page.locator('rect[data-testid^="note-"]').count();
     const triplet = dockTool(page, "tuplet-3");
-    // #region agent log
-    const tupSnap = await page.evaluate(() => {
-      const el = document.querySelector(
-        '[data-testid=sandbox-palette-dock] [data-tool-id="tuplet-3"]',
-      ) as HTMLButtonElement | null;
-      const data = {
-        attached: Boolean(el),
-        disabled: el?.disabled ?? null,
-        visible: el ? el.getClientRects().length > 0 : false,
-      };
-      fetch("http://127.0.0.1:7406/ingest/555ec36b-f260-4597-b685-d87aa80b5dde", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "73a776" },
-        body: JSON.stringify({
-          sessionId: "73a776",
-          runId: "post-fix",
-          hypothesisId: "C",
-          location: "e2e/sandbox-palette-buttons.spec.ts:triplet",
-          message: "tuplet-3 before click",
-          data,
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      return data;
-    });
-    if (!tupSnap.attached) throw new Error("tuplet-3 not attached after Expand all");
-    // #endregion
     await expect(triplet).toBeEnabled();
     await triplet.click();
     await expect(page.getByText("Application error")).toHaveCount(0);
@@ -126,5 +99,16 @@ test.describe("Sandbox palette buttons", () => {
 
     await page.getByRole("button", { name: "Export score" }).click();
     await expect(page.getByRole("dialog", { name: "PDF preview" })).toBeVisible();
+  });
+
+  test("clicking Adagio again clears the tempo marking", async ({ page }) => {
+    await selectFirstNotehead(page);
+    const adagio = dockTool(page, "tempo-preset-adagio");
+    await adagio.click();
+    await expect(adagio).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("[data-testid=hf-notation-overlay]").getByText(/Adagio/)).toBeVisible();
+    await adagio.click();
+    await expect(adagio).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("[data-testid=hf-notation-overlay]").getByText(/Adagio/)).toHaveCount(0);
   });
 });

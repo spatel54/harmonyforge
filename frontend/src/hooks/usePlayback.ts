@@ -10,6 +10,8 @@ import {
   scoreToScheduledNotes,
   scheduledNotesToSeconds,
 } from "@/lib/music/playbackUtils";
+import { buildTempoMap, midiVelocityToSamplerGain } from "@/lib/music/playbackTempoMap";
+import { syncPlaybackExpressionCache } from "@/lib/music/playbackExpressionBridge";
 
 const BPM = 120;
 /**
@@ -214,8 +216,9 @@ export function usePlayback({
 
       dispose();
 
+      syncPlaybackExpressionCache(score);
       const events = scoreToScheduledNotes(score);
-      const timed = scheduledNotesToSeconds(events, bpm);
+      const timed = scheduledNotesToSeconds(events, buildTempoMap(score));
 
       if (timed.length === 0) return;
 
@@ -232,7 +235,7 @@ export function usePlayback({
       const part = new Tone.Part(
         (time: number, ev: { pitch: string; duration: number; velocity?: number }) => {
           try {
-            const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+            const vel = ev.velocity !== undefined ? midiVelocityToSamplerGain(ev.velocity) : undefined;
             synth.triggerAttackRelease(ev.pitch, ev.duration, time, vel);
           } catch (err) {
             console.warn("[harmonyforge] Dropped event on trigger", err, ev);

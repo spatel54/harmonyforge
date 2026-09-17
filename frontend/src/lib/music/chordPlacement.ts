@@ -17,6 +17,7 @@
 import type { ChordSymbolEntry, EditableScore } from "./scoreTypes";
 import { beatToRiffQuant } from "./chordSymbolFormat";
 import { measureLengthBeats, noteBeats } from "./scoreUtils";
+import { pitchStringToMidi } from "./pitchMidi";
 
 /** Beats between chord symbols — mirrors server `getChordStepSize`. */
 export function harmonicRhythmStepBeats(timeSignature?: string): number {
@@ -48,6 +49,7 @@ export interface SoundingNote {
   pitchClass: number;
   /** 0 = melody; ≥1 = harmony staves */
   partIndex: number;
+  midi: number | null;
 }
 
 const MIN_PITCH_CLASSES_FOR_CHORD = 3;
@@ -78,6 +80,37 @@ export function meetsChordDetectThreshold(
   return harmony.size >= 1 && all.size >= 3;
 }
 
+/** Lowest sounding pitch class at an instant (bass). */
+export function bassPcAt(notes: SoundingNote[], time: number): number | null {
+  let best: SoundingNote | null = null;
+  for (const n of notes) {
+    if (time < n.globalBeat - 1e-4 || time >= n.endBeat - 1e-4) continue;
+    if (
+      !best ||
+      (n.midi != null && (best.midi == null || n.midi < best.midi)) ||
+      (n.midi == null && best.midi == null && n.partIndex > best.partIndex)
+    ) {
+      best = n;
+    }
+  }
+  return best?.pitchClass ?? null;
+}
+
+export function layeredPcsAt(
+  notes: SoundingNote[],
+  time: number,
+): { all: Set<number>; harmony: Set<number> } | null {
+  const all = new Set<number>();
+  const harmony = new Set<number>();
+  for (const n of notes) {
+    if (time < n.globalBeat - 1e-4 || time >= n.endBeat - 1e-4) continue;
+    all.add(n.pitchClass);
+    if (n.partIndex >= 1) harmony.add(n.pitchClass);
+  }
+  if (!meetsChordDetectThreshold(all, harmony)) return null;
+  return { all, harmony };
+}
+
 export function measureIndexForBeat(beat: number, score: EditableScore): number {
   const starts = measureDownbeatBeats(score);
   for (let i = starts.length - 1; i >= 0; i--) {
@@ -86,22 +119,12 @@ export function measureIndexForBeat(beat: number, score: EditableScore): number 
   return 0;
 }
 
-/** PCs sounding at an instant (mid-bar changes). */
-export function pitchClassesForChordDetect(
-  notes: SoundingNote[],
-  time: number,
-): Set<number> | null {
-  const all = new Set<number>();
-  const harmony = new Set<number>();
-
-  for (const n of notes) {
-    if (time < n.globalBeat - 1e-4 || time >= n.endBeat - 1e-4) continue;
-    all.add(n.pitchClass);
-    if (n.partIndex >= 1) harmony.add(n.pitchClass);
-  }
-
-  if (!meetsChordDetectThreshold(all, harmony)) return null;
-  return all;
+/** PCs for change-tracking: inner voices when they form a stack, else the full sonority. */
+export function pcsForHarmonyChange(notes: SoundingNote[], time: number): Set<number> | null {
+  const layered = layeredPcsAt(notes, time);
+  if (!layered) return null;
+  if (layered.harmony.size >= 2) return layered.harmony;
+  return layered.all;
 }
 
 /** Union of PCs in the measure — used for beat-one chord symbols (lead-sheet bar harmony). */
@@ -143,6 +166,7 @@ export function collectSoundingNotes(
               endBeat: start + dur,
               pitchClass: pc,
               partIndex,
+              midi: pitchStringToMidi(note.pitch),
             });
           }
         }
@@ -241,7 +265,7 @@ export function beatsWhereHarmonyChanges(notes: SoundingNote[], score: EditableS
   let prev: Set<number> | null = null;
 
   for (const t of times) {
-    const pcs = pitchClassesForChordDetect(notes, t);
+    const pcs = pcsForHarmonyChange(notes, t);
     if (!pcs) {
       prev = null;
       continue;
@@ -265,8 +289,9 @@ export function beatsToChordEntries(
   let lastSymbol = "";
 
   for (const beat of beats) {
-    const pcs = pitchClassesForChordDetect(notes, beat);
-    if (!pcs) continue;
+    const layered = layeredPcsAt(notes, beat);
+    if (!layered) continue;
+    const pcs = layered.harmony.size >= 3 ? layered.harmony : layered.all;
     const symbol = symbolForPcs(pcs);
     if (!symbol || symbol === "?") continue;
     if (!isMeasureDownbeat(beat, score) && symbol === lastSymbol) continue;
@@ -309,8 +334,8 @@ export function ensureChordsOnMeasureDownbeats(
     );
 
     const existing = byQuant.get(quant);
-    let symbol = resolveSymbolAtBeat(beat, mIdx);
-    if ((!symbol || symbol === "?") && existing?.symbol) symbol = existing.symbol;
+    let symbol = existing?.symbol ?? null;
+    if (!symbol || symbol === "?") symbol = resolveSymbolAtBeat(beat, mIdx);
     if ((!symbol || symbol === "?") && lastSymbol) symbol = lastSymbol;
     if ((!symbol || symbol === "?") && laterInMeasure) symbol = laterInMeasure.symbol;
     if (!symbol || symbol === "?") continue;

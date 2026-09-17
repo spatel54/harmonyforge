@@ -5,6 +5,7 @@
 import type { EditableScore } from "./scoreTypes";
 import { realizeSoundingTimeline } from "./realizeSoundingTimeline";
 import { pitchStringToMidi } from "./pitchMidi";
+import { buildTempoMap } from "./playbackTempoMap";
 
 const PPQ = 480;
 const DEFAULT_BPM = 120;
@@ -42,9 +43,7 @@ function buildTrackChunk(events: number[]): Uint8Array {
 
 function metaSetTempo(bpm: number): number[] {
   const usPerQuarter = Math.round(60_000_000 / Math.max(1, bpm));
-  const out: number[] = [0x00, 0xff, 0x51, 0x03];
-  out.push((usPerQuarter >> 16) & 0xff, (usPerQuarter >> 8) & 0xff, usPerQuarter & 0xff);
-  return out;
+  return [0xff, 0x51, 0x03, (usPerQuarter >> 16) & 0xff, (usPerQuarter >> 8) & 0xff, usPerQuarter & 0xff];
 }
 
 function endOfTrack(): number[] {
@@ -115,14 +114,21 @@ export function scoreToMidiBuffer(
   score: EditableScore,
   options?: ScoreToMidiOptions,
 ): Uint8Array {
-  const bpm = score.bpm ?? DEFAULT_BPM;
+  const map = buildTempoMap(score, DEFAULT_BPM);
   const beatsDefault = 4;
 
   const metaBytes: number[] = [];
   if (options?.attributionText) {
     metaBytes.push(...metaText(options.attributionText));
   }
-  metaBytes.push(...metaSetTempo(bpm));
+  let prevTick = 0;
+  for (const entry of map) {
+    const tick = Math.max(0, Math.round(entry.startBeat * PPQ));
+    const delta = Math.max(0, tick - prevTick);
+    prevTick = tick;
+    pushVLQ(metaBytes, delta);
+    metaBytes.push(...metaSetTempo(entry.bpm));
+  }
   metaBytes.push(...endOfTrack());
   const metaChunk = buildTrackChunk(metaBytes);
 

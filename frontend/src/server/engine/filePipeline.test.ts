@@ -6,7 +6,7 @@ import { ensureChords } from "./chordInference";
 import { parseChord } from "./chordParser";
 import { parseConfig } from "./runtime";
 import { generateSATB } from "./solver";
-import { satbToMusicXML } from "./satbToMusicXML";
+import { satbToMusicXML, resolveAdditiveHarmonyParts } from "./satbToMusicXML";
 import type { ParsedScore } from "./types";
 
 describe("File pipeline", () => {
@@ -45,7 +45,7 @@ describe("File pipeline", () => {
     };
     const withChords = ensureChords(parsed, "minor");
     expect(withChords.key.mode).toBe("minor");
-    expect(withChords.chords.some((c) => c.roman === "i" || c.roman === "iv" || c.roman === "v")).toBe(true);
+    expect(withChords.chords.some((c) => c.roman === "i" || c.roman === "iv" || c.roman === "V" || c.roman === "V7" || c.roman === "v")).toBe(true);
   });
 
   it("ensureChords with genre=jazz prefers 7th chords", () => {
@@ -164,6 +164,66 @@ describe("File pipeline", () => {
     const celloIdx = xml.indexOf("<part-name>Cello</part-name>");
     expect(violinIdx).toBeLessThan(fluteIdx);
     expect(fluteIdx).toBeLessThan(celloIdx);
+  });
+
+  it("resolveAdditiveHarmonyParts fills SATB when nothing is selected", () => {
+    expect(resolveAdditiveHarmonyParts().map((p) => p.voice)).toEqual([
+      "Alto",
+      "Tenor",
+      "Bass",
+    ]);
+    expect(resolveAdditiveHarmonyParts({ Soprano: [], Alto: [], Tenor: [], Bass: [] }).map((p) => p.name)).toEqual([
+      "Alto",
+      "Tenor",
+      "Bass",
+    ]);
+  });
+
+  it("resolveAdditiveHarmonyParts keeps unique SATB roles and adds a bass if missing", () => {
+    const parts = resolveAdditiveHarmonyParts({
+      Soprano: [],
+      Alto: ["Alto Voice"],
+      Tenor: ["Tenor Voice"],
+      Bass: [],
+    });
+    expect(parts.map((p) => p.voice)).toEqual(["Alto", "Tenor", "Bass"]);
+    expect(parts.map((p) => p.name)).toEqual(["Alto Voice", "Tenor Voice", "Bass"]);
+  });
+
+  it("additive generation without instruments still emits alto/tenor/bass under the melody", () => {
+    const parsed: ParsedScore = {
+      key: { tonic: "C", mode: "major" },
+      melody: [
+        { pitch: "C5", beat: 0, duration: 1.5 },
+        { pitch: "D5", beat: 1.5, duration: 0.5 },
+        { pitch: "E5", beat: 2, duration: 1.5 },
+        { pitch: "G5", beat: 3.5, duration: 0.5 },
+      ],
+      melodyPartName: "Melody",
+      timeSignature: { beats: 4, beatType: 4 },
+      totalBeats: 4,
+      totalMeasures: 1,
+    };
+    const withChords = ensureChords(parsed);
+    const result = generateSATB({
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    });
+    expect(result).not.toBeNull();
+    const xml = satbToMusicXML(result!, undefined, withChords, {
+      format: "partwise",
+      additiveHarmonies: true,
+      rhythmDensity: "mixed",
+    });
+    expect(xml).toContain("<part-name>Melody</part-name>");
+    expect(xml).toContain("<part-name>Alto</part-name>");
+    expect(xml).toContain("<part-name>Tenor</part-name>");
+    expect(xml).toContain("<part-name>Bass</part-name>");
+    const altoPart = xml.match(/<part id="P2">[\s\S]*?<\/part>/)?.[0] ?? "";
+    const eighthsOrDotted = (altoPart.match(/<type>eighth<\/type>/g)?.length ?? 0)
+      + (altoPart.match(/<dot\/>/g)?.length ?? 0);
+    expect(eighthsOrDotted).toBeGreaterThan(0);
   });
 
   it("satbToMusicXML additiveHarmonies preserves written melody note durations on Part 1", () => {

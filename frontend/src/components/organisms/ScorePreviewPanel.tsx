@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Play, Pause, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RiffScoreEditor } from "@/components/score/RiffScoreEditor";
 import { useScoreDisplayStore } from "@/store/useScoreDisplayStore";
@@ -90,12 +90,25 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
 
     React.useEffect(() => {
       if (!editorApi) return;
-      const unsub = editorApi.on("operation", (r: { method?: string }) => {
-        if (r.method === "play") setPlaying(true);
-        if (r.method === "pause" || r.method === "stop") setPlaying(false);
-      });
-      return unsub;
-    }, [editorApi]);
+      const nativeBtn = document.querySelector<HTMLButtonElement>(
+        ".riffscore-hf-wrapper .riff-PlaybackControls__play-button",
+      );
+      if (!nativeBtn) {
+        const unsub = editorApi.on("operation", (r: { method?: string }) => {
+          if (r.method === "play") setPlaying(true);
+          if (r.method === "pause" || r.method === "stop") setPlaying(false);
+        });
+        return unsub;
+      }
+      const sync = () => {
+        const label = `${nativeBtn.getAttribute("aria-label") ?? ""} ${nativeBtn.getAttribute("title") ?? ""}`;
+        setPlaying(/pause/i.test(label));
+      };
+      sync();
+      const mo = new MutationObserver(sync);
+      mo.observe(nativeBtn, { attributes: true, attributeFilter: ["aria-label", "title"] });
+      return () => mo.disconnect();
+    }, [editorApi, riffInstanceId]);
 
     const measureCount = score?.parts[0]?.measures.length ?? 0;
 
@@ -117,15 +130,22 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
           await new Promise((r) => setTimeout(r, 50));
         }
       }
-      if (!api) return;
+      const nativeBtn = document.querySelector<HTMLButtonElement>(
+        ".riffscore-hf-wrapper .riff-PlaybackControls__play-button",
+      );
       try {
+        const Tone = await import("tone");
+        await Tone.start();
+        Tone.getDestination().volume.rampTo(getPlaybackDestinationDb(), 0.05);
+        if (nativeBtn) {
+          nativeBtn.click();
+          return;
+        }
+        if (!api) return;
         if (playing) {
           api.pause();
           setPlaying(false);
         } else {
-          const Tone = await import("tone");
-          await Tone.start();
-          Tone.getDestination().volume.rampTo(getPlaybackDestinationDb(), 0.05);
           await api.play();
           setPlaying(true);
         }
@@ -161,14 +181,15 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
           </p>
           {score ? (
             <p
-              className="font-mono text-[10px] font-normal leading-snug text-center px-3 m-0 mt-1"
+              className="font-body text-[12px] font-normal leading-relaxed text-center px-3 m-0 mt-1"
               style={{ color: "var(--hf-text-secondary)" }}
             >
               You can edit this uploaded melody on the staff. Generate Harmonies uses your latest notes, not the original file.
             </p>
           ) : null}
           <h2
-            className="font-brand text-[22px] font-normal leading-none text-center"
+            className="font-brand text-[22px] font-normal leading-snug text-center break-words px-3"
+            data-testid="score-preview-title"
             style={{ color: "var(--hf-text-primary)" }}
           >
             {scoreTitle}
@@ -263,58 +284,30 @@ export const ScorePreviewPanel = React.forwardRef<HTMLDivElement, ScorePreviewPa
           role="region"
         >
           {score ? (
-            <>
-              {/* z-0 keeps the editor under the transport overlay so the canvas cannot steal hits from the play button. */}
-              <RiffScoreEditor
-                score={score}
-                className="relative z-0 w-full h-full min-h-[280px]"
-                enableScoreEditing
-                hideNativeNotationStrip={false}
-                includeHarmonyforgeToolbarPlugins={false}
-                persistScoreToStore={false}
-                showNoteNameLabels={showNoteNameLabels}
-                onSessionReady={onSessionReady}
-                onEditorApiReady={handleApiReady}
-                onRiffInstanceId={setRiffInstanceId}
-              />
-              {measureCount > 0 ? (
-                <div className="absolute top-3 right-3 z-[100]">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void togglePlayback();
-                    }}
-                    disabled={!canUseTransport}
-                    title={
-                      !canUseTransport
-                        ? "Loading…"
-                        : resolveRiffApi()
-                          ? playing
-                            ? "Pause"
-                            : "Play"
-                          : "Loading…"
+            <RiffScoreEditor
+              score={score}
+              className="relative z-0 w-full h-full min-h-[280px]"
+              enableScoreEditing
+              hideNativeNotationStrip={false}
+              hideNativePlayButton
+              includeHarmonyforgeToolbarPlugins={false}
+              persistScoreToStore={false}
+              showNoteNameLabels={showNoteNameLabels}
+              onSessionReady={onSessionReady}
+              onEditorApiReady={handleApiReady}
+              onRiffInstanceId={setRiffInstanceId}
+              externalPlayControl={
+                measureCount > 0
+                  ? {
+                      playing,
+                      disabled: !canUseTransport,
+                      onToggle: () => {
+                        void togglePlayback();
+                      },
                     }
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-full w-11 h-11 shrink-0 transition-opacity shadow-md",
-                      "disabled:opacity-40 disabled:cursor-not-allowed",
-                      "hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hf-accent)]",
-                    )}
-                    style={{
-                      backgroundColor: "var(--hf-text-primary)",
-                      color: "var(--hf-bg)",
-                    }}
-                    aria-label={playing ? "Pause score preview" : "Play score preview"}
-                  >
-                    {playing ? (
-                      <Pause className="w-[20px] h-[20px]" fill="currentColor" aria-hidden />
-                    ) : (
-                      <Play className="w-[20px] h-[20px] ml-0.5" fill="currentColor" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              ) : null}
-            </>
+                  : undefined
+              }
+            />
           ) : pdfPreviewUrl ? (
             <div className="relative w-full h-full flex flex-col items-center justify-center bg-black/5">
               {/* eslint-disable-next-line @next/next/no-img-element */}

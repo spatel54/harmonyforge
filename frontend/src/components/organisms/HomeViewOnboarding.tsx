@@ -8,6 +8,7 @@ import { DropzoneCopy } from "@/components/organisms/DropzoneCopy";
 import {
   TransitionOverlay,
   TRANSITION_MIN_VISIBLE_MS,
+  TRANSITION_COMPLETE_HOLD_MS,
 } from "@/components/organisms/TransitionOverlay";
 import { awaitMinElapsedSince } from "@/lib/ui/awaitMinElapsed";
 import { BrandTitle } from "@/components/atoms/BrandTitle";
@@ -85,6 +86,7 @@ export function HomeViewOnboarding() {
       }
       setIntakeComplete(true);
       await awaitMinElapsedSince(t0, TRANSITION_MIN_VISIBLE_MS.parsing);
+      await awaitMinElapsedSince(Date.now(), TRANSITION_COMPLETE_HOLD_MS);
       router.push("/document");
     } catch (e) {
       setFile(null);

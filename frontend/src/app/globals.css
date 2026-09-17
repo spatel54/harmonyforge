@@ -25,6 +25,7 @@
   /* Typography — MASTER.md §2 (align with --font-* from next/font on <html>) */
   --font-brand: var(--font-instrument), "Instrument Serif", serif;
   --font-body: var(--font-inter), "Inter", sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
   --font-system: "Satoshi", "SF Pro", ui-monospace, monospace;
 
   /* Spacing — 8-pt grid, MASTER.md §3 */
@@ -1019,16 +1020,11 @@ a.hf-pressable:active {
   }
 }
 
-/* Playback scrub overlay — measure band + pill */
-.hf-playback-measure-band {
-  background: color-mix(in srgb, var(--hf-accent, #ffb300) 12%, transparent);
-  border-left: 1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 35%, transparent);
-  border-right: 1px solid color-mix(in srgb, var(--hf-accent, #ffb300) 35%, transparent);
-  pointer-events: none;
-}
-
-.hf-playback-scrub-pill {
-  z-index: 12;
+/* Playback timeline rail (chrome) — staff playhead is native RiffScore */
+.hf-playback-timeline [role="slider"]:focus-visible {
+  outline: 2px solid var(--hf-accent, #ffb300);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* ─────────────────────────────────────────────────────────────

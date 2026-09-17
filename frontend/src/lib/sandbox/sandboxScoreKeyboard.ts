@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { insertNote, setPitchByLetter } from "@/lib/music/scoreUtils";
-import { isTypingTarget } from "@/lib/ui/isTypingTarget";
+import { isEditableTextTarget, isTypingTarget } from "@/lib/ui/isTypingTarget";
 import type { NoteSelection } from "@/store/useScoreStore";
 import { useScoreStore } from "@/store/useScoreStore";
 import {
@@ -100,72 +100,98 @@ function canTranspose(ctx: SandboxScoreKeyboardCtx): boolean {
   return ctx.selection.length > 0;
 }
 
+/** Stop RiffScore's bubble-phase listener from also handling the same shortcut. */
+export function claimScoreShortcut(e: KeyboardEvent): void {
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+}
+
+function isClipboardOrHistoryShortcut(e: KeyboardEvent, mod: boolean): boolean {
+  if (!mod || e.altKey) return false;
+  return (
+    e.code === "KeyC" ||
+    e.code === "KeyX" ||
+    e.code === "KeyV" ||
+    e.code === "KeyZ" ||
+    e.code === "KeyY" ||
+    e.code === "KeyA"
+  );
+}
+
 /**
  * Global capture-phase handler for `/sandbox` score editing.
  * Arrow ↑/↓ with selection: diatonic white-key step (no #/b in stored pitches).
  * ⌘/Ctrl+↑/↓: octave (±12 MIDI) then natural letter spelling.
  */
 export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKeyboardCtx): void {
-  if (isTypingTarget(e.target)) return;
   if (ctx.notationMode !== "edit") return;
   if (!ctx.score) return;
 
   const session = ctx.getSession();
   const mod = e.metaKey || e.ctrlKey;
+  const clipboardOrHistory = isClipboardOrHistoryShortcut(e, mod);
+
+  // Chat / lyrics keep native copy-paste and undo. Combobox + BPM do not block note shortcuts.
+  if (clipboardOrHistory) {
+    if (isEditableTextTarget(e.target)) return;
+  } else if (isTypingTarget(e.target)) {
+    return;
+  }
 
   // —— Help: ? (Shift+/) ——
   if (ctx.openHotkeyHelp && !mod && !e.altKey && e.key === "?") {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.openHotkeyHelp();
     return;
   }
 
   // —— Palette ——
   if (e.code === "F9") {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.setIsPaletteOpen((o) => !o);
     return;
   }
 
   // —— Escape ——
   if (e.code === "Escape") {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.clearSelection();
     session?.editorDeselectAll();
     return;
   }
 
-  // —— Undo / redo ——
+  // —— Undo / redo (⌘Z must not also run RiffScore undo — that skips / "redoes") ——
   if (mod && e.code === "KeyZ" && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     if (e.shiftKey) ctx.handleToolSelect("edit-redo");
     else ctx.handleToolSelect("edit-undo");
     return;
   }
   if (mod && e.code === "KeyY" && !e.shiftKey && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("edit-redo");
     return;
   }
 
   // —— Clipboard ——
   if (mod && e.code === "KeyC" && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("edit-copy");
     return;
   }
   if (mod && e.code === "KeyX" && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("edit-cut");
     return;
   }
   if (mod && e.code === "KeyV" && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("edit-paste");
     return;
   }
   if (mod && e.code === "KeyA" && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     session?.editorSelectAll();
     return;
   }
@@ -174,8 +200,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   if ((e.code === "Delete" || e.code === "Backspace") && !mod && !e.altKey) {
     const fallback = new Set(ctx.selection.map((s) => s.noteId));
     if (!hasDeletableEditorSelection(session, fallback)) return;
-    e.preventDefault();
-    e.stopPropagation();
+    claimScoreShortcut(e);
     scheduleDeleteSelectionAsRests(session, fallback, () => {
       ctx.clearSelection();
       session?.editorDeselectAll();
@@ -185,19 +210,19 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
 
   // —— Repitch / note-input mode ——
   if (!mod && !e.altKey && e.code === "KeyR") {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.setActiveTool(ctx.activeTool === "mode-repitch" ? "duration-quarter" : "mode-repitch");
     return;
   }
   if (!mod && !e.altKey && e.code === "KeyN") {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("duration-quarter");
     return;
   }
 
   // —— Duration shorter / longer ([ ]) ——
   if (!mod && !e.altKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     const dir = e.code === "BracketLeft" ? (-1 as const) : (1 as const);
     const nextTool = stepActiveDurationTool(ctx.activeTool, dir);
     const fallback = new Set(ctx.selection.map((s) => s.noteId));
@@ -215,7 +240,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
 
   // —— Rest / toggle rests (0) ——
   if (!mod && !e.altKey && (e.code === "Digit0" || e.code === "Numpad0")) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     if (ctx.selection.length > 0) ctx.handleToolSelect("duration-rest-toggle");
     else ctx.handleToolSelect("insert-rest");
     return;
@@ -224,7 +249,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   // —— Duration 1–6 (with selection → `handleToolSelect`; without → active tool) ——
   const durTool = CODE_TO_DURATION_TOOL[e.code];
   if (durTool && !mod && !e.altKey) {
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect(durTool);
     return;
   }
@@ -234,8 +259,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
     const up = e.code === "ArrowUp";
     const fallbackIds = new Set(ctx.selection.map((s) => s.noteId));
     if (canTranspose(ctx)) {
-      e.preventDefault();
-      e.stopPropagation();
+      claimScoreShortcut(e);
       if (mod) {
         scheduleTransposeNaturalLetters(session, up ? 12 : -12, fallbackIds);
       } else {
@@ -244,7 +268,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
       return;
     }
     if (!mod && isNoteInputMode(ctx.activeTool)) {
-      e.preventDefault();
+      claimScoreShortcut(e);
       ctx.moveCursorVertically(up ? -1 : 1);
       return;
     }
@@ -254,7 +278,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   // —— Cursor ← → (step-time, no modifier) ——
   if ((e.code === "ArrowLeft" || e.code === "ArrowRight") && !mod && !e.altKey) {
     if (ctx.selection.length > 0) return;
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.moveCursorHorizontally(e.code === "ArrowLeft" ? -1 : 1);
     return;
   }
@@ -263,7 +287,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   const letterMatch = /^Key([A-G])$/.exec(e.code);
   if (letterMatch && !mod && !e.altKey) {
     const letter = letterMatch[1]!;
-    e.preventDefault();
+    claimScoreShortcut(e);
     const ids = selectionNoteIds(ctx);
     session?.flushToZustand();
     const live = useScoreStore.getState().score ?? ctx.score;
@@ -286,7 +310,7 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   // —— Tie ——
   if (e.code === "Comma" && !mod && !e.altKey) {
     if (ctx.selection.length === 0) return;
-    e.preventDefault();
+    claimScoreShortcut(e);
     ctx.handleToolSelect("duration-tie");
     return;
   }
@@ -295,19 +319,19 @@ export function handleSandboxScoreKeyDown(e: KeyboardEvent, ctx: SandboxScoreKey
   if (!mod && !e.altKey) {
     if (e.code === "Equal" || e.code === "NumpadEqual") {
       if (ctx.selection.length === 0) return;
-      e.preventDefault();
+      claimScoreShortcut(e);
       ctx.handleToolSelect("pitch-accidental-natural");
       return;
     }
     if (e.code === "Minus" || e.code === "NumpadSubtract") {
       if (ctx.selection.length === 0) return;
-      e.preventDefault();
+      claimScoreShortcut(e);
       ctx.handleToolSelect("pitch-accidental-flat");
       return;
     }
     if (e.code === "Plus" || e.code === "NumpadAdd") {
       if (ctx.selection.length === 0) return;
-      e.preventDefault();
+      claimScoreShortcut(e);
       ctx.handleToolSelect("pitch-accidental-sharp");
       return;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMusicXML } from "./musicxmlParser";
+import { extractMusicXMLMetadata, parseMusicXML } from "./musicxmlParser";
 
 const D_MAJOR_PARTWISE = `<?xml version="1.0"?>
 <score-partwise version="3.1">
@@ -134,5 +134,41 @@ describe("parseMusicXML key signatures", () => {
     const score = parseMusicXML(D_MAJOR_TIMEWISE);
     expect(score).not.toBeNull();
     expect(score!.parts[0]!.measures[0]!.keySignature).toBe(2);
+  });
+});
+
+describe("extractMusicXMLMetadata", () => {
+  it("reads work-title and software", () => {
+    const meta = extractMusicXMLMetadata(`<?xml version="1.0"?>
+<score-partwise version="3.1">
+  <work><work-title>Silent Night</work-title></work>
+  <identification><encoding><software>Audiveris 5.9.0</software></encoding></identification>
+  <part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><rest/><duration>1</duration></note></measure></part>
+</score-partwise>`);
+    expect(meta.title).toBe("Silent Night");
+    expect(meta.meta).toContain("Voice");
+    expect(meta.meta).toContain("Audiveris 5.9.0");
+  });
+
+  it("uses credit-words when work-title is a leftover glyph", () => {
+    const meta = extractMusicXMLMetadata(`<?xml version="1.0"?>
+<score-partwise version="3.1">
+  <work><work-title>|</work-title></work>
+  <credit page="1"><credit-type>title</credit-type><credit-words>The First Noel</credit-words></credit>
+  <part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><rest/><duration>1</duration></note></measure></part>
+</score-partwise>`);
+    expect(meta.title).toBe("The First Noel");
+  });
+
+  it("reads namespaced MusicXML titles", () => {
+    const meta = extractMusicXMLMetadata(`<?xml version="1.0"?>
+<score-partwise xmlns="http://www.musicxml.org/dtds/partwise.dtd" version="3.1">
+  <work><work-title>Namespaced Carol</work-title></work>
+  <part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><rest/><duration>1</duration></note></measure></part>
+</score-partwise>`);
+    expect(meta.title).toBe("Namespaced Carol");
   });
 });

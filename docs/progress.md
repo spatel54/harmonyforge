@@ -6,6 +6,14 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — Sandbox note hotkeys (2026-09-16)](#wl-sandbox-note-hotkeys-2026-09-16) — ⌘C/V/Z copy, paste, undo the selected note
+- [Work log — Note editor QA pass (2026-09-16)](#wl-note-editor-qa-2026-09-16) — timeline under toolbar; Play/Pause sync; Document Play on the rail; hide duplicate RS shortcuts
+- [Work log — Measure timeline rail (2026-09-16)](#wl-playback-timeline-rail-2026-09-16) — chrome seek rail replaces the staff overlay line; park without play; native playhead restored
+- [Work log — Loading bar, playhead follow, SATB texture (2026-09-16)](#wl-loading-playhead-satb-2026-09-16) — overlay reaches 100%; scrub tracks Play; additive SATB fills bass — **`make test` 508**
+- [Work log — Chord notation + generation (2026-09-15 night)](#wl-chord-notation-generation-2026-09-15) — functional progressions; keep MusicXML harmony; key-aware lead-sheet labels — **`make test` 502**
+- [Work log — Remaining palettes + one Document Play (2026-09-15 night)](#wl-palette-rest-document-play-2026-09-15) — ties merge; start/end-repeat loops; slur/fermata/breath/fp/sfz sound; Document preview hides native RS Play — **`make test` 493**
+- [Work log — Palette playback expression (2026-09-15 late)](#wl-palette-playback-expression-2026-09-15) — dynamics/hairpins change loudness; per-bar tempo changes speed; 8va sounds an octave up — **`make test` 485**
+- [Work log — Preview title, scrub grab, palette toggle (2026-09-15)](#wl-preview-title-scrub-palette-2026-09-15) — uploaded piece name from filename/credits; draggable playhead stays put; clicking Adagio again clears the mark — **`make test` 474**
 - [Work log — CI verify lint (2026-08-15)](#wl-ci-verify-lint-2026-08-15) — unused vars + inspector toast hook deps + Actions Node 24-ready checkout/setup-node
 - [Work log — Notation overlay placement (2026-08-15 late)](#wl-notation-overlay-placement-2026-08-15) — **canonical handover** — palette marks sit **above the staff**, aligned to the note; dynamics same lane; TR/turn/mordent use Noto Music Unicode; tempo larger — **`make test` 461** · **no blocking overlay failure**
 - [Work log — Notation glyphs on canvas (2026-08-15)](#wl-notation-glyphs-2026-08-15) — coda/segno as **Noto Music signs**, not `CODA` pills — Y-placement superseded by the overlay log above
@@ -71,6 +79,179 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-sandbox-note-hotkeys-2026-09-16"></a>
+
+## Work log — Sandbox note hotkeys (2026-09-16)
+
+⌘C / ⌘V / ⌘Z looked dead: HarmonyForge handled them on `window` capture, then RiffScore handled ⌘Z again on bubble (double undo, felt like redo), and copy used Zustand selection only — empty after an SVG note click, or when BPM/instrument combobox still had focus.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **⌘Z twice / no-op** | `claimScoreShortcut` stops native RS undo from also running. Undo no longer flush→loadScore first (that stacked a no-op). Chord-track reload no longer double-pushes on every score change. Undo pops duplicate `LOAD_SCORE` until the notes actually change. |
+| **⌘⇧Z redo** | After undo, Zustand sync uses the store score as `prevScoreRef` so a second `loadScore` does not clear the redo stack. |
+| **⌘C/V no-op** | `copyEditorSelection` / `pasteEditorClipboard` use live peek ids + `readLiveScore`, not only `useToolStore.selection`. |
+| **Focus leftover** | Clicking a note focuses the editor wrapper; ⌘C/V/Z still apply from a combobox or BPM field; inspector textarea keeps native copy. |
+
+**Files:** [`sandboxScoreKeyboard.ts`](../frontend/src/lib/sandbox/sandboxScoreKeyboard.ts), [`sandboxScoreClipboard.ts`](../frontend/src/lib/sandbox/sandboxScoreClipboard.ts), [`isTypingTarget.ts`](../frontend/src/lib/ui/isTypingTarget.ts), [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx), [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx).
+
+**Verify:** Sandbox → click a note → ⌘C → click a rest → ⌘V pastes a copy; ⌘Z restores; ⌘⇧Z / ⌘Y redo. Browser QA: 3 notes+1 rest → paste 4+0 → undo 3+1 → redo 4+0. **`make test` 528**. **`make lint` 0 errors**.
+
+<a id="wl-note-editor-qa-2026-09-16"></a>
+
+## Work log — Note editor QA pass (2026-09-16)
+
+Full sandbox + Document preview pass after the timeline rail. Play/Pause had drifted because the rail called `api.pause()` while toolbar Play uses `playScore`. The timeline also sat above the RiffScore toolbar.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Play/Pause desync** | Timeline pause dispatches `hf-riffscore-pause` (patched RiffScore `pausePlayback`). Follow native Pause label + tick activity. |
+| **Timeline placement** | Portaled **under** `.riff-Toolbar` inside `.riff-ScoreEditor`. |
+| **Document Play** | One Play on the timeline rail (`data-testid="score-preview-play"`); native RS Play stays hidden. Clicks the hidden native button so toolbar BPM + parked play-from apply. |
+| **Play at end of piece** | Natural end (or Play while parked on the last beat) rewinds Play-from to bar 1. |
+| **Duplicate shortcuts** | Sandbox hides RiffScore’s Keyboard Shortcuts button; HarmonyForge header dialog remains. |
+| **Overlay a11y** | Idle `TransitionOverlay` is `aria-hidden` so Document does not announce “Generating harmonies 0%”. |
+| **Staff labels** | Skip a second “Melody” line when the part is already named Melody. |
+
+### Live QA (sandbox)
+
+Toolbar → timeline → canvas. Play becomes Pause and the rail advances; timeline click parks without autoplay; Play from park starts in bar 2. 102 palette tools; staccato / sharp / piano press; delete-to-rest; Octave ↓; F9 hides dock; letter names; Theory Inspector; Export (PDF / MusicXML / MIDI / WAV). Native notation strip stays hidden. **`make test` 518**. **`make lint` 0 errors**.
+
+### Live QA (Document)
+
+Upload `tour_demo.xml`: native Play hidden; rail Play + BPM + duration strip; letter names; timeline follows Play.
+
+<a id="wl-playback-timeline-rail-2026-09-16"></a>
+
+## Work log — Measure timeline rail (2026-09-16)
+
+The yellow staff overlay fight RiffScore (pixel spans, dual playheads, `api.play()` vs toolbar `playScore`). Seeking now lives in editor chrome.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Staff overlay line** | Removed `PlaybackScrubOverlay`. Native `[data-testid="playback-cursor"]` is visible again and does not steal clicks (`pointer-events: none`). |
+| **Seek UI** | `PlaybackTimelineRail` above the score: drag or click parks Play-from. Does **not** call `api.play()`. |
+| **Note / bar click** | Click a note or measure gutter parks `__HF_RIFFSCORE_PLAY_FROM` via `parkPlaybackStart`. Toolbar **Play** / **Space** / **P** consume it at toolbar BPM. |
+| **Follow while playing** | Thumb interpolates from `__HF_ON_PLAYBACK_POSITION` + live BPM (`buildLiveTempoMap`). Toolbar Play is detected via remap generation because `playScore` does not always emit `operation play`. |
+
+**`make test`:** **517**. **`make lint`:** **0 errors**.
+
+**Browser QA (sandbox):** Timeline click parks **Bar 2 · beat 1** without starting Play. Toolbar Play advances the rail (**beat 1 → beat 4**) and shows the native staff cursor (`opacity: 1`). Timeline click during Play pauses and re-parks. Note click parks **Bar 1 · beat 4** (`quant` 48) without autoplay. Overlay line gone.
+
+<a id="wl-loading-playhead-satb-2026-09-16"></a>
+
+## Work log — Loading bar, playhead follow, SATB texture (2026-09-16)
+
+Upload overlay sat at ~3–4% then vanished. The scrub line could be dragged but did not travel with Play. Generated inner voices looked unfinished (no bass, parallel half notes).
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Loading %** | Fast intake uses a short curve (~80%+ in 2s), jumps to **100%** when work finishes, and holds 100% briefly before navigation. |
+| **Playhead** | Follows RiffScore playback ticks / Tone transport, not only the `play` API event; continues across barlines. |
+| **SATB** | Empty or alto+tenor selections get a **bass** part; instruments map to unique inner voices; solver prefers root bass and less parallel inner motion; mixed rhythm uses melody onsets from all input parts. |
+
+**`make test`:** **508**. **`make lint`:** 0 errors. Browser: sandbox Play moved the scrub line **24 → 503px** over ~2.4s.
+
+<a id="wl-chord-notation-generation-2026-09-15"></a>
+
+## Work log — Chord notation + generation (2026-09-15 night)
+
+Generated SATB used a greedy melody-in-chord picker (often iii / repeated I, almost never V in minor). Sandbox then **threw away** engine `<harmony>` labels and re-detected from every passing tone.
+
+### End goal
+
+Progressions read as tonal harmony (I–IV–V–I, minor V–i). Chord symbols on the staff match the intended lead sheet, not Tonal.js polychords.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Inference** | Functional weights, ii→V→I bonuses, schema prior, stay-on-tonic when the melody is inside I, **V/V7 in minor**. |
+| **Sandbox overwrite** | Keep parsed MusicXML chords; detect only when the file has none. |
+| **Detect** | Prefer inner-voice stacks over melody passing tones; diatonic + bass ranking; simplify C6/add9/slash inversions. |
+| **Notation** | Don't replace existing downbeat symbols; skip duplicate `<harmony>` in a measure. |
+
+**`make test`:** **502**. **`make lint`:** 0 errors.
+
+### Verify
+
+Generate Harmonies on a C-major melody that outlines I–IV–V–I — chord track should show **C F G C** (or G7), not a new label every passing tone. A minor cadences should show **E** or **E7** into **Am**.
+
+<a id="wl-palette-rest-document-play-2026-09-15"></a>
+
+## Work log — Remaining palettes + one Document Play (2026-09-15 night)
+
+Continue [palette playback expression](#wl-palette-playback-expression-2026-09-15). Remaining palette marks now change the sounding timeline, and the Document upload preview has a single Play control.
+
+### End goal
+
+Every dock tool either mutates the score or is a known sandbox page path. Playback follows ties, repeat barlines, D.C. al Fine (including Fine), slurs, fermatas, breaths, fp, and sfz. Upload preview shows **one** Play button.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Tied notes double-attacked** | `realizeSoundingTimeline` merges start/continue/stop into one duration. |
+| **Start/end-repeat played the whole piece then appended** | Loop is `[0, loopEnd] + [loopStart, loopEnd] + remainder`. |
+| **D.C. skipped Fine** | Second pass includes the Fine measure. |
+| **Slur / fermata / breath inaudible** | Slur 1.08× overlap; fermata 2× hold + 0.5 beat delay; breath 0.25 / caesura 0.5. |
+| **fp stayed loud; sfz stuck** | fp splits loud→piano then stays *p*; sfz accents one note. |
+| **Two Play buttons on Document** | `hideNativePlayButton` hides `.riff-PlaybackControls__play-button`; overlay `score-preview-play` remains. |
+| **Repitch button stuck on** | Clicking Repitch again returns to quarter-note entry (same as **R**). |
+
+**Files:** [`realizeSoundingTimeline.ts`](../frontend/src/lib/music/realizeSoundingTimeline.ts), [`ScorePreviewPanel.tsx`](../frontend/src/components/organisms/ScorePreviewPanel.tsx), [`RiffScoreEditor.tsx`](../frontend/src/components/score/RiffScoreEditor.tsx), [`sandbox/page.tsx`](../frontend/src/app/sandbox/page.tsx).
+
+**`make test`:** **493**. **`make lint`:** 0 errors.
+
+### Verify
+
+- **Sandbox:** expand palettes, apply Tie / Start+End repeat / Slur / Fermata / Breath / fp — Play should follow. Clicking Repitch twice should clear it.
+- **Document:** upload XML → one circular Play overlay; native toolbar Play hidden.
+
+<a id="wl-palette-playback-expression-2026-09-15"></a>
+
+## Work log — Palette playback expression (2026-09-15 late)
+
+Sandbox Play ignored palette dynamics (same loudness) and used one global BPM, so Adagio on bar 1 and Allegro on bar 3 played at the last-clicked speed.
+
+### End goal
+
+Palette markings that have a sounding meaning change playback: dynamics/hairpins/accents change loudness, per-bar tempo changes speed, staccato shortens, 8va/8vb transpose.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **One global BPM** | Measures store `tempoBpm`. `buildTempoMap` + `remapPlaybackTimeline` stretch the RiffScore timeline. MIDI/WAV/`usePlayback` use the same map. `score.bpm` stays the measure-0 / toolbar start tempo. |
+| **Dynamics inaudible** | Lookup by measure+quant and RiffScore letter+octave (accidentals live off the pitch string). Sampler gain curve so *p* vs *f* is obvious on single-layer piano samples. Hairpins and cresc./dim. interpolate. |
+| **8va visual-only** | Sounding timeline transposes ±12 while the line is open. |
+
+**`make test`:** **485**. **`make lint`:** 0 errors.
+
+### Verify
+
+Reload **`/sandbox`**, put **p** on an early note and **f** on a later one, Play. Put **Adagio** on bar 1 and **Allegro** on a later bar, Play — the second bar should run twice as fast.
+
+<a id="wl-preview-title-scrub-palette-2026-09-15"></a>
+
+## Work log — Preview title, scrub grab, palette toggle (2026-09-15)
+
+Audiveris uploads showed a blank/glyph title (`Voice · Audiveris 5.9.0` only), the playhead could not be dragged, and clicking an already-selected tempo (Adagio) did not remove the mark.
+
+### Fixes
+- **Title:** `extractMusicXMLMetadata` uses local names + `credit-words`; `deriveDisplayScoreTitle` prefers the uploaded filename over generic/`Score`/part-name/glyph titles.
+- **Scrub:** document-level pointer capture so the staff SVG cannot steal the drag; pause-time rAF no longer copies the hidden native cursor (that snap-back made grabs feel broken).
+- **Palette toggle:** clicking the same tempo / repeat / decorative barline / tuplet again clears it. Pressed state for tempo follows measure `tempoText`.
+
+**`make test`:** **474**. Browser: Document title shows file stem; Adagio on then off; playhead drag holds position.
 
 <a id="wl-ci-verify-lint-2026-08-15"></a>
 
