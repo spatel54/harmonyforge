@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <defs>
+    <!-- Modern Tech Gradient 1: Deep Blue to Cyan (Logic/Harmony) -->
+    <linearGradient id="gradHarmony" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00C9FF" />
+      <stop offset="100%" stop-color="#92FE9D" />
+    </linearGradient>
+
+    <!-- Modern Tech Gradient 2: Vibrant Orange/Red (Forge/Creation) -->
+    <linearGradient id="gradForge" x1="200" y1="200" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF416C" />
+      <stop offset="100%" stop-color="#FF4B2B" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark Background for Contrast (matches the app theme) -->
+  <rect width="400" height="400" rx="40" fill="#0F1115" />
+
+  <g transform="translate(60, 60)">
+    <!-- 
+      The concept is an interplay between 'H' and 'F'.
+      We use a thick, monoline geometric style popular in modern tech (e.g. Figma, Vercel).
+    -->
+    
+    <!-- Left Pillar (The 'H' left leg and musical staff line hint) -->
+    <rect x="40" y="40" width="40" height="200" rx="20" fill="url(#gradHarmony)" />
+    
+    <!-- Middle Bridge (The 'H' crossbar and anvil surface) -->
+    <rect x="100" y="140" width="80" height="40" rx="20" fill="url(#gradHarmony)" />
+
+    <!-- Right Pillar (The 'H' right leg and 'F' spine) -->
+    <rect x="200" y="40" width="40" height="200" rx="20" fill="url(#gradForge)" />
+
+    <!-- 'F' Top Arm (Spark / Note flag) -->
+    <path d="M220 40 L280 40 A20 20 0 0 1 300 60 A20 20 0 0 1 280 80 L220 80 Z" fill="url(#gradForge)" />
+    
+    <!-- 'F' Middle Arm -->
+    <path d="M220 140 L250 140 A20 20 0 0 1 270 160 A20 20 0 0 1 250 180 L220 180 Z" fill="url(#gradForge)" />
+
+    <!-- A circular 'spark' or 'note head' accent -->
+    <circle cx="280" cy="220" r="20" fill="url(#gradHarmony)" />
+  </g>
+</svg>
