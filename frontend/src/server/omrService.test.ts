@@ -106,6 +106,89 @@ describe("mintOmrGrant", () => {
   });
 });
 
+/** Mirror of isOriginAllowed() in services/omr/server.mjs. */
+function originPatternToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[A-Za-z0-9-]+");
+  return new RegExp(`^${escaped}$`);
+}
+
+function isOriginAllowed(origin: string, allowed: string[]): boolean {
+  if (!origin) return false;
+  for (const entry of allowed) {
+    if (entry === origin) return true;
+    if (!entry.includes("*")) continue;
+    try {
+      if (originPatternToRegExp(entry).test(origin)) return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+describe("isOriginAllowed (sidecar CORS contract)", () => {
+  const allowed = [
+    "https://harmonyforge.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://harmonyforge-sjp10-9620s-projects.vercel.app",
+    "https://harmonyforge-*-sjp10-9620s-projects.vercel.app",
+  ];
+
+  it("admits the exact production origin", () => {
+    expect(isOriginAllowed("https://harmonyforge.vercel.app", allowed)).toBe(true);
+  });
+
+  it("admits localhost with its port", () => {
+    expect(isOriginAllowed("http://localhost:3000", allowed)).toBe(true);
+    expect(isOriginAllowed("http://localhost:9999", allowed)).toBe(false);
+  });
+
+  it("admits hashed and branch preview hostnames (which are flat, not subdomains)", () => {
+    expect(
+      isOriginAllowed("https://harmonyforge-eylkz49hj-sjp10-9620s-projects.vercel.app", allowed),
+    ).toBe(true);
+    expect(
+      isOriginAllowed("https://harmonyforge-git-main-sjp10-9620s-projects.vercel.app", allowed),
+    ).toBe(true);
+  });
+
+  it("REJECTS lookalikes a naive suffix match would admit", () => {
+    expect(isOriginAllowed("https://evilsjp10-9620s-projects.vercel.app", allowed)).toBe(false);
+    expect(isOriginAllowed("https://harmonyforge.vercel.app.evil.com", allowed)).toBe(false);
+  });
+
+  it("the glob never crosses a dot — no other Vercel app can match", () => {
+    // If `*` matched dots, this attacker-controlled host would satisfy the
+    // pattern by embedding the expected suffix after its own domain.
+    expect(
+      isOriginAllowed("https://harmonyforge-evil.attacker.com-sjp10-9620s-projects.vercel.app", allowed),
+    ).toBe(false);
+    expect(
+      isOriginAllowed("https://harmonyforge-x.evil-sjp10-9620s-projects.vercel.app", allowed),
+    ).toBe(false);
+  });
+
+  it("rejects a wrong scheme on an otherwise-matching host", () => {
+    expect(
+      isOriginAllowed("http://harmonyforge-abc-sjp10-9620s-projects.vercel.app", allowed),
+    ).toBe(false);
+  });
+
+  it("rejects empty, garbage, and unlisted origins", () => {
+    expect(isOriginAllowed("", allowed)).toBe(false);
+    expect(isOriginAllowed("not-a-url", allowed)).toBe(false);
+    expect(isOriginAllowed("https://evil.example", allowed)).toBe(false);
+  });
+
+  it("rejects everything when the allowlist is empty", () => {
+    expect(isOriginAllowed("https://harmonyforge.vercel.app", [])).toBe(false);
+  });
+});
+
 describe("parseRemoteOmrDocuments", () => {
   it("parses a MusicXML document returned by the sidecar", () => {
     const parsed = parseRemoteOmrDocuments([

@@ -49,6 +49,8 @@ export default function Home() {
   const [omrTransport, setOmrTransport] = React.useState<OmrTransport | null>(null);
   /** A sidecar is configured but not answering — a cold start, not a setup gap. */
   const [omrRemoteConfigured, setOmrRemoteConfigured] = React.useState(false);
+  /** Sidecar is healthy but refuses this origin (preview deployment). */
+  const [omrOriginBlocked, setOmrOriginBlocked] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -59,13 +61,14 @@ export default function Home() {
           omr?: {
             ready?: boolean;
             transport?: OmrTransport;
-            remote?: { configured?: boolean };
+            remote?: { configured?: boolean; originAllowed?: boolean | null };
           };
         }) => {
           if (cancelled) return;
           setOmrReady(data.omr?.ready ?? false);
           setOmrTransport(data.omr?.transport ?? "none");
           setOmrRemoteConfigured(data.omr?.remote?.configured === true);
+          setOmrOriginBlocked(data.omr?.remote?.originAllowed === false);
         },
       )
       .catch(() => {
@@ -73,6 +76,7 @@ export default function Home() {
           setOmrReady(null);
           setOmrTransport(null);
           setOmrRemoteConfigured(false);
+          setOmrOriginBlocked(false);
         }
       });
     return () => {
@@ -181,7 +185,13 @@ export default function Home() {
                   style={{ color: "var(--hf-text-primary)" }}
                 >
                   <strong>PDF uploads:</strong>{" "}
-                  {omrRemoteConfigured ? (
+                  {omrOriginBlocked ? (
+                    <>
+                      optical music recognition isn’t enabled for this URL. Use the
+                      production site — preview deployments aren’t authorized to call
+                      the OMR service.
+                    </>
+                  ) : omrRemoteConfigured ? (
                     <>
                       the OMR service isn’t responding yet. A cold instance takes a few
                       seconds to start — retry shortly.

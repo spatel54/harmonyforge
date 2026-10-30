@@ -77,7 +77,11 @@ docker-run:
 GCP_PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
 GCP_REGION  ?= us-central1
 OMR_SERVICE ?= harmonyforge-omr
-VERCEL_ORIGIN ?= https://harmonyforge.vercel.app
+# Browser origins allowed to call /convert. Exact matches plus `*` globs, where
+# `*` never crosses a dot (see isOriginAllowed in services/omr/server.mjs).
+# Vercel preview hostnames are FLAT (harmonyforge-<hash>-<team>.vercel.app), so
+# they need a within-label glob, not a `*.` subdomain wildcard.
+OMR_ORIGINS ?= https://harmonyforge.vercel.app,https://harmonyforge-sjp10-9620s-projects.vercel.app,https://harmonyforge-*-sjp10-9620s-projects.vercel.app,http://localhost:3000,http://localhost:3001
 
 # Generate a shared secret once, then set it on BOTH Cloud Run and Vercel.
 omr-secret:
@@ -118,8 +122,7 @@ omr-deploy:
 		--concurrency=1 \
 		--min-instances=0 \
 		--max-instances=2 \
-		--set-env-vars "OMR_ALLOWED_ORIGINS=$(VERCEL_ORIGIN),HF_AUDIVERIS_MAX_MS=900000" \
-		--set-env-vars "OMR_SHARED_SECRET=$$OMR_SHARED_SECRET"
+		--set-env-vars "^|^OMR_ALLOWED_ORIGINS=$(OMR_ORIGINS)|HF_AUDIVERIS_MAX_MS=900000|OMR_SHARED_SECRET=$$OMR_SHARED_SECRET"
 
 # Confirm the deployed sidecar reports Audiveris + Java ready.
 omr-health:

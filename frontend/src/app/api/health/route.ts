@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getOmrStatus } from "@/server/engine/parsers/audiverisPipeline";
 import { probeOmrService } from "@/server/omrService";
 
@@ -14,9 +14,19 @@ export const dynamic = "force-dynamic";
  * Local wins when both are present so `make dev` never silently bills a
  * remote service for work the machine can already do.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const local = getOmrStatus();
-  const remote = await probeOmrService();
+
+  // The page's origin is this deployment's own origin — that is what the
+  // browser will send when it uploads to the sidecar. Prefer the forwarded
+  // host (Vercel) so previews report their real, per-deployment origin.
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
+  const browserOrigin = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : req.nextUrl.origin;
+
+  const remote = await probeOmrService(browserOrigin);
 
   const transport = local.ready ? "local" : remote.ready ? "remote" : "none";
   const ready = transport !== "none";
@@ -32,7 +42,13 @@ export async function GET() {
       ready,
       transport,
       local: { ready: local.ready, details: local.details },
-      remote: { configured: remote.configured, ready: remote.ready, detail: remote.detail },
+      remote: {
+        configured: remote.configured,
+        ready: remote.ready,
+        originAllowed: remote.originAllowed,
+        origin: browserOrigin,
+        detail: remote.detail,
+      },
     },
   });
 }

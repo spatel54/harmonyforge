@@ -39,6 +39,42 @@ const ALLOWED_ORIGINS = (process.env.OMR_ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/**
+ * Origin allowlisting: exact matches, plus `*` globs for Vercel previews.
+ *
+ * Previews cannot be enumerated (the hostname embeds a deployment hash) and —
+ * critically — a Vercel preview host is *flat*:
+ *   harmonyforge-<hash>-sjp10-9620s-projects.vercel.app
+ * There is no dot before the team segment, so a `*.suffix` subdomain wildcard
+ * never matches one, and `*.vercel.app` would admit every app on Vercel.
+ *
+ * So `*` is a within-label glob: it matches `[A-Za-z0-9-]+` and **never a dot**,
+ * which keeps `https://harmonyforge-*-sjp10-9620s-projects.vercel.app` from
+ * being satisfied by an attacker-controlled host on another domain. Everything
+ * outside the `*` is matched literally (regex-escaped) and anchored at both ends.
+ */
+function originPatternToRegExp(pattern) {
+  const escaped = pattern
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[A-Za-z0-9-]+");
+  return new RegExp(`^${escaped}$`);
+}
+
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  for (const entry of ALLOWED_ORIGINS) {
+    if (entry === origin) return true;
+    if (!entry.includes("*")) continue;
+    try {
+      if (originPatternToRegExp(entry).test(origin)) return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
 /** Matches DEFAULT_AUDIVERIS_MS in the app. Cloud Run allows 60-minute requests. */
 const AUDIVERIS_MS = Number.parseInt(process.env.HF_AUDIVERIS_MAX_MS ?? "900000", 10);
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -255,7 +291,7 @@ function convert(buffer, originalName) {
 
 function corsHeaders(origin) {
   // Explicit allowlist: this endpoint spends CPU, so it is never open to `*`.
-  const allowed = origin && ALLOWED_ORIGINS.includes(origin);
+  const allowed = isOriginAllowed(origin);
   return allowed
     ? {
         "Access-Control-Allow-Origin": origin,
@@ -308,18 +344,30 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     const status = omrStatus();
+    // The app passes the browser origin it is about to upload from. Without
+    // this, a Vercel preview reports "ready" and then fails the upload with an
+    // opaque CORS error — the health answer must cover the origin too.
+    const probedOrigin = url.searchParams.get("origin");
+    const originAllowed = probedOrigin ? isOriginAllowed(probedOrigin) : null;
+    const details = [...status.details];
+    if (originAllowed === false) {
+      details.push(
+        `origin not allowed: ${probedOrigin} — add it to OMR_ALLOWED_ORIGINS and redeploy`,
+      );
+    }
     sendJson(res, status.ready ? 200 : 503, {
       ok: status.ready,
       audiveris: status.audiveris,
       java: status.java,
       ready: status.ready,
-      details: status.details,
+      originAllowed,
+      details,
     }, cors);
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/convert") {
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && !isOriginAllowed(origin)) {
       sendJson(res, 403, { error: "origin not allowed" }, cors);
       return;
     }

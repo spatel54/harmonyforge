@@ -53,33 +53,67 @@ export function mintOmrGrant(config: OmrServiceConfig, now = Date.now()): OmrGra
  * Cloud Run instance answering slowly is reported as not-ready rather than
  * blocking (the next poll will catch it once warm).
  */
+export interface OmrProbe {
+  configured: boolean;
+  ready: boolean;
+  /** Null when not checked; false means uploads from this origin would be refused. */
+  originAllowed: boolean | null;
+  detail?: string;
+}
+
 export async function probeOmrService(
+  browserOrigin?: string,
   timeoutMs = 3000,
-): Promise<{ configured: boolean; ready: boolean; detail?: string }> {
+): Promise<OmrProbe> {
   const config = getOmrServiceConfig();
   if (!config) {
     return {
       configured: false,
       ready: false,
+      originAllowed: null,
       detail: "OMR_SERVICE_URL / OMR_SHARED_SECRET not set — PDF intake disabled",
     };
   }
+  // Pass the origin the browser will upload from. A sidecar can be perfectly
+  // healthy and still refuse this deployment's origin (Vercel previews), and
+  // reporting "ready" in that case produces an opaque CORS failure at upload.
+  const probeUrl = new URL(`${config.url}/health`);
+  if (browserOrigin) probeUrl.searchParams.set("origin", browserOrigin);
+
   try {
-    const res = await fetch(`${config.url}/health`, {
+    const res = await fetch(probeUrl, {
       signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
     if (!res.ok) {
-      return { configured: true, ready: false, detail: `sidecar /health returned ${res.status}` };
+      return {
+        configured: true,
+        ready: false,
+        originAllowed: null,
+        detail: `sidecar /health returned ${res.status}`,
+      };
     }
-    const body = (await res.json()) as { ready?: boolean; details?: string[] };
+    const body = (await res.json()) as {
+      ready?: boolean;
+      originAllowed?: boolean | null;
+      details?: string[];
+    };
+    const originAllowed = body.originAllowed ?? null;
+    // Ready means "a PDF uploaded from here will actually convert".
+    const ready = body.ready === true && originAllowed !== false;
     return {
       configured: true,
-      ready: body.ready === true,
-      detail: body.ready === true ? undefined : (body.details ?? []).join("; ") || "sidecar not ready",
+      ready,
+      originAllowed,
+      detail: ready ? undefined : (body.details ?? []).join("; ") || "sidecar not ready",
     };
   } catch (e) {
     const reason = e instanceof Error ? e.message : "unknown error";
-    return { configured: true, ready: false, detail: `sidecar unreachable: ${reason}` };
+    return {
+      configured: true,
+      ready: false,
+      originAllowed: null,
+      detail: `sidecar unreachable: ${reason}`,
+    };
   }
 }
