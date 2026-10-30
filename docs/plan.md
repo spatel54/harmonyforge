@@ -6,6 +6,7 @@ Skim **Status at a glance** below, then use the numbered **Plan** checklist for 
 
 ### Status at a glance
 
+- **Git remote (2026-10-30):** **Do not update `salt-family/harmonyforge`.** Push / PR / CI only to **`spatel54/harmonyforge`**. See **[progress.md standing order](progress.md#standing-order--github-remotes-2026-10-30)** · [`.cursor/rules/git-remote.mdc`](../.cursor/rules/git-remote.mdc).
 - **HF monogram SVG (2026-10-30):** **[progress.md](progress.md#wl-hf-monogram-svg-2026-10-30)** — `LogoMark` + README use **`logo-mark.svg`**; favicons/OG stay PNG.
 - **HF monogram brand (2026-10-30):** **[progress.md](progress.md#wl-hf-monogram-brand-2026-10-30)** — new white-on-black HF mark kit + README badge; Sonata/Nocturne unchanged; **`spatel54/main`** merged + upstream.
 - **Sandbox note hotkeys (2026-09-16):** **[progress.md](progress.md#wl-sandbox-note-hotkeys-2026-09-16)** — ⌘/Ctrl+C/X/V copy-cut-paste the selected note; ⌘/Ctrl+Z undoes once; ⌘⇧Z / ⌘Y redo. **`make test` 528**.

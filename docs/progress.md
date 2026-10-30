@@ -1,5 +1,10 @@
 # Progress (RALPH Loop)
 
+### Standing order — GitHub remotes (2026-10-30)
+
+**Do not update [`salt-family/harmonyforge`](https://github.com/salt-family/harmonyforge) anymore.**  
+Canonical push / PR / CI / Vercel git target is **[`spatel54/harmonyforge`](https://github.com/spatel54/harmonyforge)** only (`spatel54` remote / `spatel54/main`). Treat any local `origin` → `salt-family` as legacy read-only unless Superman explicitly says otherwise. Agent rule: [`.cursor/rules/git-remote.mdc`](../.cursor/rules/git-remote.mdc).
+
 ### How to read this file
 
 This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Handover). Newest context often appears in **work log** sections near the top and in **Consolidated status**. Older **session logs** stay for archaeology—use search or the links below rather than reading top-to-bottom once.

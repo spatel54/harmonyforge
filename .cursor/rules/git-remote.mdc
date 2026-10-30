@@ -1,0 +1,11 @@
+---
+description: Canonical GitHub remote for HarmonyForge — do not update salt-family
+alwaysApply: true
+---
+
+### Git remotes (standing order — 2026-10-30)
+
+- **Canonical repo:** [`spatel54/harmonyforge`](https://github.com/spatel54/harmonyforge)
+- **Push / PR / CI / Vercel git integration:** use **`spatel54`** only (`git push spatel54 …`, upstream `spatel54/main`).
+- **Do not update** [`salt-family/harmonyforge`](https://github.com/salt-family/harmonyforge) — no pushes, force-pushes, PR merges, or “sync origin” to that org unless Superman explicitly revokes this note.
+- Local clones may still list `origin` → `salt-family`; treat that as **legacy / read-only**. Prefer `git push spatel54 HEAD` (or retarget `origin` to spatel54 when asked).

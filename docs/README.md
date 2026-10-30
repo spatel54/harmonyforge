@@ -2,6 +2,8 @@
 
 Plans, ADRs, design specs, and long-running logs. **New here?** Read the root [README.md](../README.md), then use the table below.
 
+**GitHub:** do **not** update [`salt-family/harmonyforge`](https://github.com/salt-family/harmonyforge). Canonical repo is [`spatel54/harmonyforge`](https://github.com/spatel54/harmonyforge) — see [progress.md standing order](progress.md#standing-order--github-remotes-2026-10-30).
+
 ---
 
 ## Reading order
