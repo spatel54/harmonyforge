@@ -2,6 +2,44 @@
 
 ---
 
+## [2026-10-30 Session 4] — Close the OMR origin edges (localhost + Vercel previews)
+
+**Session goal:** Make OMR usable from local dev and preview deployments, and stop `/api/health` claiming "ready" on origins the sidecar would refuse.
+
+### Reasoning
+
+Two coupled defects after the sidecar went live: the allowlist held only the production origin, and the health probe is **server-side** (no `Origin` header), so the sidecar answered about *itself* rather than about the caller. A preview therefore hid the banner and then failed at upload with an opaque CORS error — strictly worse than an honest "unavailable".
+
+### Action
+
+| Change | File |
+|---|---|
+| `*` globs in the origin allowlist; `/health?origin=` returns `originAllowed` | `services/omr/server.mjs` |
+| `probeOmrService(origin)`; `ready` now means "an upload from HERE will convert" | `frontend/src/server/omrService.ts` |
+| Forward the deployment's own origin via `x-forwarded-host` | `frontend/src/app/api/health/route.ts` |
+| Third banner message: "not authorized for this URL" vs cold-start vs not-configured | `frontend/src/app/page.tsx` |
+| `OMR_ORIGINS` (prod + team + preview glob + localhost 3000/3001); single `--set-env-vars` with `^|^` delimiter | `Makefile` |
+| 8 new origin-contract tests | `frontend/src/server/omrService.test.ts` |
+
+Commit `4477ebc8`, pushed to `spatel54/main`; Cloud Run revision `00003`.
+
+### Learning
+
+- **A `*.suffix` subdomain wildcard is the wrong tool for Vercel previews.** Preview hostnames are **flat** — `harmonyforge-<hash>-sjp10-9620s-projects.vercel.app` has no dot before the team segment — so the subdomain wildcard never matches, and the tempting fallback `*.vercel.app` would admit **every app on Vercel** to a metered free tier. The glob now matches `[A-Za-z0-9-]+` and never a dot, anchored, with everything else regex-escaped. **My own test caught this** before deploy.
+- Repeated `--set-env-vars` flags are fragile when a value contains commas; one flag with the `^|^` alternate delimiter is the robust form.
+
+### Verification
+
+Live against revision 00003: prod / localhost:3000 / branch-preview origins all receive `access-control-allow-origin`; `evil.example` blocked. `/health?origin=` → `true / true / false`, and `null` when unasked. Production `/api/health` now reports `originAllowed: true` with the resolved `origin`. 549 tests, lint clean, build clean.
+
+### Progression / remaining
+
+- **Local dev still needs a one-time step:** add `OMR_SERVICE_URL` + `OMR_SHARED_SECRET` to `frontend/.env.local` to get `transport: "remote"` without a JDK. Until then the local banner persists — the original complaint is fixed in production and *available* locally, not automatic.
+- **Preview health not verified end-to-end:** the project has SSO deployment protection, so preview URLs could not be curled anonymously. Origin logic is proven at the sidecar and in tests, not on a live preview page.
+- **Secret hygiene:** `OMR_SHARED_SECRET` is a plain Cloud Run env var, readable by anyone with console access to `harmonyforge-omr`. Fine solo; Secret Manager is the hardening step if collaborators appear.
+
+---
+
 ## [2026-10-30 Session 3] — Lane C deployed: PDF → MusicXML works in the cloud (verified on real scores)
 
 **Session goal:** Stand up the Cloud Run OMR sidecar and prove a real PDF converts end-to-end.
