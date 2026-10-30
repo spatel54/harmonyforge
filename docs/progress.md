@@ -118,7 +118,17 @@ Superman: failure is on **PDF uploads**, not confirmed on XML. OMR scores keep e
 | **Chord inference on PDF OMR** | `parsedScoreForChordInference` drops `inputParts` before `ensureChords`; export score restores them for additive MusicXML. |
 | **Edited multi-staff Document score** | `resolveMelodyXmlForGeneration` exports **melody-only** (part 0) when `parts.length > 1`. |
 
-**`make test`:** see latest count after this follow-up.
+### Follow-up — piano OMR bass poisons soprano lock (same day)
+
+Reproduced with Mutopia Kinderszenen PDF via remote OMR: one **Piano** part, 276 notes spanning ~B2–D6. Melody lock → `generateSATB` **NULL**; same chords without melody → **OK**.
+
+| Gap | Fix |
+|-----|-----|
+| **Cantus** | `extractCantusMelody` keeps ≥C4 (or upper half) before inference/solve. |
+| **Recovery** | Final attempt drops melody lock (`genre=pop`). |
+| **Error banner** | Document toast uses `--hf-text-primary` (readable on Sonata cream). |
+
+**`make test`:** run after this follow-up.
 
 <a id="wl-hf-monogram-svg-2026-10-30"></a>
 

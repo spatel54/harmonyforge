@@ -468,8 +468,13 @@ export default function DocumentPage() {
         <AppFooterStrip />
         {error && (
           <div
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg font-mono text-sm bg-red-500/20 text-red-200 border border-red-500/50"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[min(92vw,36rem)] px-4 py-3 rounded-lg font-mono text-sm shadow-md border"
             role="alert"
+            style={{
+              backgroundColor: "var(--semantic-violation-10)",
+              borderColor: "color-mix(in srgb, var(--semantic-violation) 45%, var(--hf-detail))",
+              color: "var(--hf-text-primary)",
+            }}
           >
             {error}
           </div>

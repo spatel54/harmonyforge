@@ -7,6 +7,7 @@
 
 import { generateSATB, SolverBudgetExceededError, type SolverResult } from "./solver";
 import { ensureChords } from "./chordInference";
+import { extractCantusMelody } from "./cantusMelody";
 import { satbToMusicXML, parsedScoreToPartwiseMelodyMusicXML } from "./satbToMusicXML";
 import { parseMusicXML } from "./parsers/musicxmlParser";
 import { sliceParsedScoreToMeasureRange } from "./measureRangeSlice";
@@ -194,36 +195,68 @@ function withPreservedInputLayout(
 }
 
 /**
- * Run ensureChords → generateSATB. If the first pass fails (e.g. unvoiceable file
- * Romans), retry once with melody-inferred chords and relaxed voice-leading.
+ * Run ensureChords → generateSATB. Retries with melody-inferred chords, relaxed
+ * voice-leading, a cantus-filtered melody (PDF/piano OMR), and finally no melody
+ * lock so generation still succeeds when OMR bass notes poison soprano locking.
  */
 export function solveSatbWithRecovery(
   parsed: ParsedScore,
   config: GenerationConfig | null,
 ): SolvedSatb {
   const forInfer = parsedScoreForChordInference(parsed);
-  const attempts: Array<{ preferInferred: boolean; genre: Genre | undefined }> = [
+  const cantusMelody = extractCantusMelody(forInfer.melody);
+  const attempts: Array<{
+    preferInferred: boolean;
+    genre: Genre | undefined;
+    melodyMode: "cantus" | "none";
+  }> = [
     {
       preferInferred: config?.preferInferredChords === true,
       genre: config?.genre,
+      melodyMode: "cantus",
     },
   ];
   if (config?.preferInferredChords !== true) {
-    attempts.push({ preferInferred: true, genre: config?.genre });
+    attempts.push({
+      preferInferred: true,
+      genre: config?.genre,
+      melodyMode: "cantus",
+    });
   }
   if (config?.genre !== "pop") {
-    attempts.push({ preferInferred: true, genre: "pop" });
+    attempts.push({
+      preferInferred: true,
+      genre: "pop",
+      melodyMode: "cantus",
+    });
   }
+  // Last resort: drop melody lock (chords still inferred from the cantus).
+  attempts.push({
+    preferInferred: true,
+    genre: "pop",
+    melodyMode: "none",
+  });
 
   let lastBudget = false;
   for (const attempt of attempts) {
-    const withChords = ensureChords(forInfer, config?.mood, attempt.genre, {
+    const scoreForChords =
+      attempt.melodyMode === "full"
+        ? forInfer
+        : { ...forInfer, melody: cantusMelody.length > 0 ? cantusMelody : forInfer.melody };
+    const withChords = ensureChords(scoreForChords, config?.mood, attempt.genre, {
       preferInferredChords: attempt.preferInferred,
     });
     const leadSheet: LeadSheet = {
       key: withChords.key,
       chords: withChords.chords,
-      melody: withChords.melody,
+      melody:
+        attempt.melodyMode === "none"
+          ? undefined
+          : attempt.melodyMode === "cantus"
+            ? cantusMelody.length > 0
+              ? cantusMelody
+              : withChords.melody
+            : withChords.melody,
     };
     try {
       const result = generateSATB(leadSheet, {
@@ -234,7 +267,14 @@ export function solveSatbWithRecovery(
         return {
           ok: true,
           result,
-          withChords: withPreservedInputLayout(withChords, parsed),
+          withChords: withPreservedInputLayout(
+            {
+              ...withChords,
+              // Keep full OMR melody for additive rhythm / display source timing.
+              melody: parsed.melody,
+            },
+            parsed,
+          ),
         };
       }
     } catch (e) {
