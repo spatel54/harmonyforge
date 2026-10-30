@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — HF monogram brand assets (2026-10-30)](#wl-hf-monogram-brand-2026-10-30) — new white-on-black HF mark kit + README badge; Sonata/Nocturne tokens unchanged; **`spatel54/main`** merged + set as upstream
 - [Work log — Sandbox note hotkeys (2026-09-16)](#wl-sandbox-note-hotkeys-2026-09-16) — ⌘C/V/Z copy, paste, undo the selected note
 - [Work log — Note editor QA pass (2026-09-16)](#wl-note-editor-qa-2026-09-16) — timeline under toolbar; Play/Pause sync; Document Play on the rail; hide duplicate RS shortcuts
 - [Work log — Measure timeline rail (2026-09-16)](#wl-playback-timeline-rail-2026-09-16) — chrome seek rail replaces the staff overlay line; park without play; native playhead restored
@@ -79,6 +80,29 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-hf-monogram-brand-2026-10-30"></a>
+
+## Work log — HF monogram brand assets (2026-10-30)
+
+### Reasoning
+Superman approved swapping the app + README to the new HF monogram (white-on-black) without a Sonata/Nocturne palette rewrite. Also confirmed **`spatel54/harmonyforge`** is the primary remote.
+
+### Action
+- Merged **`spatel54/main`** (playback timeline rail + ISMIR poster) into local `main`; set upstream to **`spatel54/main`**.
+- Rebuilt brand kit under `frontend/public/brand/`: `logo-{16,32,64,128,256}.png`, favicons, OG/twitter cards, `logo-lockup*.png`, `logo-lockup-badge.png`; `frontend/public/logo.png` aligned.
+- README hero uses `frontend/public/brand/logo-lockup-badge.png`. `LogoMark` / `LogoLockup` keep mark + wordmark (monogram has no baked text). Sonata/Nocturne tokens unchanged.
+
+### Learning
+Source PNG is **black glyphs + alpha** (not white RGB). App kit uses **white glyph on black plate** so chrome works on both themes; README badge bakes the same plate for GitHub light/dark.
+
+### Progression
+Done: assets + README + docs. **Follow-up (same day):** fixed Vercel `sandbox/page.tsx` `'parsed' is possibly 'null'` blocking production build; pushing monogram + fix to `spatel54/main`. Open: hard-refresh if browser caches old `/brand/logo-*.png`.
+
+### History
+Do not silently revert to the prior anvil/wave kit or rebrand Sonata/Nocturne to pure mono without an explicit decision.
+
+---
 
 <a id="wl-sandbox-note-hotkeys-2026-09-16"></a>
 

@@ -6,7 +6,7 @@ export type LogoLockupProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * LogoLockup Atom
- * Brand mark (32px HF kit) + "HarmonyForge" wordmark.
+ * HF monogram mark (32px) + "HarmonyForge" wordmark.
  * Used in DocumentHeader, SandboxHeader, and Team page header.
  */
 export const LogoLockup = React.forwardRef<HTMLDivElement, LogoLockupProps>(

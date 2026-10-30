@@ -18,7 +18,7 @@ export type LogoMarkProps = {
 };
 
 /**
- * HarmonyForge logo mark from the HF brand kit (PNG raster).
+ * HarmonyForge HF monogram mark (white glyph on black plate, PNG raster).
  */
 export function LogoMark({ size = 32, className, priority = false }: LogoMarkProps) {
   return (

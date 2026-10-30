@@ -1260,6 +1260,8 @@ function TactileSandboxPageInner({
       setScore(parsed);
       setSelection([]);
       clearCursor();
+      if (!parsed) return;
+      const parsedChords = parsed.chords;
       queueMicrotask(() => {
         const s = useScoreStore.getState().score;
         if (!s) return;
@@ -1270,8 +1272,8 @@ function TactileSandboxPageInner({
               ? {
                   ...stamped,
                   chords:
-                    parsed.chords && parsed.chords.length > 0
-                      ? parsed.chords
+                    parsedChords && parsedChords.length > 0
+                      ? parsedChords
                       : detectChordsFromScore(stamped),
                 }
               : stamped;
