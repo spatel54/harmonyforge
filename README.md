@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/public/brand/logo-lockup-badge.png" alt="HarmonyForge" width="200" />
+<img src="frontend/public/brand/logo.svg" alt="HarmonyForge" width="160" />
 
 # HarmonyForge
 

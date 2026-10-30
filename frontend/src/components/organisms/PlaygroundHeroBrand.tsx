@@ -19,7 +19,7 @@ export function PlaygroundHeroBrand({
       <LogoMark
         size={128}
         priority
-        className="hf-playground-hero-mark w-[clamp(4.5rem,18vw,7rem)] h-[clamp(4.5rem,18vw,7rem)] rounded-2xl"
+        className="hf-playground-hero-mark w-[clamp(4.5rem,18vw,7rem)] h-auto"
       />
       <div className="hf-playground-title-wrap">
         <BrandTitle className={cn("text-center", titleClassName)} />

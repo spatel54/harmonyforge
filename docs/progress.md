@@ -6,6 +6,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — HF monogram SVG (2026-10-30)](#wl-hf-monogram-svg-2026-10-30) — app + README use **`logo-mark.svg`** (not PNG sizes); favicons/OG stay raster
 - [Work log — HF monogram brand assets (2026-10-30)](#wl-hf-monogram-brand-2026-10-30) — new white-on-black HF mark kit + README badge; Sonata/Nocturne tokens unchanged; **`spatel54/main`** merged + set as upstream
 - [Work log — Sandbox note hotkeys (2026-09-16)](#wl-sandbox-note-hotkeys-2026-09-16) — ⌘C/V/Z copy, paste, undo the selected note
 - [Work log — Note editor QA pass (2026-09-16)](#wl-note-editor-qa-2026-09-16) — timeline under toolbar; Play/Pause sync; Document Play on the rail; hide duplicate RS shortcuts
@@ -80,6 +81,29 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-hf-monogram-svg-2026-10-30"></a>
+
+## Work log — HF monogram SVG (2026-10-30)
+
+### Reasoning
+Superman: logo should be **SVG**, not PNG. Raster size ladder is unnecessary for a monochrome mark.
+
+### Action
+- Traced monogram → `frontend/public/brand/logo.svg`, `logo-on-dark.svg`, `logo-mark.svg` (no plate), `frontend/public/logo.svg`.
+- `LogoMark` is **inline SVG** (no plate); `.hf-logo-mark path` / `.hf-logo-wordmark` fill/color = `--hf-text-primary` with short transition so theme toggle stays readable.
+- README uses transparent `logo.svg`. Favicons / OG / twitter / PWA icons remain PNG.
+
+### Learning
+Source asset is alpha-only black glyphs; potrace + black plate yields the chrome mark.
+
+### Progression
+Done locally. Open: commit/push when Superman asks; hard-refresh after deploy.
+
+### History
+Do not reintroduce PNG `logo-{16..256}` as the app mark source of truth.
+
+---
 
 <a id="wl-hf-monogram-brand-2026-10-30"></a>
 
