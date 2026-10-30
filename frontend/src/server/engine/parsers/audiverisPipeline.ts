@@ -24,7 +24,23 @@ import { isLikelyRasterImagePdf } from "./pdfRasterHeuristic";
 const LOG_PREVIEW = 800;
 const DETAIL_OUTPUT_MAX = 1_800;
 /** Audiveris batch on a full score can take several minutes on first run. */
-export const DEFAULT_AUDIVERIS_MS = 900_000;
+export const FALLBACK_AUDIVERIS_MS = 900_000;
+
+/**
+ * Audiveris wall-clock budget. Env-tunable because the ceiling is host-shaped:
+ * a container host can afford the full 15 minutes, a proxied PaaS often cannot.
+ * Set `HF_AUDIVERIS_MAX_MS` (ms); invalid or non-positive values fall back.
+ * Mirrors the `HF_SOLVER_MAX_MS` convention in docs/deployment.md.
+ */
+function resolveDefaultAudiverisMs(): number {
+  const raw = process.env.HF_AUDIVERIS_MAX_MS?.trim();
+  if (!raw) return FALLBACK_AUDIVERIS_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return FALLBACK_AUDIVERIS_MS;
+  return parsed;
+}
+
+export const DEFAULT_AUDIVERIS_MS = resolveDefaultAudiverisMs();
 
 const USE_COMPRESSION_FALSE =
   "org.audiveris.omr.sheet.BookManager.useCompression=false";
@@ -412,6 +428,45 @@ export function tryAudiverisOnInputFile(
     details.push("audiveris: no MusicXML (.xml/.mxl) produced in output directory");
   }
   return parsed;
+}
+
+/** A MusicXML document returned by the remote OMR sidecar (`services/omr`). */
+export interface RemoteOmrDocument {
+  name: string;
+  data: Buffer;
+}
+
+/**
+ * Parse + merge documents produced by a *remote* Audiveris run, using the exact
+ * same code path as a local run: the bytes are materialized into a work dir and
+ * handed to `parseAudiverisWorkDir`. Keeping one parser is the point — the
+ * sidecar deliberately returns raw documents rather than parsing them itself.
+ *
+ * Document names arrive from a network peer, so only the basename is honored and
+ * only `.xml` / `.mxl` are written (no traversal, no arbitrary extensions).
+ */
+export function parseRemoteOmrDocuments(documents: RemoteOmrDocument[]): ParsedScore | null {
+  if (documents.length === 0) return null;
+
+  const workRoot = mkdtempSync(join(tmpdir(), "hf-omr-remote-"));
+  try {
+    let written = 0;
+    for (const [index, doc] of documents.entries()) {
+      const safeName = basename(doc.name ?? "");
+      if (!/\.(xml|mxl)$/i.test(safeName)) continue;
+      // Index-prefixed so multi-sheet ordering survives the sort in collectScoreFiles.
+      writeFileSync(join(workRoot, `${String(index).padStart(3, "0")}-${safeName}`), doc.data);
+      written += 1;
+    }
+    if (written === 0) return null;
+    return parseAudiverisWorkDir(workRoot);
+  } finally {
+    try {
+      rmSync(workRoot, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+  }
 }
 
 export function audiverisPipelineFailureMessage(details: string[]): string {

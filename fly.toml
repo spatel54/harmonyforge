@@ -1,0 +1,55 @@
+# fly.toml — HarmonyForge single-artifact deploy (Next.js + SATB engine + Audiveris OMR).
+#
+# Why Fly and not Vercel: PDF → MusicXML spawns the Audiveris CLI (JDK 25) for
+# minutes per score. Vercel functions cap at 300s and ship no JVM, so OMR can
+# only ever 501 there. This runs the root Dockerfile, which bakes Audiveris in.
+#
+# Deploy:  make fly-deploy      (first time: make fly-launch)
+# Logs:    fly logs
+# Secrets: fly secrets set OPENAI_API_KEY=sk-...
+
+app = "harmonyforge"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  # Baked into the image too, but kept here so they are visible/overridable.
+  AUDIVERIS_BIN = "/app/audiveris/bin/Audiveris"
+  TESSDATA_PREFIX = "/app/tessdata"
+  # Audiveris wall-clock budget (ms). The code default is 900_000; 600_000 keeps
+  # a stuck batch from pinning the only machine for a quarter hour.
+  HF_AUDIVERIS_MAX_MS = "600000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # OMR is a long, stateful request: never stop a machine with work in flight,
+  # and keep one warm so /api/health reports omr.ready truthfully at all times.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # Audiveris is CPU- and RAM-hungry; queue rather than run batches in parallel.
+    type = "requests"
+    soft_limit = 2
+    hard_limit = 4
+
+  [[http_service.checks]]
+    path = "/api/health"
+    method = "get"
+    interval = "30s"
+    timeout = "10s"
+    # Generous: the app must not be declared unhealthy while a long OMR batch
+    # is saturating the CPU.
+    grace_period = "60s"
+
+[[vm]]
+  # A JVM running OMR will OOM on Fly's 256 MB default. 4 GB / 2 shared vCPU is
+  # the smallest size that reliably completes a multi-page score.
+  size = "shared-cpu-2x"
+  memory = "4gb"

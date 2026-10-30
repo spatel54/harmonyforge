@@ -1,0 +1,67 @@
+# Build context hygiene for the root Dockerfile (see docs/deployment.md).
+#
+# Without this file the context is ~2.1 GB and every `docker build` / `fly deploy`
+# uploads node_modules, .next, .git and the demo video. The image needs only
+# frontend/ sources + lockfile + patches; deps are installed and Next is built
+# inside the image.
+
+# --- VCS / tooling ---
+.git
+.gitignore
+.github
+.vscode
+.idea
+.cursor
+.claude
+.specstory
+.remember
+
+# --- Dependencies + build output (reinstalled/rebuilt in-image) ---
+node_modules
+**/node_modules
+.next
+**/.next
+**/.turbo
+out
+dist
+build
+
+# --- Secrets: never copy real env files into an image layer ---
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# --- Audiveris: built from source in the audiveris-builder stage ---
+scripts/audiveris/vendor
+scripts/audiveris/tessdata
+scripts/audiveris/input
+scripts/audiveris/output
+
+# --- Large assets not used at runtime ---
+# Root-anchored (leading /) so frontend/public/brand — which IS shipped — survives.
+*.mov
+*.mp4
+/poster
+/brand
+/miscellaneous
+/docs
+/notes
+
+# --- Docker / compose (not needed inside the image) ---
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# --- Local noise ---
+.DS_Store
+**/.DS_Store
+*.log
+dev.log
+npm-debug.log*
+coverage
+**/coverage
+*.tsbuildinfo
+**/*.tsbuildinfo

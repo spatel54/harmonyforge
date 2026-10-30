@@ -1,0 +1,13 @@
+{
+  "name": "harmonyforge-omr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Audiveris OMR sidecar for HarmonyForge — PDF/image to MusicXML over HTTP.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

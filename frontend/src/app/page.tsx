@@ -19,6 +19,8 @@ import { COACHMARKS_ENABLED } from "@/store/useCoachmarkStore";
 import { enrichIntakePreviewError } from "@/lib/ui/intakeErrorHints";
 import { isOmrIntakeExtension } from "@/lib/ui/intakeOverlayProgress";
 import { needsEnginePreviewForExtension } from "@/lib/ui/needsEnginePreviewForExtension";
+import { convertViaRemoteOmr } from "@/lib/ui/remoteOmrUpload";
+import type { OmrTransport } from "@/lib/ui/omrTransport";
 import { rasterizePdf } from "@/hooks/useClientPdfPreview";
 import { AppFooterStrip } from "@/components/organisms/AppFooterStrip";
 import { AlertTriangle } from "lucide-react";
@@ -43,16 +45,35 @@ export default function Home() {
   }, []);
 
   const [omrReady, setOmrReady] = React.useState<boolean | null>(null);
+  /** Which PDF path to take — see /api/health. Null until the probe resolves. */
+  const [omrTransport, setOmrTransport] = React.useState<OmrTransport | null>(null);
+  /** A sidecar is configured but not answering — a cold start, not a setup gap. */
+  const [omrRemoteConfigured, setOmrRemoteConfigured] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
     void fetch("/api/health")
       .then((r) => r.json())
-      .then((data: { omr?: { ready?: boolean } }) => {
-        if (!cancelled) setOmrReady(data.omr?.ready ?? false);
-      })
+      .then(
+        (data: {
+          omr?: {
+            ready?: boolean;
+            transport?: OmrTransport;
+            remote?: { configured?: boolean };
+          };
+        }) => {
+          if (cancelled) return;
+          setOmrReady(data.omr?.ready ?? false);
+          setOmrTransport(data.omr?.transport ?? "none");
+          setOmrRemoteConfigured(data.omr?.remote?.configured === true);
+        },
+      )
       .catch(() => {
-        if (!cancelled) setOmrReady(null);
+        if (!cancelled) {
+          setOmrReady(null);
+          setOmrTransport(null);
+          setOmrRemoteConfigured(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -71,7 +92,13 @@ export default function Home() {
     const t0 = Date.now();
     const needsServerPreview = needsEnginePreviewForExtension(ext);
     try {
-      if (needsServerPreview) {
+      if (isOmrIntakeExtension(ext) && omrTransport === "remote") {
+        // PDF/image on a serverless deployment: the score goes straight to the
+        // OMR sidecar (Vercel caps function bodies at 4.5 MB), and only the
+        // symbolic result comes back through /api/omr-merge.
+        const xml = await convertViaRemoteOmr(file);
+        setPreviewMusicXML(xml);
+      } else if (needsServerPreview) {
         const formData = new FormData();
         formData.append("file", file);
         if (ext === "pdf") {
@@ -153,10 +180,21 @@ export default function Home() {
                   className="font-sans text-[12px] sm:text-[13px] leading-relaxed"
                   style={{ color: "var(--hf-text-primary)" }}
                 >
-                  <strong>PDF uploads:</strong> Audiveris is not set up on this dev server. Run{" "}
-                  <code className="font-mono text-[11px]">make audiveris-setup</code> (Java 25+), then
-                  restart <code className="font-mono text-[11px]">make dev</code>. MusicXML, MXL,
-                  and MIDI work without OMR.
+                  <strong>PDF uploads:</strong>{" "}
+                  {omrRemoteConfigured ? (
+                    <>
+                      the OMR service isn’t responding yet. A cold instance takes a few
+                      seconds to start — retry shortly.
+                    </>
+                  ) : (
+                    <>
+                      optical music recognition isn’t available here. Locally, run{" "}
+                      <code className="font-mono text-[11px]">make audiveris-setup</code>{" "}
+                      (Java 25+) and restart{" "}
+                      <code className="font-mono text-[11px]">make dev</code>.
+                    </>
+                  )}{" "}
+                  MusicXML, MXL, and MIDI work without OMR.
                 </p>
               </div>
             )}

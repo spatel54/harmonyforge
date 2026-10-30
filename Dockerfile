@@ -29,7 +29,7 @@ RUN mkdir -p /build/tessdata \
 # ────────────────────────────────────────────────────────────────────────────
 # 2. Next.js builder
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS node-builder
+FROM node:22-bookworm-slim AS node-builder
 WORKDIR /app
 
 COPY frontend/package.json frontend/package-lock.json ./frontend/
@@ -38,9 +38,10 @@ RUN cd frontend && npm ci --no-audit --no-fund
 
 COPY frontend/ ./frontend/
 
-ARG OPENAI_API_KEY
+# Build-time model id only. OPENAI_API_KEY is deliberately NOT a build ARG:
+# ARG values persist in build cache/history, and the key is only ever needed at
+# runtime (pass it with `fly secrets set` / compose env). See docs/deployment.md.
 ARG OPENAI_MODEL=gpt-5-nano
-ENV OPENAI_API_KEY=$OPENAI_API_KEY
 ENV OPENAI_MODEL=$OPENAI_MODEL
 
 RUN cd frontend && npm run build
@@ -48,7 +49,7 @@ RUN cd frontend && npm run build
 # ────────────────────────────────────────────────────────────────────────────
 # 3. Runtime
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -81,4 +82,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
 
-CMD ["sh", "-c", "cd frontend && npx next start -p 3000"]
+# Bind 0.0.0.0 explicitly: Fly/Render route to the container IP, not loopback.
+# Resolve the local binary rather than `npx` (no registry lookup at boot).
+WORKDIR /app/frontend
+CMD ["./node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
