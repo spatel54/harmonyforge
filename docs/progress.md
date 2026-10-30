@@ -98,7 +98,7 @@ Superman: logo should be **SVG**, not PNG. Raster size ladder is unnecessary for
 Source asset is alpha-only black glyphs; potrace + black plate yields the chrome mark.
 
 ### Progression
-Done locally. Open: commit/push when Superman asks; hard-refresh after deploy.
+Hero mark shrunk (`~2.75–4.25rem`); header lockup mark `24px`. Favicons regenerated from monogram (`favicon.ico` / `icon.png` / `apple-icon` / brand PNGs + `favicon.svg`). Open: commit/push when Superman asks; hard-refresh after deploy.
 
 ### History
 Do not reintroduce PNG `logo-{16..256}` as the app mark source of truth.

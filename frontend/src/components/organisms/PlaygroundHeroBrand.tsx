@@ -17,9 +17,9 @@ export function PlaygroundHeroBrand({
   return (
     <div className={cn("flex flex-col items-center gap-4 sm:gap-5", className)}>
       <LogoMark
-        size={128}
+        size={72}
         priority
-        className="hf-playground-hero-mark w-[clamp(4.5rem,18vw,7rem)] h-auto"
+        className="hf-playground-hero-mark w-[clamp(2.75rem,10vw,4.25rem)] h-auto"
       />
       <div className="hf-playground-title-wrap">
         <BrandTitle className={cn("text-center", titleClassName)} />

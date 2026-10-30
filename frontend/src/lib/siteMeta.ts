@@ -39,6 +39,7 @@ const BRAND = {
   ogImage: "/brand/og-image.png",
   ogImageDark: "/brand/og-image-dark.png",
   twitterCard: "/brand/twitter-card.png",
+  faviconSvg: "/brand/favicon.svg",
   favicon16: "/brand/favicon-16x16.png",
   favicon32: "/brand/favicon-32x32.png",
   appleTouchIcon: "/brand/apple-touch-icon.png",
@@ -53,8 +54,9 @@ export function buildRootMetadata(): Metadata {
     authors: [{ name: COPYRIGHT_HOLDER }],
     icons: {
       icon: [
-        { url: BRAND.favicon16, sizes: "16x16", type: "image/png" },
+        { url: BRAND.faviconSvg, type: "image/svg+xml" },
         { url: BRAND.favicon32, sizes: "32x32", type: "image/png" },
+        { url: BRAND.favicon16, sizes: "16x16", type: "image/png" },
       ],
       apple: BRAND.appleTouchIcon,
     },
