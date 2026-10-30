@@ -239,10 +239,10 @@ export function solveSatbWithRecovery(
 
   let lastBudget = false;
   for (const attempt of attempts) {
-    const scoreForChords =
-      attempt.melodyMode === "full"
-        ? forInfer
-        : { ...forInfer, melody: cantusMelody.length > 0 ? cantusMelody : forInfer.melody };
+    const scoreForChords = {
+      ...forInfer,
+      melody: cantusMelody.length > 0 ? cantusMelody : forInfer.melody,
+    };
     const withChords = ensureChords(scoreForChords, config?.mood, attempt.genre, {
       preferInferredChords: attempt.preferInferred,
     });
@@ -252,10 +252,8 @@ export function solveSatbWithRecovery(
       melody:
         attempt.melodyMode === "none"
           ? undefined
-          : attempt.melodyMode === "cantus"
-            ? cantusMelody.length > 0
-              ? cantusMelody
-              : withChords.melody
+          : cantusMelody.length > 0
+            ? cantusMelody
             : withChords.melody,
     };
     try {
