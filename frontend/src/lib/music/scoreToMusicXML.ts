@@ -7,6 +7,7 @@ import { chordSymbolToHarmonyXml } from "./chordSymbolFormat";
 import { noteBeats } from "./scoreUtils";
 import { getTupletRatio } from "./tupletUtils";
 import { riffQuantsForMeasure } from "./playbackScrub";
+import { resolveMeasureTempoBpm } from "./playbackTempoMap";
 
 function measureGlobalQuantStart(score: EditableScore, measureIndex: number): number {
   let q = 0;
@@ -369,10 +370,15 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
         }
       }
 
-      // Tempo — first part / first measure only (standard engraving placement).
-      // Palette tempos set both tempoText and score.bpm; emit words + metronome/sound.
-      if (pIdx === 0 && isFirst) {
-        const bpm = score.bpm != null && score.bpm > 0 ? Math.round(score.bpm) : null;
+      // Tempo: words on any marked bar; metronome + <sound> so playback/OSMD follow each change.
+      if (pIdx === 0) {
+        const markedBpm = resolveMeasureTempoBpm(measure);
+        const bpm =
+          markedBpm != null
+            ? Math.round(markedBpm)
+            : isFirst && score.bpm != null && score.bpm > 0
+              ? Math.round(score.bpm)
+              : null;
         const metronomeBlock =
           bpm != null
             ? `
@@ -390,7 +396,7 @@ export function scoreToPartwiseMusicXML(score: EditableScore, title?: string | n
           <words>${esc(measure.tempoText)}</words>
         </direction-type>${metronomeBlock}
       </direction>`);
-        } else if (bpm != null) {
+        } else if (isFirst && bpm != null) {
           lines.push(`      <direction placement="above">${metronomeBlock}
       </direction>`);
         }

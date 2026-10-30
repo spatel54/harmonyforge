@@ -180,7 +180,11 @@ function createCandidateCache(): CandidateGetter {
  *   - same-direction, same-distance S/A motion relative to prev (parallel motion):
  *     moderate bias away to encourage independence over multi-slot spans.
  */
-function candidateMotionScore(prev: SATBVoices | null, curr: SATBVoices): number {
+function candidateMotionScore(
+  prev: SATBVoices | null,
+  curr: SATBVoices,
+  chord?: ParsedChord,
+): number {
   const keys: (keyof SATBVoices)[] = ["soprano", "alto", "tenor", "bass"];
   let total = 0;
   if (prev) {
@@ -191,19 +195,39 @@ function candidateMotionScore(prev: SATBVoices | null, curr: SATBVoices): number
 
   const sCur = pitchToMidi(curr.soprano);
   const aCur = pitchToMidi(curr.alto);
+  const tCur = pitchToMidi(curr.tenor);
+  const bCur = pitchToMidi(curr.bass);
   if (sCur === aCur) {
     total += 80;
   } else if (mod12(sCur) === mod12(aCur)) {
     total += 18;
   }
+  if (aCur - tCur < 3) total += 14;
+  if (tCur - bCur < 3) total += 8;
+
+  if (chord) {
+    const bassPc = mod12(bCur);
+    if (bassPc !== mod12(chord.rootPc)) total += 10;
+  }
 
   if (prev) {
-    const sPrev = pitchToMidi(prev.soprano);
-    const aPrev = pitchToMidi(prev.alto);
-    const sDelta = sCur - sPrev;
-    const aDelta = aCur - aPrev;
-    if (sDelta !== 0 && sDelta === aDelta) {
-      total += 6;
+    const pairs: Array<[keyof SATBVoices, keyof SATBVoices]> = [
+      ["soprano", "alto"],
+      ["alto", "tenor"],
+      ["tenor", "bass"],
+      ["soprano", "bass"],
+    ];
+    for (const [upper, lower] of pairs) {
+      const uDelta = pitchToMidi(curr[upper]) - pitchToMidi(prev[upper]);
+      const lDelta = pitchToMidi(curr[lower]) - pitchToMidi(prev[lower]);
+      if (uDelta !== 0 && uDelta === lDelta) {
+        total += upper === "alto" || lower === "tenor" ? 14 : 8;
+      }
+    }
+    const sDelta = sCur - pitchToMidi(prev.soprano);
+    const bDelta = bCur - pitchToMidi(prev.bass);
+    if (sDelta !== 0 && bDelta !== 0 && Math.sign(sDelta) !== Math.sign(bDelta)) {
+      total -= 4;
     }
   }
 
@@ -286,7 +310,7 @@ function solveGreedy(
         fixedSoprano = undefined;
       }
     }
-    const candidates = getCand(i, parsedChords[i], fixedSoprano).slice().sort((a, b) => candidateMotionScore(prev, a) - candidateMotionScore(prev, b));
+    const candidates = getCand(i, parsedChords[i], fixedSoprano).slice().sort((a, b) => candidateMotionScore(prev, a, parsedChords[i]) - candidateMotionScore(prev, b, parsedChords[i]));
     const found = candidates.find((v) => check(prev, v));
     if (!found) return null;
     result.push(found);
@@ -329,7 +353,7 @@ function solve(
     const prev = i > 0 ? result[i - 1] : null;
     const candidates = getCand(i, parsedChords[i], fixedSoprano)
       .slice()
-      .sort((a, b) => candidateMotionScore(prev, a) - candidateMotionScore(prev, b));
+      .sort((a, b) => candidateMotionScore(prev, a, parsedChords[i]) - candidateMotionScore(prev, b, parsedChords[i]));
 
     for (const v of candidates) {
       if (!check(prev, v)) continue;

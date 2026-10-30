@@ -12,6 +12,18 @@ describe("detectSymbolFromPcs", () => {
   it("labels C+E+G as C", () => {
     expect(detectSymbolFromPcs(new Set([0, 4, 7]))).toBe("C");
   });
+
+  it("labels C+E+G+B as Cmaj7, not a polychord", () => {
+    expect(detectSymbolFromPcs(new Set([0, 4, 7, 11]))).toBe("Cmaj7");
+  });
+
+  it("prefers C over C6 when A is an extra tone", () => {
+    expect(detectSymbolFromPcs(new Set([0, 4, 7, 9]), { bassPc: 0, keyFifths: 0 })).toBe("C");
+  });
+
+  it("spells Bb in F major, not A#", () => {
+    expect(detectSymbolFromPcs(new Set([10, 2, 5]), { keyFifths: -1 })).toBe("Bb");
+  });
 });
 
 describe("buildChordTrackFromScore", () => {

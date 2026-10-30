@@ -7,6 +7,8 @@ import type { RecursivePartial } from "tone/build/esm/core/util/Interface";
 import type { EditableScore } from "./scoreTypes";
 import { partNameToTimbreKind, type TimbreKind } from "./playbackTimbre";
 import { scoreToScheduledPartNotes, scheduledPartNotesToSeconds } from "./playbackPartNotes";
+import { buildTempoMap, midiVelocityToSamplerGain } from "./playbackTempoMap";
+import { syncPlaybackExpressionCache } from "./playbackExpressionBridge";
 
 const BPM_FALLBACK = 72;
 
@@ -63,9 +65,9 @@ export async function playScoreMultiTimbre(
   options?: { volumeDb?: number; onComplete?: () => void },
 ): Promise<MultiTimbrePlayHandle> {
   const Tone = await import("tone");
-  const bpm = score.bpm ?? BPM_FALLBACK;
+  syncPlaybackExpressionCache(score);
   const partEvents = scoreToScheduledPartNotes(score);
-  const timed = scheduledPartNotesToSeconds(partEvents, bpm);
+  const timed = scheduledPartNotesToSeconds(partEvents, buildTempoMap(score, BPM_FALLBACK));
   if (timed.length === 0) {
     options?.onComplete?.();
     return { stop: () => undefined };
@@ -92,7 +94,7 @@ export async function playScoreMultiTimbre(
       const kind = partNameToTimbreKind(ev.partName);
       const syn = synths[kind] ?? synths.other!;
       try {
-        const vel = ev.velocity !== undefined ? ev.velocity / 127 : undefined;
+        const vel = ev.velocity !== undefined ? midiVelocityToSamplerGain(ev.velocity) : undefined;
         syn.triggerAttackRelease(ev.pitch, ev.duration, time, vel);
       } catch {
         /* drop bad pitch */

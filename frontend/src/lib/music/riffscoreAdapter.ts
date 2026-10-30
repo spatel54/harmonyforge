@@ -532,6 +532,7 @@ function rsMeasureToHf(
       if (prevMeasure.repeatMark) hfMeasure.repeatMark = prevMeasure.repeatMark;
       if (prevMeasure.rehearsalMark) hfMeasure.rehearsalMark = prevMeasure.rehearsalMark;
       if (prevMeasure.tempoText) hfMeasure.tempoText = prevMeasure.tempoText;
+      if (prevMeasure.tempoBpm) hfMeasure.tempoBpm = prevMeasure.tempoBpm;
       if (index > 0) {
         if (prevMeasure.keySignature !== undefined) hfMeasure.keySignature = prevMeasure.keySignature;
         if (prevMeasure.timeSignature) hfMeasure.timeSignature = prevMeasure.timeSignature;

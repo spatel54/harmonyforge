@@ -4,7 +4,7 @@
 import type { DurationType, EditableScore, Measure, Note, Part } from "@/lib/music/scoreTypes";
 import { getNoteById } from "@/lib/music/scoreUtils";
 import type { PaletteItem } from "@/lib/palettes/paletteRegistry";
-import { TEMPO_PRESET_BPM } from "./paletteToolScoreOps";
+import { TEMPO_PRESET_BPM, TEMPO_PRESET_TEXT } from "./paletteToolScoreOps";
 
 const ARTIC_TOOL_TO_VALUE: Record<string, string> = {
   "artic-staccato": "a.",
@@ -227,10 +227,16 @@ export function isPaletteItemPressed(
     return focus.measure.repeatMark === toolId.slice("measure-repeat-".length);
   }
 
-  if (toolId.startsWith("tempo-preset-") && toolId !== "tempo-preset-custom" && score) {
+  if (toolId.startsWith("tempo-preset-") && toolId !== "tempo-preset-custom" && focus) {
     const kind = toolId.slice("tempo-preset-".length);
+    const label = TEMPO_PRESET_TEXT[kind];
     const bpm = TEMPO_PRESET_BPM[kind];
-    return typeof bpm === "number" && score.bpm === bpm;
+    const text = focus.measure.tempoText ?? "";
+    if (!label || !text) return false;
+    return (
+      text === `${label} ♩ = ${bpm}` ||
+      text.toLowerCase().startsWith(label.toLowerCase())
+    );
   }
 
   return false;

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { intakeProgressWhileWaiting } from "@/lib/ui/intakeOverlayProgress";
+import { generateProgressWhileWaiting, intakeProgressWhileWaiting } from "@/lib/ui/intakeOverlayProgress";
 
 export type TransitionVariant = "parsing" | "generating" | "melody_only";
 
@@ -14,6 +14,9 @@ export const TRANSITION_MIN_VISIBLE_MS: Record<TransitionVariant, number> = {
   generating: 2200,
   melody_only: 2000,
 };
+
+/** Keep 100% on screen so the bar is not dismissed mid-jump from ~few percent. */
+export const TRANSITION_COMPLETE_HOLD_MS = 400;
 
 export interface TransitionOverlayProps {
   variant: TransitionVariant;
@@ -66,6 +69,29 @@ function useTimedProgressCap(
   return Math.round(pct);
 }
 
+function useGenerateProgress(visible: boolean, workComplete: boolean): number {
+  const [pct, setPct] = React.useState(0);
+  React.useEffect(() => {
+    if (!visible) {
+      setPct(0);
+      return;
+    }
+    if (workComplete) {
+      setPct(100);
+      return;
+    }
+    const t0 = Date.now();
+    setPct(generateProgressWhileWaiting(0));
+    const id = window.setInterval(() => {
+      const elapsed = Date.now() - t0;
+      const next = generateProgressWhileWaiting(elapsed);
+      setPct(next);
+    }, 50);
+    return () => window.clearInterval(id);
+  }, [visible, workComplete]);
+  return pct;
+}
+
 function useIntakeProgress(
   visible: boolean,
   workComplete: boolean,
@@ -77,14 +103,15 @@ function useIntakeProgress(
       setPct(0);
       return;
     }
+    if (workComplete) {
+      setPct(100);
+      return;
+    }
     const t0 = Date.now();
+    setPct(intakeProgressWhileWaiting(0, slowIntake));
     const id = window.setInterval(() => {
-      if (workComplete) {
-        setPct(100);
-        return;
-      }
       setPct(intakeProgressWhileWaiting(Date.now() - t0, slowIntake));
-    }, 250);
+    }, 50);
     return () => window.clearInterval(id);
   }, [visible, workComplete, slowIntake]);
   return pct;
@@ -284,9 +311,21 @@ export function TransitionOverlay({
   const showBook = variant === "parsing";
   const timedPct = useTimedProgressCap(visible, duration, 90);
   const intakePct = useIntakeProgress(visible, workComplete, slowIntake);
-  const displayPct = showBook ? intakePct : workComplete ? 100 : timedPct;
+  const generatePct = useGenerateProgress(
+    visible && variant === "generating",
+    workComplete,
+  );
+  const displayPct = workComplete
+    ? 100
+    : showBook
+      ? intakePct
+      : variant === "generating"
+        ? generatePct
+        : timedPct;
   const showLongWaitHint =
-    visible && !workComplete && (slowIntake ? displayPct >= 55 : displayPct >= 85);
+    visible &&
+    !workComplete &&
+    ((slowIntake || variant === "generating") ? displayPct >= 55 : displayPct >= 85);
   const sub =
     showBook && slowIntake && !workComplete && labels.slowSub
       ? labels.slowSub
@@ -294,8 +333,9 @@ export function TransitionOverlay({
 
   return (
     <div
-      aria-live="assertive"
-      aria-label={labels.headline}
+      aria-live={visible ? "assertive" : "off"}
+      aria-hidden={!visible}
+      aria-label={visible ? labels.headline : undefined}
       className={cn(
         "fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-[32px]",
         "transition-opacity duration-500",
@@ -328,7 +368,7 @@ export function TransitionOverlay({
         aria-hidden
       >
         <div
-          className="h-full rounded-full transition-[width] duration-75 ease-linear"
+          className="h-full rounded-full transition-[width] duration-100 ease-linear"
           style={{
             width: `${displayPct}%`,
             backgroundColor: "var(--hf-accent)",

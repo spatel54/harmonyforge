@@ -56,6 +56,35 @@ describe("scoreToMidiBuffer", () => {
     expect(dv.getUint16(10, false)).toBe(3);
   });
 
+  it("embeds a second tempo change on a later bar", () => {
+    const changing: EditableScore = {
+      ...tinyScore,
+      parts: [
+        {
+          ...tinyScore.parts[0]!,
+          measures: [
+            tinyScore.parts[0]!.measures[0]!,
+            {
+              id: "m2",
+              timeSignature: "4/4",
+              tempoBpm: 80,
+              tempoText: "Andante ♩ = 80",
+              notes: [{ id: "n9", pitch: "G4", duration: "q", isRest: false }],
+            },
+          ],
+        },
+      ],
+    };
+    const buf = scoreToMidiBuffer(changing);
+    const text = new TextDecoder("latin1").decode(buf);
+    expect(text).toContain("\x51\x03");
+    let tempoMeta = 0;
+    for (let i = 0; i < buf.length - 1; i++) {
+      if (buf[i] === 0xff && buf[i + 1] === 0x51) tempoMeta += 1;
+    }
+    expect(tempoMeta).toBeGreaterThanOrEqual(2);
+  });
+
   it("can embed attribution text on the meta track", () => {
     const buf = scoreToMidiBuffer(tinyScore, {
       attributionText: "Exported from HarmonyForge",

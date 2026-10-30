@@ -1,0 +1,101 @@
+% -----------------------------------------------
+% Template for ISMIR LBD Papers
+% 2026 version (HarmonyForge submission)
+% -----------------------------------------------
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[lbd,submission]{ismir}
+\usepackage{amsmath,cite,url}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{float}
+\def\lbd{} % required by LBD template; do not modify
+\raggedbottom 
+
+\title{HarmonyForge: A Deterministic Co-Creative System for Symbolic Music Arrangement}
+
+\multauthor
+{Dulf Vincent Genis $^1$  \hspace{1cm} Shivam Patel $^1$  \hspace{1cm} Muawiz Khan $^1$ }
+{{\bf Yiren Liu $^1$  \hspace{1cm} Jeff Ginger $^1$  \hspace{1cm} Yun Huang $^1$ }\\
+$^1$  Salt Lab, School of Information Sciences, University of Illinois Urbana-Champaign, USA\\
+{\tt\small \{dgeni2, sjp10, mfkhan4, yirenl2, ginger, yunhuang\}@illinois.edu}
+}
+
+\def\authorname{D. V. Genis, S. Patel, M. Khan, Y. Liu, J. Ginger, and Y. Huang}
+
+\sloppy
+\begin{document}
+\maketitle
+
+\begin{abstract}
+    Chamber ensembles often face participation barriers when scores lack parts matching their specific instrumentation. While generative AI models draft arrangements quickly, they introduce structural drift and formatting errors that force musicians into tedious repair tasks. We present HarmonyForge, an interactive co-creative system that separates musical drafting from explanation. A deterministic SATB (Soprano, Alto, Tenor, Bass) Logic Core generates rule-constrained, instrument-mapped MusicXML harmony parts for an uploaded melody, which users then revise in a note-level editor. Hard constraints ban illegal spacing, voice-crossing, and parallel fifths or octaves; a motion heuristic prefers small pitch-to-pitch changes. An on-demand conversational LLM Theory Inspector explains voice-leading rules in plain language and may suggest repairs, but it never writes to the score without user confirmation. The proposed demonstration lets attendees configure custom ensembles, generate deterministic arrangements, override note placements, trigger theory violations on edit, query the pedagogical assistant, and export MusicXML, MIDI, WAV, or PDF. HarmonyForge provides an open sandbox demonstrating how deterministic constraints and glass-box explainability preserve creative ownership.
+\end{abstract}
+
+
+\section{Introduction}\label{sec:introduction}
+
+Participatory music-making in community and educational settings often stalls when written parts do not match the instruments available. While fully probabilistic AI generators draft arrangements or harmonies quickly \cite{Thickstun:2024}, they often produce opaque structures that require tedious manual correction of voice-leading errors (illegal motion between parts, such as parallel fifths) and range errors \cite{Hadjeres:2017, Deng:2024, Wu:2025}. Musicians maintain greater creative agency when systems explicitly separate automated drafting from interactive steering and explanation \cite{Louie:2020, Fu:2025}.
+
+This extended abstract presents HarmonyForge, a co-creative arranger for classical Soprano, Alto, Tenor, and Bass (SATB) ensembles. Formative need-finding interviews with musicians ($N=21$) surfaced two recurring bottlenecks: the manual labor of clef transposition, and players sitting out when no part matched their instrument. We address these challenges by decoupling drafting, direct editing, and pedagogical feedback into three distinct modules: a rule-based SATB Logic Core \cite{Dajda:2021}, an interactive web score editor \cite{Kotvas:2025}, and an LLM-powered Theory Inspector \cite{Zhou:2024}.
+
+\begin{figure}[htbp] 
+\centering 
+\includegraphics[width=0.9\linewidth]{LogicCore.png} 
+\caption{The Logic Core mapping a generated SATB scaffold to a user-selected ensemble.} 
+\label{fig:logic_core} 
+\end{figure}
+
+\section{System Architecture}\label{sec:system_architecture}
+
+\subsection{The Logic Core: Rule-Based Scaffolding}\label{subsec:logic_core}
+To prevent the structural errors and opaque repair work common in deep learning models like DeepBach~\cite{Hadjeres:2017} or the Anticipatory Music Transformer~\cite{Thickstun:2024}, the Logic Core uses a deterministic, rule-based approach to automated harmonization~\cite{Dajda:2021, Liao:2025}. Instead of relying on probabilistic guessing, the core algorithmically generates arrangements from explicit music-theory rules.
+
+Following common-practice SATB norms~\cite{Gotham:2021}, the engine infers a chord sequence from the uploaded melody and searches four-part voicings within standard vocal ranges. Absolute prohibitions from Aldwell and Schachter~\cite{Aldwell:2011} (range, spacing, voice-crossing, and parallel fifths or octaves) are treated as hard barriers that the search cannot cross. A motion heuristic then prefers small pitch-to-pitch changes, in the spirit of Fuxian stepwise writing~\cite{Fux:1725}, and a greedy-then-backtracking solver returns a voicing sequence that satisfies all active hard rules.
+
+The final step maps this harmonized scaffold to the user's selected instruments (Figure~\ref{fig:logic_core}). By adjusting registers and writing necessary transpositions directly to MusicXML, the Logic Core maps the SATB scaffold onto even unusual instrumental mixtures (e.g., flute, trombone, and violin) as playable, rule-checked individual parts.
+
+\subsection{The Interactive Editor: Tactile Sandbox}\label{subsec:editor_interface}
+After generation, musicians refine the arrangement in a note-level editor on a custom web sandbox built on a patched RiffScore canvas~\cite{Kotvas:2025}, facilitating what Fu et al. identify as a co-creative ``collaging and refinement'' stage~\cite{Fu:2025}. Edits sync immediately on the staff (Figure~\ref{fig:tactile_sandbox}), leveraging direct manipulation to foster user ownership and self-efficacy~\cite{Louie:2020}. Users can selectively regenerate measure ranges or accept targeted LLM pitch suggestions, keeping the human creator in control. To resolve cross-platform accessibility, the editor supports exporting completed arrangements as MusicXML, MIDI, WAV, or OpenSheetMusicDisplay-rendered PDFs with clef transpositions.
+
+\begin{figure}[htbp] 
+\centering 
+\includegraphics[width=0.9\linewidth]{Tactile.png} 
+\caption{The Tactile Sandbox note-level editor allowing users to manually refine the arrangement.} 
+\label{fig:tactile_sandbox} 
+\end{figure}
+
+\subsection{The Theory Inspector}\label{subsec:theory_inspector}
+To support musicians without formal training while avoiding cognitive overload, we keep the Theory Inspector closed until selected. Clicking a note builds a deterministic fact block of intervals, spacing, and rule checks, with visual warnings for violations. An on-demand chat sidebar answers contextual queries (Figure~\ref{fig:theory_inspector}): replies are retrieval-augmented from a curated theory lexicon grounded in Open Music Theory~\cite{Gotham:2021}, then phrased in plain language. Because LLMs remain unreliable at multi-step symbolic music reasoning~\cite{Zhou:2024}, the Inspector explains and suggests only; it never drafts the score. Auditor, Tutor, and Stylist personas propose alternative voicings as an ``Interpreter'' under explicit user control~\cite{Louie:2020}, ensuring no changes are written to the score without confirmation.
+
+\begin{figure}[htbp] 
+\centering 
+\includegraphics[width=0.9\linewidth]{TheoryIns.png} 
+\caption{The Theory Inspector interface displaying fact blocks and contextual plain-language explanations.} 
+\label{fig:theory_inspector} 
+\end{figure}
+
+\section{Demonstration Use Case}\label{sec:demo}
+We will demo HarmonyForge live at our poster station. Attendees collaboratively arrange for an ad-hoc ensemble:
+\begin{enumerate}
+\item \textbf{Upload \& Configure}: Load a melody (MusicXML, MIDI, or PDF) and pick an unusual instrument mix (e.g., Flute, Trombone, Violin).
+\item \textbf{Generate}: Run the Logic Core to generate playable parts.
+\item \textbf{Edit}: In the Sandbox, move a note to intentionally break a rule (such as creating parallel octaves).
+\item \textbf{Inspect}: Open the Theory Inspector, read red/blue audit highlights, and ask the Tutor how to fix the conflict.
+\item \textbf{Export}: Toggle letter names (and chords) and download PDF, MusicXML, WAV, or MIDI.
+\end{enumerate}
+
+\section{Conclusion and Future Work}\label{sec:conclusion}
+We have presented HarmonyForge, a co-creative symbolic music arrangement system designed to separate deterministic, rule-based drafting from conversational explanations. By combining a constraint-based logic engine with a flexible note-level editor, the system preserves human creative control while automating mechanical notation tasks.
+
+While preliminary testing has refined the constraint engine, upcoming field studies will measure HarmonyForge's pedagogical and creative impact. Future mixed-methods work with classrooms and ensembles will examine whether the Theory Inspector scaffolds foundational learning without compromising user agency. We aim to grow the theory lexicon beyond Western classical SATB so the system can stand at a crossroads, where rule-based arrangement, pedagogical explanation, and diverse musical traditions can meet. Feedback from the ISMIR 2026 late-breaking demo will guide those evaluations and the next version of this explainable sandbox.
+
+\clearpage
+\section{Acknowledgments}
+We thank the Salt Lab at the University of Illinois Urbana-Champaign School of Information Sciences for their support. We also extend our gratitude to the musicians and educators who provided feedback during our formative interviews.
+
+\section{AI Usage Statement}
+In accordance with the ISMIR 2026 AI Usage Policy, we disclose that (i)~an LLM is a core component of the Theory Inspector described in this abstract, and (ii)~Google Gemini was used during development to help synthesize thematic codes and perform data analysis from formative interview notes and to draft candidate pedagogical explanation templates later edited by the authors. All scientific claims, system design decisions, and final text were reviewed and approved by the authors.
+
+\bibliography{ISMIR2026_current}
+\end{document}

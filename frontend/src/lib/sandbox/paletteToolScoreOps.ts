@@ -8,6 +8,7 @@ import {
   applyTupletGroup,
   clearTupletOnSelection,
   cloneScore,
+  getNoteById,
   setMeasureBarline,
   setMeasureRepeatMark,
   setMeasureTempoText,
@@ -128,12 +129,20 @@ export function applyPaletteScoreOp(
     }
     const n = Number.parseInt(rest, 10);
     if (Number.isFinite(n) && n > 0) {
+      const already = [...noteIds].every((id) => getNoteById(score, id)?.note.tuplet === n);
+      if (already) {
+        return { kind: "score", score: clearTupletOnSelection(score, noteIds) };
+      }
       return { kind: "score", score: applyTupletGroup(score, noteIds, n) };
     }
   }
 
   if (toolId.startsWith("measure-barline-")) {
     const style = toolId.slice("measure-barline-".length) as BarlineStyle;
+    const current = score.parts[0]?.measures[measureIndex]?.barline ?? "normal";
+    if (style !== "normal" && current === style) {
+      return { kind: "score", score: setMeasureBarline(score, measureIndex, "normal") };
+    }
     return { kind: "score", score: setMeasureBarline(score, measureIndex, style) };
   }
 
@@ -143,6 +152,10 @@ export function applyPaletteScoreOp(
       return { kind: "score", score: setMeasureRepeatMark(score, measureIndex, null) };
     }
     if (["segno", "coda", "dc", "ds", "fine"].includes(kind)) {
+      const current = score.parts[0]?.measures[measureIndex]?.repeatMark;
+      if (current === kind) {
+        return { kind: "score", score: setMeasureRepeatMark(score, measureIndex, null) };
+      }
       return {
         kind: "score",
         score: setMeasureRepeatMark(
@@ -182,9 +195,20 @@ export function applyPaletteScoreOp(
     if (kind === "custom") return { kind: "prompt", promptKind: "tempo" };
     if (kind in presets) {
       const { text, bpm } = presets[kind]!;
+      const formatted = `${text} ♩ = ${bpm}`;
+      const current = score.parts[0]?.measures[measureIndex]?.tempoText ?? "";
+      const already =
+        current === formatted ||
+        (score.bpm === bpm && current.toLowerCase().startsWith(text.toLowerCase()));
+      if (already) {
+        return {
+          kind: "score",
+          score: setMeasureTempoText(score, measureIndex, null, null),
+        };
+      }
       return {
         kind: "score",
-        score: setMeasureTempoText(score, measureIndex, `${text} ♩ = ${bpm}`, bpm),
+        score: setMeasureTempoText(score, measureIndex, formatted, bpm),
       };
     }
   }

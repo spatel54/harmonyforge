@@ -43,4 +43,11 @@ test.describe("Document live melody → Generate", () => {
     expect(uploaded).toBeTruthy();
     expect(uploaded).toMatch(/<type>whole<\/type>/);
   });
+
+  test("upload preview has a single play control", async ({ page }) => {
+    await uploadSampleXml(page);
+    await waitForRiffScoreReady(page);
+    await expect(page.getByTestId("score-preview-play")).toBeVisible();
+    await expect(page.locator(".riff-PlaybackControls__play-button")).toBeHidden();
+  });
 });

@@ -17,16 +17,21 @@ function spellPitchClass(pc: number, key: KeyContext): string {
 
 const ROOT_RE = /^([A-Ga-g])([#b♯♭]?)(.*)$/;
 
+function replaceMusicAccidentals(s: string): string {
+  return s.replace(/♯/g, "#").replace(/♭/g, "b");
+}
+
 /**
  * Lead-sheet labels: major triads = root only (C, not CM); minor = lowercase m (Am, Dm).
  * Also normalizes detect/MusicXML variants (C major, Cmin, CMaj → C).
  */
 export function normalizeLeadSheetChordSymbol(symbol: string): string {
-  const trimmed = symbol.trim();
+  const trimmed = replaceMusicAccidentals(symbol.trim());
   if (!trimmed || trimmed === "?") return trimmed;
 
   const slashIdx = trimmed.indexOf("/");
   const head = slashIdx >= 0 ? trimmed.slice(0, slashIdx) : trimmed;
+  const bassRaw = slashIdx >= 0 ? trimmed.slice(slashIdx + 1).trim() : "";
 
   const m = head.match(ROOT_RE);
   if (!m) return trimmed;
@@ -50,7 +55,52 @@ export function normalizeLeadSheetChordSymbol(symbol: string): string {
     suffix = `m${suffix.slice(1)}`;
   }
 
+  const bassMatch = bassRaw.match(ROOT_RE);
+  const bass = bassMatch
+    ? `${(bassMatch[1] ?? "C").toUpperCase()}${bassMatch[2] ?? ""}`
+    : "";
+  // Drop inversions (C/E → C). Keep a slash only when bass isn't a simple root duplicate.
+  if (bass && bass !== root) {
+    return `${root}${suffix}`;
+  }
   return `${root}${suffix}`;
+}
+
+/**
+ * Collapse Tonal/detect junk (C6, Cadd9, Cmaj9, Csus) to triad/7th lead-sheet labels.
+ */
+export function simplifyLeadSheetChordSymbol(symbol: string): string {
+  const n = normalizeLeadSheetChordSymbol(symbol);
+  if (!n || n === "?") return n;
+  const m = n.match(/^([A-G][#b]?)(.*)$/);
+  if (!m) return n;
+  const root = m[1]!;
+  let suf = m[2] ?? "";
+  suf = suf.replace(/add\d+/gi, "").replace(/sus[24]?/gi, "");
+  if (suf === "6" || suf === "69" || suf === "6/9" || suf === "69") suf = "";
+  if (/^maj9/i.test(suf) || /^ma9/i.test(suf)) suf = "maj7";
+  if (suf === "9" || suf === "11" || suf === "13") suf = "7";
+  if (suf === "m9" || suf === "m11" || suf === "m13") suf = "m7";
+  if (/^m6/.test(suf)) suf = "m";
+  return `${root}${suf}`;
+}
+
+const PC_SHARP_SPELL = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
+const PC_FLAT_SPELL = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"] as const;
+
+/** Diatonic triad + V7 labels for a key signature (fifths), plus V of the relative minor. */
+export function diatonicLeadSheetSymbols(fifths: number): string[] {
+  const f = Math.max(-7, Math.min(7, Math.round(fifths)));
+  const useFlats = f < 0;
+  const spell = (pc: number) => (useFlats ? PC_FLAT_SPELL : PC_SHARP_SPELL)[((pc % 12) + 12) % 12]!;
+  const tonicPc = ((f * 7) % 12 + 12) % 12;
+  const scale = [0, 2, 4, 5, 7, 9, 11];
+  const quality = ["", "m", "m", "", "", "m", "dim"];
+  const out = scale.map((iv, i) => `${spell((tonicPc + iv) % 12)}${quality[i]!}`);
+  out.push(`${spell((tonicPc + 7) % 12)}7`);
+  out.push(spell((tonicPc + 4) % 12));
+  out.push(`${spell((tonicPc + 4) % 12)}7`);
+  return out;
 }
 
 /** Map engine Roman numeral + key to RiffScore-style symbol (e.g. C, Dm, G7, Am). */

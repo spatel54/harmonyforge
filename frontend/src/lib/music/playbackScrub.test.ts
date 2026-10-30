@@ -7,9 +7,13 @@ import {
   contentXForPlaybackTick,
   contentXToMeasureQuant,
   contentXToNearestMeasureStart,
+  fractionToMeasureQuant,
+  measureQuantToFraction,
+  noteStartQuantInMeasure,
   quantToBeatLabel,
   riffQuantsForMeasure,
   secondsPerQuantForScore,
+  advancePlaybackTick,
 } from "./playbackScrub";
 
 const minimalScore: EditableScore = {
@@ -149,6 +153,35 @@ describe("contentXForPlaybackTick", () => {
     );
     expect(xMid).toBeGreaterThan(xStart);
   });
+
+  it("continues into the next measure when elapsed time crosses the barline", () => {
+    const score: EditableScore = { ...minimalScore, bpm: 120 };
+    const spans = buildMeasurePlaybackSpans(
+      [pos(0, 0), pos(0, 100), pos(1, 200), pos(1, 300)],
+      2,
+      400,
+    );
+    const barSec = 64 * secondsPerQuantForScore(score);
+    const x0 = contentXForPlaybackTick(score, spans, 0, 0, barSec * 2, 0);
+    const xNext = contentXForPlaybackTick(
+      score,
+      spans,
+      0,
+      0,
+      barSec * 2,
+      barSec + barSec / 4,
+    );
+    expect(xNext).toBeGreaterThan(x0);
+    expect(contentXToMeasureQuant(xNext, spans, score).measureIndex).toBe(1);
+  });
+
+  it("advances slower at live 80 BPM than the 120 default when score.bpm is unset", () => {
+    const spans = buildMeasurePlaybackSpans([pos(0, 0), pos(0, 200)], 1, 400);
+    const x80 = contentXForPlaybackTick(minimalScore, spans, 0, 0, 10, 1.5, 80);
+    const x120 = contentXForPlaybackTick(minimalScore, spans, 0, 0, 10, 1.5, 120);
+    expect(x80).toBeLessThan(x120);
+    expect(x80).toBeGreaterThan(contentXForPlaybackTick(minimalScore, spans, 0, 0, 10, 0, 80));
+  });
 });
 
 describe("contentXForMeasureQuant", () => {
@@ -167,5 +200,48 @@ describe("quantToBeatLabel", () => {
   it("formats bar and beat for 4/4", () => {
     expect(quantToBeatLabel(0, minimalScore, 0)).toBe("Bar 1 · beat 1");
     expect(quantToBeatLabel(16, minimalScore, 0)).toBe("Bar 1 · beat 2");
+  });
+});
+
+describe("timeline measure/quant mapping", () => {
+  it("round-trips fraction through measure + quant", () => {
+    const start = fractionToMeasureQuant(minimalScore, 0);
+    expect(start).toEqual({ measureIndex: 0, quant: 0 });
+    const mid = fractionToMeasureQuant(minimalScore, 0.5);
+    expect(mid.measureIndex).toBe(1);
+    expect(mid.quant).toBe(0);
+    const back = measureQuantToFraction(minimalScore, mid.measureIndex, mid.quant);
+    expect(back).toBeCloseTo(0.5, 5);
+  });
+
+  it("advances into the next bar at live 80 BPM", () => {
+    const score: EditableScore = { ...minimalScore, bpm: 80 };
+    const barSec = 64 * secondsPerQuantForScore(score, 80);
+    const next = advancePlaybackTick(score, 0, 0, barSec * 2, barSec + barSec / 4, 80);
+    expect(next.measureIndex).toBe(1);
+    expect(next.quant).toBeGreaterThan(0);
+  });
+
+  it("maps a later note in the bar to a later start quant", () => {
+    const score: EditableScore = {
+      ...minimalScore,
+      parts: [
+        {
+          ...minimalScore.parts[0]!,
+          measures: [
+            {
+              id: "m0",
+              notes: [
+                { id: "n0", pitch: "C4", duration: "q" },
+                { id: "n1", pitch: "E4", duration: "q" },
+              ],
+            },
+            { id: "m1", notes: [] },
+          ],
+        },
+      ],
+    };
+    expect(noteStartQuantInMeasure(score, "p1", 0, 0)).toBe(0);
+    expect(noteStartQuantInMeasure(score, "p1", 0, 1)).toBe(16);
   });
 });

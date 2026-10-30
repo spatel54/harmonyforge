@@ -1,6 +1,6 @@
 /**
  * Patched RiffScore notifies HarmonyForge on each playback segment (notes and rests)
- * so the scrub overlay can advance through silence without relying on SVG cursor motion.
+ * so the native playhead and timeline rail can advance through silence without relying on SVG cursor motion.
  */
 
 export type HfPlaybackPositionTick = {
@@ -41,6 +41,16 @@ function clearPlaybackPosition(): void {
 
 export function getHfPlaybackPositionTick(): HfPlaybackPositionTick | null {
   return lastTick;
+}
+
+/** True while RiffScore has reported a playback segment that is still in progress. */
+export function isHfPlaybackTickActive(nowMs?: number): boolean {
+  if (!lastTick) return false;
+  const now =
+    nowMs ??
+    (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const holdMs = Math.max(180, lastTick.durationSec * 1000 + 160);
+  return now - lastTick.at < holdMs;
 }
 
 export function installPlaybackPositionBridge(): void {

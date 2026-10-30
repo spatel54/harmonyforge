@@ -88,7 +88,7 @@ import {
 } from "@/components/score/NotationEngravingOverlay";
 import { RiffScoreSuggestionOverlay } from "./RiffScoreSuggestionOverlay";
 import { NotePalettePopover } from "@/components/molecules/NotePalettePopover";
-import { PlaybackScrubOverlay } from "./PlaybackScrubOverlay";
+import { PlaybackTimelineRail } from "./PlaybackTimelineRail";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
 import { applyDeleteSelectionAsRests } from "@/lib/sandbox/deleteSelectionAsRests";
 import {
@@ -105,6 +105,8 @@ import {
   installPlaybackExpressionBridge,
   syncPlaybackExpressionCache,
 } from "@/lib/music/playbackExpressionBridge";
+import { parkPlaybackStart } from "@/lib/music/riffscorePlaybackBridge";
+import { noteStartQuantInMeasure } from "@/lib/music/playbackScrub";
 import { showSandboxToast } from "@/lib/sandbox/sandboxToast";
 import { mapSandboxToolbarActionToToolId, type SandboxToolbarActionId } from "./toolbarActionMap";
 
@@ -250,6 +252,19 @@ function canvasPointHitsAnyNoteOrRest(
   return false;
 }
 
+function scoreEditFingerprint(score: EditableScore | null): string {
+  if (!score) return "";
+  return score.parts
+    .map((p) =>
+      p.measures
+        .map((m) =>
+          m.notes.map((n) => `${n.pitch}:${n.duration}:${n.isRest ? "r" : "n"}`).join(","),
+        )
+        .join("|"),
+    )
+    .join("/");
+}
+
 /** Hit-test note or rest at canvas coordinates for palette drop targeting. */
 function pickNoteOrRestAtCanvasPoint(
   positions: readonly NotePosition[],
@@ -323,6 +338,17 @@ export interface RiffScoreEditorProps {
   hideNativeNotationStrip?: boolean;
   /** HF undo/transpose/export plugins on the RiffScore toolbar. Default true; Document sets false. */
   includeHarmonyforgeToolbarPlugins?: boolean;
+  /**
+   * Hide RiffScore's native Play/Pause control when the parent supplies its own transport
+   * (Document upload preview overlay).
+   */
+  hideNativePlayButton?: boolean;
+  /** Document preview Play/Pause on the timeline rail (native Play is hidden). */
+  externalPlayControl?: {
+    playing: boolean;
+    disabled?: boolean;
+    onToggle: () => void;
+  };
   /** Write editor pulls into `useScoreStore`. Default true; Document sets false so sandbox score is not overwritten. */
   persistScoreToStore?: boolean;
   /** Dropping a notation-panel symbol onto the score runs the same tool id as a click. */
@@ -376,6 +402,8 @@ export function RiffScoreEditor({
   hideNativeNotationStrip = true,
   includeHarmonyforgeToolbarPlugins = true,
   persistScoreToStore = true,
+  hideNativePlayButton = false,
+  externalPlayControl,
   onPaletteSymbolDrop,
   paletteIsItemPressed,
   onEditorApiReady,
@@ -418,9 +446,11 @@ export function RiffScoreEditor({
   const [learnerClipTopPx, setLearnerClipTopPx] = useState(0);
   /** Same inset for theory/selection/focus pills — overlays are sibling to RiffScore and would otherwise paint over the toolbar when scrolling. */
   const [scoreOverlayClipTopPx, setScoreOverlayClipTopPx] = useState(0);
-  /** Mount target for playback scrub (inside `.riff-ScoreEditor__content`, below the toolbar). */
-  const [playbackScrubPortalHost, setPlaybackScrubPortalHost] = useState<HTMLElement | null>(null);
+  /** Mount target for the measure timeline (between RiffScore toolbar and canvas). */
+  const [timelineHost, setTimelineHost] = useState<HTMLElement | null>(null);
   const prevScoreRef = useRef<EditableScore | null>(null);
+  /** Skip the next Zustand→RS push so undo/redo does not `loadScore` and wipe the redo stack. */
+  const skipNextScorePushRef = useRef(false);
   /** HF ids from the last true multi-select; retained while RiffScore reports only the dragged primary note. */
   const pitchGroupRef = useRef<Set<string>>(new Set());
   /** Score snapshot at pointerdown for live multi-note pitch drag (propagate vs frozen baseline). */
@@ -490,14 +520,19 @@ export function RiffScoreEditor({
   const runEditorHistoryOp = useCallback((op: "undo" | "redo") => {
     const api = apiRef.current;
     if (!api) return;
-    // Ensure the latest editor state is in Zustand first, then execute history,
-    // then sync back so toolbar/hotkeys feel single-press reliable.
-    flushToZustandRef.current();
-    requestAnimationFrame(() => {
+    const before = scoreEditFingerprint(readLiveScoreRef.current());
+    // Duplicate loadScore (score-change + chord-track effects) can sit on the
+    // RS stack as no-ops. Pop until the sounding score actually changes.
+    for (let i = 0; i < 4; i++) {
       if (op === "undo") api.undo();
       else api.redo();
-      requestAnimationFrame(() => flushToZustandRef.current());
-    });
+      if (scoreEditFingerprint(readLiveScoreRef.current()) !== before) break;
+    }
+    const live = readLiveScoreRef.current();
+    if (!live) return;
+    skipNextScorePushRef.current = true;
+    useScoreStore.getState().replaceScoreFromEditor(live);
+    prevScoreRef.current = useScoreStore.getState().score;
   }, []);
   const syncMultiPitchFromBaselineRef = useRef(syncMultiPitchFromBaseline);
   syncMultiPitchFromBaselineRef.current = syncMultiPitchFromBaseline;
@@ -1211,6 +1246,11 @@ export function RiffScoreEditor({
   // Push score to RiffScore when it changes externally (e.g., undo/redo, file load)
   useEffect(() => {
     if (!isReady || !score) return;
+    if (skipNextScorePushRef.current) {
+      skipNextScorePushRef.current = false;
+      prevScoreRef.current = score;
+      return;
+    }
     // Only push if the score reference actually changed (not from our own pull)
     if (score !== prevScoreRef.current) {
       prevScoreRef.current = score;
@@ -1219,11 +1259,18 @@ export function RiffScoreEditor({
     }
   }, [isReady, score, pushToRiffScore]);
 
+  const pushToRiffScoreRef = useRef(pushToRiffScore);
+  pushToRiffScoreRef.current = pushToRiffScore;
+  const chordTrackEffectArmedRef = useRef(false);
   useEffect(() => {
-    if (!isReady || !score || !persistScoreToStore) return;
+    if (!isReady || !persistScoreToStore) return;
+    if (!chordTrackEffectArmedRef.current) {
+      chordTrackEffectArmedRef.current = true;
+      return;
+    }
     ignoreEmptySelectionUntilRef.current = performance.now() + 400;
-    pushToRiffScore();
-  }, [isReady, score, showChordTrack, pushToRiffScore, persistScoreToStore]);
+    pushToRiffScoreRef.current();
+  }, [isReady, showChordTrack, persistScoreToStore]);
 
   // Extract note positions after renders for overlay positioning
   useEffect(() => {
@@ -1339,13 +1386,15 @@ export function RiffScoreEditor({
 
     const measure = () => {
       const tb = root.querySelector(".riff-Toolbar");
-      if (!tb) {
+      const timeline = root.querySelector(".hf-playback-timeline-host");
+      const clipEl = timeline ?? tb;
+      if (!clipEl) {
         setLearnerClipTopPx(0);
         setScoreOverlayClipTopPx(0);
         return;
       }
       const cr = root.getBoundingClientRect();
-      const br = tb.getBoundingClientRect();
+      const br = clipEl.getBoundingClientRect();
       const clipTop = Math.max(0, Math.round(br.bottom - cr.top));
       setScoreOverlayClipTopPx(clipTop);
       setLearnerClipTopPx(showNoteNameLabels ? clipTop : 0);
@@ -1356,27 +1405,38 @@ export function RiffScoreEditor({
     ro.observe(root);
     const tbEl = root.querySelector(".riff-Toolbar");
     if (tbEl) ro.observe(tbEl);
+    const hostEl = root.querySelector(".hf-playback-timeline-host");
+    if (hostEl) ro.observe(hostEl);
     return () => ro.disconnect();
-  }, [showNoteNameLabels, presentation, isReady, instanceId, score]);
+  }, [showNoteNameLabels, presentation, isReady, instanceId, score, timelineHost]);
 
   useLayoutEffect(() => {
     if (presentation || !isReady) {
-      setPlaybackScrubPortalHost(null);
+      setTimelineHost(null);
       return;
     }
     const root = containerRef.current;
     if (!root) return;
 
     const syncHost = () => {
-      const content = root.querySelector<HTMLElement>(".riff-ScoreEditor__content");
-      setPlaybackScrubPortalHost((prev) => (prev === content ? prev : content ?? null));
+      const editor = root.querySelector<HTMLElement>(".riff-ScoreEditor");
+      const toolbar = root.querySelector<HTMLElement>(".riff-Toolbar");
+      if (!editor || !toolbar) {
+        setTimelineHost((prev) => (prev == null ? prev : null));
+        return;
+      }
+      let host = editor.querySelector<HTMLElement>(":scope > .hf-playback-timeline-host");
+      if (!host) {
+        host = document.createElement("div");
+        host.className = "hf-playback-timeline-host";
+        toolbar.insertAdjacentElement("afterend", host);
+      }
+      setTimelineHost((prev) => (prev === host ? prev : host));
     };
 
     syncHost();
     const ro = new ResizeObserver(syncHost);
     ro.observe(root);
-    const contentEl = root.querySelector(".riff-ScoreEditor__content");
-    if (contentEl) ro.observe(contentEl);
     return () => ro.disconnect();
   }, [presentation, isReady, instanceId, score]);
 
@@ -1553,14 +1613,28 @@ export function RiffScoreEditor({
       if (e.shiftKey || e.ctrlKey || e.metaKey) return;
       const t = e.target as Node | null;
       if (root.querySelector(".riff-Toolbar")?.contains(t)) return;
+      if (t instanceof Element && t.closest(".hf-playback-timeline")) return;
       if (t instanceof Element && t.closest("[data-hf-rest-ghost-root]")) return;
       if (t instanceof Element && t.closest("button,a,input,textarea,select,[role='button']")) {
         return;
       }
 
+      // SVG noteheads are not focusable; keep shortcuts on the editor, not leftover BPM/combobox focus.
+      if (enableScoreEditing) {
+        root.focus({ preventScroll: true });
+      }
+
       const rect = root.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+
+      const noteHit = pickNoteOrRestAtCanvasPoint(notePositionsRef.current, mx, my);
+      if (noteHit) {
+        parkPlaybackStart(
+          noteHit.measureIndex,
+          noteStartQuantInMeasure(score, noteHit.partId, noteHit.measureIndex, noteHit.noteIndex),
+        );
+      }
 
       if (enableScoreEditing && measureCount > 0) {
         const hit = measurePartFromCanvasPoint(notePositionsRef.current, mx, my);
@@ -1569,6 +1643,7 @@ export function RiffScoreEditor({
           if (staffIndex >= 0) {
             e.preventDefault();
             e.stopPropagation();
+            parkPlaybackStart(hit.measureIndex, 0);
             const api = apiRef.current;
             if (api) {
               selectEventsInMeasureOnStaff(api, hit.measureIndex, staffIndex);
@@ -1657,6 +1732,7 @@ export function RiffScoreEditor({
         "relative w-full h-full min-h-[200px] riffscore-hf-wrapper",
         presentation && "riffscore-hf-wrapper--presentation",
         hideNativeNotationStrip && "riffscore-hf-wrapper--no-notation-strip",
+        hideNativePlayButton && "riffscore-hf-wrapper--external-play",
         showNoteNameLabels && (!presentation || allowNoteNameLabelsInPresentation) && "pt-5",
         className,
       )}
@@ -1722,9 +1798,9 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-ScoreCanvas {
           background: transparent !important;
         }
-        /* Draggable HarmonyForge scrub line replaces the built-in cursor hit-testing */
+        /* Native playhead is visual-only; seeking lives on the timeline rail. */
         .riffscore-hf-wrapper [data-testid="playback-cursor"] {
-          opacity: 0 !important;
+          pointer-events: none !important;
         }
         /* Fewer than 3 staves: hide RiffScore chord track (avoids misleading Cm7 hover). */
         .riffscore-hf-wrapper[data-hf-chord-ui="0"] g.riff-ChordTrack,
@@ -1740,9 +1816,17 @@ export function RiffScoreEditor({
         .riffscore-hf-wrapper .riff-Toolbar__row > *:has(+ .riff-Toolbar__library-wrapper) {
           display: none !important;
         }
+        /* Sandbox: HarmonyForge header already has keyboard shortcuts. */
+        .riffscore-hf-wrapper--no-notation-strip .riff-ToolbarButton[aria-label="Keyboard Shortcuts"] {
+          display: none !important;
+        }
         /* Notation palettes live in the docked panel + note popover (sandbox). */
         .riffscore-hf-wrapper--no-notation-strip .riff-Toolbar > .riff-Toolbar__row ~ .riff-Toolbar__row,
         .riffscore-hf-wrapper--no-notation-strip .riff-Toolbar > .riff-Divider--horizontal {
+          display: none !important;
+        }
+        /* Document preview: one Play control — the HarmonyForge overlay, not native RS Play. */
+        .riffscore-hf-wrapper--external-play .riff-PlaybackControls__play-button {
           display: none !important;
         }
         /*
@@ -1768,11 +1852,10 @@ export function RiffScoreEditor({
         }
         /* Toolbar: show caption under native RiffScore tool buttons */
         /* Keep native toolbar above HF absolute overlays (siblings paint after RiffScore). */
-        .riffscore-hf-wrapper .riff-Toolbar {
+        .riffscore-hf-wrapper .hf-playback-timeline-host {
+          flex: 0 0 auto !important;
+          z-index: 61 !important;
           position: relative !important;
-          z-index: 60 !important;
-          background: var(--hf-bg) !important;
-          box-shadow: 0 1px 0 color-mix(in srgb, var(--hf-detail) 40%, transparent) !important;
         }
         .riffscore-hf-wrapper .riff-ToolbarButton {
           flex-direction: column !important;
@@ -1798,7 +1881,6 @@ export function RiffScoreEditor({
         }
         /* Restore interactivity on elements that genuinely need line-level hit-testing:
            staff cursor, playback line, measure bar selection overlays. */
-        .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-testid="playback-cursor"],
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-measure-bar],
         .riffscore-hf-wrapper .riff-ScoreCanvas__svg line[data-editable] {
           pointer-events: stroke;
@@ -1833,18 +1915,19 @@ export function RiffScoreEditor({
         id={instanceId}
         config={config}
       />
-
-      {!presentation && (
-        <PlaybackScrubOverlay
-          containerRef={containerRef}
-          portalHost={playbackScrubPortalHost}
-          apiRef={apiRef}
-          score={score}
-          notePositions={notePositions}
-          measureCount={measureCount}
-          isReady={isReady}
-        />
-      )}
+      {!presentation && timelineHost
+        ? createPortal(
+            <PlaybackTimelineRail
+              apiRef={apiRef}
+              rootRef={containerRef}
+              score={score}
+              measureCount={measureCount}
+              isReady={isReady}
+              playControl={externalPlayControl}
+            />,
+            timelineHost,
+          )
+        : null}
 
       {/* Part names when SVG staff geometry is unavailable */}
       {!presentation && score.parts.length > 0 && !staffLabelsUseOverlay && (
@@ -1873,7 +1956,9 @@ export function RiffScoreEditor({
               const melodyName = (
                 <span className="flex flex-col items-start gap-0">
                   <span className="font-medium">Melody</span>
-                  <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
+                  {p.name.trim().toLowerCase() !== "melody" ? (
+                    <span className="text-[10px] opacity-85 font-mono">{p.name}</span>
+                  ) : null}
                 </span>
               );
               const nameContent = showMelody ? melodyName : p.name;
@@ -1913,8 +1998,9 @@ export function RiffScoreEditor({
           const centerY = layout.top + layout.height / 2;
           const multi = score.parts.length > 1;
           const primaryLabel = multi && si === 0 ? "Melody" : part.name;
-          const secondaryLabel = multi && si === 0 ? part.name : null;
-          const labelTitle = multi && si === 0 ? `Melody — ${part.name}` : part.name;
+          const secondaryLabel =
+            multi && si === 0 && part.name.trim().toLowerCase() !== "melody" ? part.name : null;
+          const labelTitle = secondaryLabel ? `Melody — ${part.name}` : part.name;
           const canPartInspect = noteInspectionEnabled && onInspectorSelectPart;
           const textShadow =
             "0 0 8px var(--hf-bg), 0 0 10px var(--hf-bg), 0 1px 2px var(--hf-bg)";

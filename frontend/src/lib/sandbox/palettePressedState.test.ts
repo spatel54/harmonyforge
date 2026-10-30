@@ -67,6 +67,28 @@ describe("isPaletteItemPressed", () => {
     ).toBe(true);
   });
 
+  it("marks Adagio pressed from measure tempo text, not leftover BPM", () => {
+    const score = scoreWith({ id: "n1", pitch: "C4", duration: "q" });
+    score.parts[0]!.measures[0]!.tempoText = "Adagio ♩ = 66";
+    score.bpm = 66;
+    expect(
+      isPaletteItemPressed(item("tempo-preset-adagio"), {
+        score,
+        selectedNoteIds: new Set(["n1"]),
+        activeTool: null,
+      }),
+    ).toBe(true);
+
+    delete score.parts[0]!.measures[0]!.tempoText;
+    expect(
+      isPaletteItemPressed(item("tempo-preset-adagio"), {
+        score,
+        selectedNoteIds: new Set(["n1"]),
+        activeTool: null,
+      }),
+    ).toBe(false);
+  });
+
   it("marks sharp accidental from pitch spelling", () => {
     const score = scoreWith({ id: "n1", pitch: "C#4", duration: "q" });
     expect(

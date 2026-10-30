@@ -8,12 +8,14 @@ import { EnsembleBuilderPanel } from "@/components/organisms/EnsembleBuilderPane
 import {
   TransitionOverlay,
   TRANSITION_MIN_VISIBLE_MS,
+  TRANSITION_COMPLETE_HOLD_MS,
 } from "@/components/organisms/TransitionOverlay";
 import { awaitMinElapsedSince } from "@/lib/ui/awaitMinElapsed";
 import { useUploadStore } from "@/store/useUploadStore";
 import { useGenerationConfigStore } from "@/store/useGenerationConfigStore";
 import type { GenerationConfig } from "@/components/organisms/EnsembleBuilderPanel";
 import { parseMusicXML, extractMusicXMLMetadata } from "@/lib/music/musicxmlParser";
+import { deriveDisplayScoreTitle, uploadedFileStem } from "@/lib/music/scoreDisplayTitle";
 import type { EditableScore } from "@/lib/music/scoreTypes";
 import { resolveMelodyXmlForGeneration } from "@/lib/music/resolveMelodyXmlForGeneration";
 import type { RiffScoreSessionHandles } from "@/context/RiffScoreSessionContext";
@@ -35,46 +37,6 @@ const GENERATE_TIMEOUT_MS = (() => {
   return Number.isFinite(n) && n >= 15_000 ? Math.min(n, 600_000) : 180_000;
 })();
 
-function uploadedFileStem(file: File | null): string | null {
-  if (!file) return null;
-  const stem = file.name.replace(/\.[^/.]+$/, "").trim();
-  return stem.length > 0 ? stem : null;
-}
-
-function deriveDisplayScoreTitle(
-  file: File | null,
-  previewMeta: { title: string; meta: string } | null,
-  previewScore: EditableScore | null,
-): string | null {
-  const fileTitle = uploadedFileStem(file);
-  const rawMetaTitle = previewMeta?.title?.trim() ?? "";
-
-  if (!rawMetaTitle || rawMetaTitle.toLowerCase() === "score") {
-    return fileTitle;
-  }
-
-  const normalizedMetaTitle = rawMetaTitle.toLowerCase();
-  const partNames = (previewScore?.parts ?? [])
-    .map((p) => p.name.trim().toLowerCase())
-    .filter((name) => name.length > 0);
-
-  // Some sources place the instrument/part name in movement-title.
-  // If that happens, prefer the uploaded filename as the score title.
-  if (partNames.includes(normalizedMetaTitle)) {
-    return fileTitle ?? rawMetaTitle;
-  }
-
-  const normalizedMetaLine = (previewMeta?.meta ?? "").trim().toLowerCase();
-  if (
-    normalizedMetaLine.startsWith(`${normalizedMetaTitle} •`) ||
-    normalizedMetaLine.startsWith(`${normalizedMetaTitle}·`)
-  ) {
-    return fileTitle ?? rawMetaTitle;
-  }
-
-  return rawMetaTitle;
-}
-
 /**
  * Document Page — /document
  * Step 2: Score preview (left) + Ensemble Builder (right).
@@ -84,11 +46,13 @@ export default function DocumentPage() {
   const router = useRouter();
   const coachmarkTourActive = useCoachmarkStore((s) => s.isActive);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [generateComplete, setGenerateComplete] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [previewScore, setPreviewScore] = React.useState<EditableScore | null>(null);
   const [previewMeta, setPreviewMeta] = React.useState<{ title: string; meta: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const file = useUploadStore((s) => s.file);
+  const sourceFileName = useUploadStore((s) => s.sourceFileName);
   const storePreviewXml = useUploadStore((s) => s.previewMusicXML);
   const generatedMusicXML = useUploadStore((s) => s.generatedMusicXML);
   const setGeneratedMusicXML = useUploadStore((s) => s.setGeneratedMusicXML);
@@ -357,6 +321,7 @@ export default function DocumentPage() {
       return;
     }
     setIsTransitioning(true);
+    setGenerateComplete(false);
     setError(null);
     const t0 = Date.now();
     const minMs = reviewerArm
@@ -364,7 +329,7 @@ export default function DocumentPage() {
       : TRANSITION_MIN_VISIBLE_MS.generating;
     try {
       const liveScore = previewSessionRef.current?.readLiveScore() ?? previewScore;
-      const title = uploadedFileStem(file);
+      const title = uploadedFileStem(file.name);
       const melodyXml = resolveMelodyXmlForGeneration({
         liveScore,
         baselineScore: previewScore,
@@ -383,7 +348,9 @@ export default function DocumentPage() {
         const musicXML =
           melodyXml ?? (await readMelodyXmlForReviewer(file, storePreviewXml));
         setGeneratedMusicXML(musicXML);
+        setGenerateComplete(true);
         await awaitMinElapsedSince(t0, minMs);
+        await awaitMinElapsedSince(Date.now(), TRANSITION_COMPLETE_HOLD_MS);
         router.push("/sandbox");
         return;
       }
@@ -440,12 +407,15 @@ export default function DocumentPage() {
       }
       const musicXML = await res.text();
       setGeneratedMusicXML(musicXML);
+      setGenerateComplete(true);
       await awaitMinElapsedSince(t0, minMs);
+      await awaitMinElapsedSince(Date.now(), TRANSITION_COMPLETE_HOLD_MS);
       router.push("/sandbox");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
     } finally {
       setIsTransitioning(false);
+      setGenerateComplete(false);
     }
   };
 
@@ -461,8 +431,12 @@ export default function DocumentPage() {
           <ScorePreviewPanel
             score={previewScore}
             scoreTitle={
-              deriveDisplayScoreTitle(file, previewMeta, previewScore) ??
-              (coachmarkTourActive ? "Preview" : "The First Noel")
+              deriveDisplayScoreTitle({
+                fileName: file?.name ?? sourceFileName,
+                xmlTitle: previewMeta?.title,
+                xmlMeta: previewMeta?.meta,
+                partNames: (previewScore?.parts ?? []).map((p) => p.name),
+              }) ?? (coachmarkTourActive ? "Preview" : "Untitled score")
             }
             scoreMeta={
               previewMeta?.meta ??
@@ -524,6 +498,7 @@ export default function DocumentPage() {
       <TransitionOverlay
         variant={reviewerArm ? "melody_only" : "generating"}
         visible={isTransitioning}
+        workComplete={generateComplete}
       />
     </>
   );

@@ -229,7 +229,10 @@ function slotSpansForDensity(
     return [{ startBeat: clampedStart, duration: spanLen }];
   }
 
-  const melody = source?.melody ?? [];
+  const melody = [
+    ...(source?.melody ?? []),
+    ...(source?.inputParts ?? []).flatMap((part) => part.notes),
+  ];
   const onsetsInSlot: number[] = [];
   for (const note of melody) {
     const beat = clampDurationBeats(note.beat);
@@ -524,6 +527,8 @@ function buildHarmoniesByMeasure(
     const symbol = romanToChordSymbol(slot.roman, key);
     const xml = chordSymbolToHarmonyXml(symbol);
     const list = byMeasure.get(measureIndex) ?? [];
+    const prev = list[list.length - 1];
+    if (prev && prev.xml === xml) continue;
     list.push({ localBeat, xml });
     byMeasure.set(measureIndex, list);
   }
@@ -614,6 +619,64 @@ const DEFAULT_PARTS: Record<Voice, string> = {
 };
 
 const VOICE_ORDER: Voice[] = ["Soprano", "Alto", "Tenor", "Bass"];
+const HARMONY_VOICE_ORDER: Voice[] = ["Alto", "Tenor", "Bass"];
+
+type AdditiveHarmonyPart = { voice: Voice; name: string; groupIndex: number };
+
+/**
+ * Map user-selected instruments onto unique SATB inner voices.
+ * Empty selection → Alto / Tenor / Bass. Missing bass is filled so the
+ * texture has a foundation (melody + inner voices alone looked unfinished).
+ */
+export function resolveAdditiveHarmonyParts(
+  instruments?: Record<Voice, string[]>,
+): AdditiveHarmonyPart[] {
+  const selected: { requested: Voice; name: string }[] = [];
+  if (instruments) {
+    for (const v of VOICE_ORDER) {
+      for (const name of instruments[v] ?? []) {
+        if (typeof name === "string" && name.trim()) {
+          selected.push({ requested: v, name: name.trim() });
+        }
+      }
+    }
+  }
+
+  if (selected.length === 0) {
+    return HARMONY_VOICE_ORDER.map((voice) => ({
+      voice,
+      name: DEFAULT_PARTS[voice],
+      groupIndex: 0,
+    }));
+  }
+
+  const used = new Set<Voice>();
+  const out: AdditiveHarmonyPart[] = [];
+
+  const takeVoice = (requested: Voice): Voice => {
+    const preferred: Voice = requested === "Soprano" ? "Alto" : requested;
+    if (
+      (preferred === "Alto" || preferred === "Tenor" || preferred === "Bass") &&
+      !used.has(preferred)
+    ) {
+      return preferred;
+    }
+    const free = HARMONY_VOICE_ORDER.find((v) => !used.has(v));
+    return free ?? preferred;
+  };
+
+  for (const item of selected) {
+    const voice = takeVoice(item.requested);
+    const groupIndex = out.filter((p) => p.voice === voice).length;
+    if (groupIndex === 0) used.add(voice);
+    out.push({ voice, name: item.name, groupIndex });
+  }
+
+  if (!used.has("Bass")) {
+    out.push({ voice: "Bass", name: DEFAULT_PARTS.Bass, groupIndex: 0 });
+  }
+  return out;
+}
 
 /** Options for MusicXML output format: partwise for MuseScore compatibility */
 export interface SatbToMusicXMLOptions {
@@ -676,17 +739,9 @@ export function satbToMusicXML(
   let partNames: string[];
   let partEvents: MeasureSegment[][][];
 
-  if (additive && instruments) {
+  if (additive) {
     const inputParts = source?.inputParts;
-    const harmonyParts: { voice: Voice; name: string; groupIndex: number }[] = [];
-    for (const v of ["Soprano", "Alto", "Tenor", "Bass"] as Voice[]) {
-      const insts = instruments[v];
-      if (!insts || insts.length === 0) continue;
-      const voiceForPart = v === "Soprano" ? "Alto" : v;
-      for (let i = 0; i < insts.length; i++) {
-        harmonyParts.push({ voice: voiceForPart, name: insts[i]!, groupIndex: i });
-      }
-    }
+    const harmonyParts = resolveAdditiveHarmonyParts(instruments);
 
     if (inputParts && inputParts.length > 1) {
       const numInput = inputParts.length;
@@ -748,11 +803,6 @@ export function satbToMusicXML(
         ),
       ];
     }
-  } else if (additive && !instruments) {
-    activeVoices = ["Soprano"];
-    partIds = ["P1"];
-    partNames = [source!.melodyPartName ?? "Melody"];
-    partEvents = [allPartEvents[0]];
   } else {
     activeVoices = VOICE_ORDER.filter(
       (v) => !instruments || !instruments[v] || instruments[v].length > 0

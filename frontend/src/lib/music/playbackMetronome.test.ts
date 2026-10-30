@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import {
   METRONOME_BEAT_DB,
   METRONOME_DOWNBEAT_DB,
@@ -6,6 +6,11 @@ import {
   clearPlaybackMetronome,
   schedulePlaybackMetronome,
 } from "./playbackMetronome";
+import { resetPlaybackExpressionCache } from "./playbackExpressionBridge";
+
+beforeEach(() => {
+  resetPlaybackExpressionCache();
+});
 
 describe("metronome gain constants", () => {
   it("exposes louder downbeat than weak beats", () => {

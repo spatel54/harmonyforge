@@ -3,6 +3,7 @@ import {
   clearHfPlaybackPosition,
   getHfPlaybackPositionTick,
   installPlaybackPositionBridge,
+  isHfPlaybackTickActive,
 } from "./playbackPositionBridge";
 
 describe("playbackPositionBridge", () => {
@@ -40,5 +41,18 @@ describe("playbackPositionBridge", () => {
     g.__HF_ON_PLAYBACK_POSITION?.(0, 0, 1);
     clearHfPlaybackPosition();
     expect(getHfPlaybackPositionTick()).toBeNull();
+  });
+
+  it("treats a recent segment tick as active playback", () => {
+    const g = globalThis as {
+      __HF_ON_PLAYBACK_POSITION?: (
+        m: number,
+        q: number,
+        d: number,
+      ) => void;
+    };
+    g.__HF_ON_PLAYBACK_POSITION?.(0, 0, 0.5);
+    expect(isHfPlaybackTickActive()).toBe(true);
+    expect(isHfPlaybackTickActive(getHfPlaybackPositionTick()!.at + 5_000)).toBe(false);
   });
 });

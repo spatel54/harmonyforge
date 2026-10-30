@@ -64,6 +64,57 @@ describe("inferChords", () => {
     expect(inferChords(minimalParsed({ melody: [] }))).toEqual([{ roman: "I", beat: 0 }]);
   });
 
+  it("infers I–IV–V–I for a melody that outlines those triads", () => {
+    const parsed = minimalParsed({
+      melody: [
+        { pitch: "C5", beat: 0, duration: 2 },
+        { pitch: "E5", beat: 1, duration: 1 },
+        { pitch: "F5", beat: 2, duration: 2 },
+        { pitch: "A5", beat: 3, duration: 1 },
+        { pitch: "G5", beat: 4, duration: 2 },
+        { pitch: "B5", beat: 5, duration: 1 },
+        { pitch: "C5", beat: 6, duration: 2 },
+      ],
+      totalBeats: 8,
+      timeSignature: { beats: 4, beatType: 4 },
+    });
+    const chords = inferChords(parsed);
+    expect(chords.map((c) => c.roman)).toEqual(["I", "IV", "V", "I"]);
+  });
+
+  it("uses V or V7 in minor rather than staying on modal v", () => {
+    const parsed = minimalParsed({
+      key: { tonic: "A", mode: "minor" },
+      melody: [
+        { pitch: "A4", beat: 0, duration: 2 },
+        { pitch: "C5", beat: 1, duration: 1 },
+        { pitch: "E4", beat: 2, duration: 2 },
+        { pitch: "G#4", beat: 3, duration: 1 },
+        { pitch: "A4", beat: 4, duration: 2 },
+      ],
+      totalBeats: 6,
+      timeSignature: { beats: 4, beatType: 4 },
+    });
+    const chords = inferChords(parsed, "minor");
+    expect(chords.some((c) => c.roman === "V" || c.roman === "V7")).toBe(true);
+    expect(chords[chords.length - 1]!.roman).toBe("i");
+  });
+
+  it("holds I across a tonic arpeggio instead of wandering to iii", () => {
+    const parsed = minimalParsed({
+      melody: [
+        { pitch: "C5", beat: 0, duration: 2 },
+        { pitch: "E5", beat: 2, duration: 2 },
+        { pitch: "G5", beat: 4, duration: 2 },
+        { pitch: "C5", beat: 6, duration: 2 },
+      ],
+      totalBeats: 8,
+    });
+    const chords = inferChords(parsed);
+    expect(chords.every((c) => c.roman === "I")).toBe(true);
+    expect(chords.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("weights vertical sonority from all input parts, not melody alone", () => {
     const parsed = minimalParsed({
       melody: [{ pitch: "G5", beat: 0, duration: 4 }],

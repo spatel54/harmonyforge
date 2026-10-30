@@ -1,0 +1,97 @@
+[
+  {
+    "name": "Illini Orange",
+    "pms": "1655",
+    "cmyk": "0/80/100/0",
+    "hex": "#FF5F05",
+    "id": "il-orange",
+    "rgb": "255/95/5"
+  },
+  {
+    "name": "Illini Blue",
+    "pms": "2767",
+    "cmyk": "100/90/10/50",
+    "hex": "#13294B",
+    "id": "il-blue",
+    "rgb": "19/41/75"
+  },
+  {
+    "name": "Storm",
+    "hex": "#707372",
+    "id": "il-storm",
+    "cmyk": "30/20/19/58"
+  },
+  {
+    "name": "Storm 60",
+    "hex": "#8E9090",
+    "id": "il-storm-60",
+    "cmyk": "47/38/38/2"
+  },
+  {
+    "name": "Storm 80",
+    "hex": "#C6C7C6",
+    "id": "il-storm-80",
+    "cmyk": "22/16/18/0"
+  },
+  {
+    "name": "White",
+    "hex": "#FFFFFF",
+    "id": "il-white",
+    "cmyk": "0/0/0/0"
+  },
+  {
+    "name": "Black",
+    "hex": "#000000",
+    "id": "il-black",
+    "cmyk": "50/40/30/100"
+  },
+  {
+    "name": "Industrial",
+    "hex": "#1D58A7",
+    "id": "il-industrial",
+    "rgb": "29/88/167",
+    "cmyk": "90/48/0/0"
+  },
+  {
+    "name": "Arches",
+    "hex": "#009FD4",
+    "id": "il-arches",
+    "rgb": "0/159/212",
+    "cmyk": "70/5/2/0"
+  },
+  {
+    "name": "Patina",
+    "hex": "#007E8E",
+    "id": "il-patina",
+    "rgb": "0/126/142",
+    "cmyk": "93/34/39/5"
+  },
+  {
+    "name": "Berry",
+    "hex": "#5C0E41",
+    "id": "il-berry",
+    "rgb": "92/14/65",
+    "cmyk": "53/100/42/43"
+  },
+  {
+    "name": "Harvest",
+    "hex": "#FCB316",
+    "id": "il-harvest",
+    "rgb": "252/179/22",
+    "cmyk": "0/33/100/0"
+  },
+  {
+    "name": "Prairie",
+    "hex": "#006230",
+    "id": "il-prairie",
+    "rgb": "0/98/48",
+    "cmyk": "100/13/100/44"
+  },
+  {
+    "name": "Earth",
+    "hex": "#7D3E13",
+    "id": "il-earth",
+    "rgb": "125/62/19",
+    "cmyk": "33/76/100/36"
+  }
+]

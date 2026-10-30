@@ -26,3 +26,26 @@ export function pitchStringToMidi(pitch: string): number | null {
   if (midi < 0 || midi > 127) return null;
   return midi;
 }
+
+const MIDI_STEPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
+
+/** MIDI 0–127 → scientific pitch (`60` → `C4`). Accidentals spell as sharps. */
+export function midiToPitchString(midi: number): string {
+  const clamped = Math.max(0, Math.min(127, Math.round(midi)));
+  const octave = Math.floor(clamped / 12) - 1;
+  const pc = ((clamped % 12) + 12) % 12;
+  return `${MIDI_STEPS[pc]}${octave}`;
+}
+
+export function transposePitchString(pitch: string, semitones: number): string {
+  const midi = pitchStringToMidi(pitch);
+  if (midi === null) return pitch;
+  return midiToPitchString(midi + semitones);
+}
+
+/** `C#4` / `Bb3` → `C4` / `B3` — RiffScore stores accidentals off the pitch string. */
+export function pitchLetterOctave(pitch: string): string {
+  const m = pitch.match(/^([A-G])(?:#{1,2}|b{1,2})?(\d+)$/);
+  if (!m) return pitch;
+  return `${m[1]}${m[2]}`;
+}

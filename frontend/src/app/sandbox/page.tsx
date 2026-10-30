@@ -6,10 +6,9 @@ import { SandboxHeader } from "@/components/organisms/SandboxHeader";
 import { AudioUnlockBanner } from "@/components/molecules/AudioUnlockBanner";
 import { ScoreCanvas } from "@/components/organisms/ScoreCanvas";
 import { useUploadStore } from "@/store/useUploadStore";
-import { useScoreStore, getClipboard, setClipboard, pasteNotes, type NoteSelection } from "@/store/useScoreStore";
+import { useScoreStore, type NoteSelection } from "@/store/useScoreStore";
 import {
   cloneScore,
-  extractNotes,
   toggleNoteDots,
   toggleNoteRests,
   insertMeasureBefore,
@@ -111,6 +110,11 @@ import {
   type RiffScoreSessionHandles,
 } from "@/context/RiffScoreSessionContext";
 import { handleSandboxScoreKeyDown, type SandboxScoreKeyboardCtx } from "@/lib/sandbox/sandboxScoreKeyboard";
+import {
+  copyEditorSelection,
+  cutEditorSelection,
+  pasteEditorClipboard,
+} from "@/lib/sandbox/sandboxScoreClipboard";
 import { scheduleTransposeSelectedNotes } from "@/lib/sandbox/sandboxScoreTranspose";
 import { scheduleDeleteSelectionAsRests } from "@/lib/sandbox/deleteSelectionAsRests";
 import {
@@ -1034,28 +1038,26 @@ function TactileSandboxPageInner({
         "edit-undo": () => riffSessionRef.current?.editorUndo(),
         "edit-redo": () => riffSessionRef.current?.editorRedo(),
         "edit-cut": () => {
-          if (!score || selection.length === 0) return;
-          const noteIds = new Set(selection.map((s) => s.noteId));
-          setClipboard(extractNotes(score, noteIds));
-          scheduleDeleteSelectionAsRests(
-            riffSessionRef.current,
-            noteIds,
-            clearSelection,
-          );
+          const fallback = new Set(selection.map((s) => s.noteId));
+          cutEditorSelection(riffSessionRef.current, fallback, clearSelection);
         },
         "edit-copy": () => {
-          if (!score || selection.length === 0) return;
-          const noteIds = selection.map((s) => s.noteId);
-          setClipboard(extractNotes(score, new Set(noteIds)));
+          const fallback = new Set(selection.map((s) => s.noteId));
+          copyEditorSelection(riffSessionRef.current, fallback);
         },
         "edit-paste": () => {
-          if (!score || getClipboard().length === 0) return;
-          const target = resolveInsertionTarget();
-          const partId = target?.partId ?? score.parts[0]?.id;
-          const measureIndex = target?.measureIndex ?? 0;
-          const noteIndex = target?.noteIndex ?? 0;
-          const next = pasteNotes(score, partId, measureIndex, noteIndex);
-          applyScore(next);
+          const fallback = new Set(selection.map((s) => s.noteId));
+          pasteEditorClipboard(
+            riffSessionRef.current,
+            fallback,
+            cursor
+              ? {
+                  partId: cursor.partId,
+                  measureIndex: cursor.measureIndex,
+                  noteIndex: cursor.noteIndex,
+                }
+              : null,
+          );
         },
         "edit-delete": () => {
           if (!score) return;
@@ -1144,6 +1146,8 @@ function TactileSandboxPageInner({
         }
       } else if (toolId === "duration-tie") {
         toggleTieOnSelection();
+      } else if (toolId === "mode-repitch") {
+        setActiveTool(activeTool === "mode-repitch" ? "duration-quarter" : "mode-repitch");
       } else if (pitchHandlers[toolId] !== undefined) {
         scheduleTransposeSelectedNotes(
           riffSessionRef.current,
@@ -1250,7 +1254,7 @@ function TactileSandboxPageInner({
   const hydrateSandboxFromMusicXml = React.useCallback(
     (xml: string) => {
       let parsed = parseMusicXML(xml);
-      if (parsed && shouldShowChordNotation(parsed)) {
+      if (parsed && shouldShowChordNotation(parsed) && !(parsed.chords && parsed.chords.length > 0)) {
         parsed = { ...parsed, chords: detectChordsFromScore(parsed) };
       }
       setScore(parsed);
@@ -1263,7 +1267,13 @@ function TactileSandboxPageInner({
           const stamped = applyOriginalGeneratedPitches(s, payload.harmonyNotePitches);
           const withChords =
             shouldShowChordNotation(stamped)
-              ? { ...stamped, chords: detectChordsFromScore(stamped) }
+              ? {
+                  ...stamped,
+                  chords:
+                    parsed.chords && parsed.chords.length > 0
+                      ? parsed.chords
+                      : detectChordsFromScore(stamped),
+                }
               : stamped;
           useScoreStore.getState().applyScore(withChords);
           useTheoryInspectorStore.getState().setGenerationBaseline({

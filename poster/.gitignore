@@ -1,0 +1,31 @@
+# Preview / temp renders (keep poster HTML, assets, PDF)
+poster/preview*.png
+poster/_check*.png
+poster/_tmp*
+poster/_*.png
+
+# LaTeX build artifacts
+overleaf/*.aux
+overleaf/*.log
+overleaf/*.bbl
+overleaf/*.blg
+overleaf/*.out
+overleaf/*.fdb_latexmk
+overleaf/*.fls
+overleaf/*.synctex.gz
+
+# OS
+.DS_Store
+
+# LaTeX artifacts
+*.aux
+*.log
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.out
+*.bbl
+*.blg
+
+# Old overleaf clone dirs (hash-named folders from Overleaf git)
+66f48147915155a9aac9c3ae/
