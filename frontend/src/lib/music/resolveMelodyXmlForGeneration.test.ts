@@ -121,4 +121,65 @@ describe("resolveMelodyXmlForGeneration", () => {
   it("returns null when neither source has content", () => {
     expect(resolveMelodyXmlForGeneration({ liveScore: null, previewXml: "  " })).toBeNull();
   });
+
+  it("exports only part 0 when a multi-staff live score was edited (PDF OMR)", () => {
+    const baseline: EditableScore = {
+      divisions: 1,
+      parts: [
+        {
+          id: "P1",
+          name: "Violin",
+          clef: "treble",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              notes: [{ id: "n1", pitch: "C5", duration: "q" }],
+            },
+          ],
+        },
+        {
+          id: "P2",
+          name: "Cello",
+          clef: "bass",
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              notes: [{ id: "n2", pitch: "C3", duration: "q" }],
+            },
+          ],
+        },
+      ],
+    };
+    const live: EditableScore = {
+      ...baseline,
+      parts: [
+        {
+          ...baseline.parts[0]!,
+          measures: [
+            {
+              id: "m1",
+              timeSignature: "4/4",
+              keySignature: 0,
+              notes: [{ id: "n1", pitch: "E5", duration: "q" }],
+            },
+          ],
+        },
+        baseline.parts[1]!,
+      ],
+    };
+    const xml = resolveMelodyXmlForGeneration({
+      liveScore: live,
+      baselineScore: baseline,
+      previewXml: "<score-partwise><part-list></part-list></score-partwise>",
+      title: "OMR Edit",
+    });
+    expect(xml).toContain("E");
+    expect(xml).toContain("Violin");
+    expect(xml).not.toContain("Cello");
+    expect(xml).not.toContain(">C3<");
+  });
 });

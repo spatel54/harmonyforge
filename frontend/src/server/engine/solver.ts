@@ -5,6 +5,7 @@
 import { midiToPitch, pitchToMidi } from "./types";
 import type { LeadSheet, MelodyNote, ParsedChord, SATBVoices, Genre } from "./types";
 import { parseChord } from "./chordParser";
+import { coerceChordRoman, normalizeKeyContext } from "./chordRomanCoerce";
 import { checkVoiceLeading, checkVoiceLeadingRelaxed } from "./constraints";
 import { getVoiceRange } from "./types";
 
@@ -163,6 +164,10 @@ function createCandidateCache(): CandidateGetter {
     let list = cache.get(key);
     if (!list) {
       list = getCandidatesSimple(pc, fixedSoprano);
+      // Chord-tone melody can still be unvoiceable under spacing rules; free the soprano.
+      if (list.length === 0 && fixedSoprano) {
+        list = getCandidatesSimple(pc, undefined);
+      }
       cache.set(key, list);
     }
     return list;
@@ -390,9 +395,16 @@ export function generateSATB(
   leadSheet: LeadSheet,
   options?: GenerateSATBOptions
 ): SolverResult | null {
-  const { key, chords, melody } = leadSheet;
-  const parsedChords: ParsedChord[] = [];
+  const key = normalizeKeyContext(leadSheet.key);
+  const { melody } = leadSheet;
+  const coercedSlots = leadSheet.chords.map((slot) => {
+    const roman = coerceChordRoman(slot.roman, key);
+    return roman ? { ...slot, roman } : null;
+  });
+  if (coercedSlots.some((s) => s == null)) return null;
+  const chords = coercedSlots as typeof leadSheet.chords;
 
+  const parsedChords: ParsedChord[] = [];
   for (const slot of chords) {
     try {
       parsedChords.push(parseChord(slot.roman, key));

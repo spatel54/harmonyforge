@@ -11,6 +11,7 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 
 ### Quick links
 
+- [Work log — SATB generate “valid arrangement” 422 (2026-10-30)](#wl-satb-arrangement-422-2026-10-30) — lead-sheet coerce + PDF multi-staff melody-only inference — **`make test` 560**
 - [Work log — HF monogram SVG (2026-10-30)](#wl-hf-monogram-svg-2026-10-30) — app + README use **`logo-mark.svg`** (not PNG sizes); favicons/OG stay raster
 - [Work log — HF monogram brand assets (2026-10-30)](#wl-hf-monogram-brand-2026-10-30) — new white-on-black HF mark kit + README badge; Sonata/Nocturne tokens unchanged; **`spatel54/main`** merged + set as upstream
 - [Work log — Sandbox note hotkeys (2026-09-16)](#wl-sandbox-note-hotkeys-2026-09-16) — ⌘C/V/Z copy, paste, undo the selected note
@@ -86,6 +87,38 @@ This is a **long-running work log** (RALPH: Research, Analyze, Learn, Plan, Hand
 - [Next Steps](#next-steps)
 - [Learnings](#learnings)
 - [State Handover](#state-handover)
+
+<a id="wl-satb-arrangement-422-2026-10-30"></a>
+
+## Work log — SATB generate “valid arrangement” 422 (2026-10-30)
+
+Document **Generate Harmonies** returned **422** `Could not find valid SATB arrangement` when embedded harmony labels were lead-sheet symbols (`C`, `G7`, `Am`) stored in `ChordSlot.roman`. `parseChord` threw → `generateSATB` returned `null`.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Lead-sheet as Roman** | `chordRomanCoerce.ts` maps `C`/`Am`/`G7` → `I`/`vi`/`V7`; flat tonics `Bb`→`A#`. |
+| **ensureChords** | Sanitize file chords; reinfer when labels are unusable (`X`). |
+| **Solver** | Coerce before parse; if fixed soprano yields zero candidates, retry without fixing soprano. |
+| **Runtime** | `solveSatbWithRecovery` retries inferred (+ pop/relaxed) before the 422. |
+
+**`make test`:** **556** (then **560+** after PDF follow-up below).
+
+### Verify
+
+Upload a MusicXML/lead sheet with `C` / `G7` / `Am` harmony (or generate again on the score that failed) → Generate Harmonies should return **200** MusicXML, not the red SATB banner.
+
+### Follow-up — PDF / multi-staff OMR (same day)
+
+Superman: failure is on **PDF uploads**, not confirmed on XML. OMR scores keep every staff in `inputParts`; vertical PC inference from noisy inner staves was fighting the cantus in `generateSATB`.
+
+| Gap | Fix |
+|-----|-----|
+| **Chord inference on PDF OMR** | `parsedScoreForChordInference` drops `inputParts` before `ensureChords`; export score restores them for additive MusicXML. |
+| **Edited multi-staff Document score** | `resolveMelodyXmlForGeneration` exports **melody-only** (part 0) when `parts.length > 1`. |
+
+**`make test`:** see latest count after this follow-up.
 
 <a id="wl-hf-monogram-svg-2026-10-30"></a>
 
@@ -212,6 +245,27 @@ Upload overlay sat at ~3–4% then vanished. The scrub line could be dragged but
 | **SATB** | Empty or alto+tenor selections get a **bass** part; instruments map to unique inner voices; solver prefers root bass and less parallel inner motion; mixed rhythm uses melody onsets from all input parts. |
 
 **`make test`:** **508**. **`make lint`:** 0 errors. Browser: sandbox Play moved the scrub line **24 → 503px** over ~2.4s.
+
+<a id="wl-satb-arrangement-422-2026-10-30"></a>
+
+## Work log — SATB generate “valid arrangement” 422 (2026-10-30)
+
+Document **Generate Harmonies** returned **422** `Could not find valid SATB arrangement` when embedded harmony labels were lead-sheet symbols (`C`, `G7`, `Am`) stored in `ChordSlot.roman`. `parseChord` threw → `generateSATB` returned `null`.
+
+### What shipped
+
+| Gap | Fix |
+|-----|-----|
+| **Lead-sheet as Roman** | `chordRomanCoerce.ts` maps `C`/`Am`/`G7` → `I`/`vi`/`V7`; flat tonics `Bb`→`A#`. |
+| **ensureChords** | Sanitize file chords; reinfer when labels are unusable (`X`). |
+| **Solver** | Coerce before parse; if fixed soprano yields zero candidates, retry without fixing soprano. |
+| **Runtime** | `solveSatbWithRecovery` retries inferred (+ pop/relaxed) before the 422. |
+
+**`make test`:** **556**.
+
+### Verify
+
+Upload a MusicXML/lead sheet with `C` / `G7` / `Am` harmony (or generate again on the score that failed) → Generate Harmonies should return **200** MusicXML, not the red SATB banner.
 
 <a id="wl-chord-notation-generation-2026-09-15"></a>
 

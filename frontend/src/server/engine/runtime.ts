@@ -5,7 +5,7 @@
  * Every helper is environment-safe: no Express, no global state.
  */
 
-import { generateSATB, SolverBudgetExceededError } from "./solver";
+import { generateSATB, SolverBudgetExceededError, type SolverResult } from "./solver";
 import { ensureChords } from "./chordInference";
 import { satbToMusicXML, parsedScoreToPartwiseMelodyMusicXML } from "./satbToMusicXML";
 import { parseMusicXML } from "./parsers/musicxmlParser";
@@ -162,6 +162,95 @@ export function mapIntakeFailure(result: Extract<IntakeResult, { ok: false }>): 
   return { ok: false, status: result.failure.status, error: result.failure.error };
 }
 
+type SolvedSatb =
+  | {
+      ok: true;
+      result: SolverResult;
+      withChords: ParsedScore & { chords: NonNullable<ParsedScore["chords"]> };
+    }
+  | EngineError;
+
+/**
+ * PDF / multi-staff OMR keeps every staff in `inputParts`. Those vertical stacks are
+ * useful for additive export, but they are too noisy for chord inference (wrong OMR
+ * notes on inner staves push Romans that the melody cannot support). Harmonize the
+ * cantus line only; restore multiparts on the score used for MusicXML export.
+ */
+export function parsedScoreForChordInference(parsed: ParsedScore): ParsedScore {
+  if ((parsed.inputParts?.length ?? 0) <= 1) return parsed;
+  return { ...parsed, inputParts: undefined };
+}
+
+function withPreservedInputLayout(
+  withChords: ParsedScore & { chords: NonNullable<ParsedScore["chords"]> },
+  original: ParsedScore,
+): ParsedScore & { chords: NonNullable<ParsedScore["chords"]> } {
+  return {
+    ...withChords,
+    inputParts: original.inputParts,
+    sourceMusicXml: original.sourceMusicXml,
+    melodyPartName: original.melodyPartName,
+  };
+}
+
+/**
+ * Run ensureChords → generateSATB. If the first pass fails (e.g. unvoiceable file
+ * Romans), retry once with melody-inferred chords and relaxed voice-leading.
+ */
+export function solveSatbWithRecovery(
+  parsed: ParsedScore,
+  config: GenerationConfig | null,
+): SolvedSatb {
+  const forInfer = parsedScoreForChordInference(parsed);
+  const attempts: Array<{ preferInferred: boolean; genre: Genre | undefined }> = [
+    {
+      preferInferred: config?.preferInferredChords === true,
+      genre: config?.genre,
+    },
+  ];
+  if (config?.preferInferredChords !== true) {
+    attempts.push({ preferInferred: true, genre: config?.genre });
+  }
+  if (config?.genre !== "pop") {
+    attempts.push({ preferInferred: true, genre: "pop" });
+  }
+
+  let lastBudget = false;
+  for (const attempt of attempts) {
+    const withChords = ensureChords(forInfer, config?.mood, attempt.genre, {
+      preferInferredChords: attempt.preferInferred,
+    });
+    const leadSheet: LeadSheet = {
+      key: withChords.key,
+      chords: withChords.chords,
+      melody: withChords.melody,
+    };
+    try {
+      const result = generateSATB(leadSheet, {
+        genre: attempt.genre,
+        maxMs: effectiveSolverMaxMsForFileGeneration(),
+      });
+      if (result) {
+        return {
+          ok: true,
+          result,
+          withChords: withPreservedInputLayout(withChords, parsed),
+        };
+      }
+    } catch (e) {
+      if (e instanceof SolverBudgetExceededError) {
+        lastBudget = true;
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (lastBudget) {
+    return { ok: false, status: 422, error: SOLVER_BUDGET_ERROR };
+  }
+  return { ok: false, status: 422, error: "Could not find valid SATB arrangement" };
+}
+
 /**
  * Resolve a ParsedScore from an uploaded file.
  * When `pageImages` are provided with a PDF, those PNG/JPG pages are tried first (client pdfjs raster).
@@ -202,30 +291,9 @@ export async function runGenerateFromFile(
           pickupBeats: config.pickupBeats === 0 ? undefined : config.pickupBeats,
         }
       : parsed;
-  const withChords = ensureChords(parsedForGen, config?.mood, config?.genre, {
-    preferInferredChords: config?.preferInferredChords === true,
-  });
-  const leadSheet: LeadSheet = {
-    key: withChords.key,
-    chords: withChords.chords,
-    melody: withChords.melody,
-  };
-  let result;
-  try {
-    result = generateSATB(leadSheet, {
-      genre: config?.genre,
-      maxMs: effectiveSolverMaxMsForFileGeneration(),
-    });
-  } catch (e) {
-    if (e instanceof SolverBudgetExceededError) {
-      return { ok: false, status: 422, error: SOLVER_BUDGET_ERROR };
-    }
-    throw e;
-  }
-  if (!result) {
-    return { ok: false, status: 422, error: "Could not find valid SATB arrangement" };
-  }
-  const xml = satbToMusicXML(result, config?.instruments, withChords, {
+  const solved = solveSatbWithRecovery(parsedForGen, config);
+  if (!solved.ok) return solved;
+  const xml = satbToMusicXML(solved.result, config?.instruments, solved.withChords, {
     additiveHarmonies: true,
     format: "partwise",
     version: "2.0",
@@ -269,30 +337,14 @@ export function runGenerateHarmonyRangeFromMusicXml(
           pickupBeats: config.pickupBeats === 0 ? undefined : config.pickupBeats,
         }
       : sliced;
-  const withChords = ensureChords(parsedForGen, config?.mood, config?.genre, {
-    preferInferredChords: config?.preferInferredChords === true,
-  });
-  const leadSheet: LeadSheet = {
-    key: withChords.key,
-    chords: withChords.chords,
-    melody: withChords.melody,
-  };
-  let result;
-  try {
-    result = generateSATB(leadSheet, {
-      genre: config?.genre,
-      maxMs: effectiveSolverMaxMsForFileGeneration(),
-    });
-  } catch (e) {
-    if (e instanceof SolverBudgetExceededError) {
-      return { ok: false, status: 422, error: SOLVER_BUDGET_ERROR };
+  const solved = solveSatbWithRecovery(parsedForGen, config);
+  if (!solved.ok) {
+    if (solved.status === 422 && solved.error === "Could not find valid SATB arrangement") {
+      return { ok: false, status: 422, error: "Could not find valid SATB arrangement for range" };
     }
-    throw e;
+    return solved;
   }
-  if (!result) {
-    return { ok: false, status: 422, error: "Could not find valid SATB arrangement for range" };
-  }
-  const outXml = satbToMusicXML(result, config?.instruments, withChords, {
+  const outXml = satbToMusicXML(solved.result, config?.instruments, solved.withChords, {
     additiveHarmonies: true,
     format: "partwise",
     version: "2.0",

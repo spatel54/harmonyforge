@@ -1,5 +1,6 @@
 import type { EditableScore, Note } from "@/lib/music/scoreTypes";
 import { scoreToPartwiseMusicXML } from "@/lib/music/scoreToMusicXML";
+import { extractMelodyOnlyScore } from "@/lib/music/scoreUtils";
 
 function noteFingerprint(note: Note): string {
   if (note.isRest) return "";
@@ -68,7 +69,12 @@ export function resolveMelodyXmlForGeneration(opts: {
       !baseline ||
       soundingMelodyFingerprint(live) !== soundingMelodyFingerprint(baseline);
     if (edited) {
-      const xml = scoreToPartwiseMusicXML(withBaselineMeasureMeta(live, baseline), opts.title);
+      // Multi-staff OMR previews (typical PDF intake) must not re-submit inner
+      // staves into generate — only the edited cantus / part 0.
+      const scored = withBaselineMeasureMeta(live, baseline);
+      const forGenerate =
+        scored.parts.length > 1 ? extractMelodyOnlyScore(scored) : scored;
+      const xml = scoreToPartwiseMusicXML(forGenerate, opts.title);
       if (xml.trim().length > 0) return xml;
     }
   }

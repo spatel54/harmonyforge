@@ -5,6 +5,7 @@
 
 import type { ParsedScore, ChordSlot, MelodyNote, Genre } from "./types";
 import { parseChord } from "./chordParser";
+import { coerceChordRoman, normalizeKeyContext } from "./chordRomanCoerce";
 import { pitchStringToMidi } from "../../lib/music/pitchMidi";
 
 const MAJOR_TRIADS = ["I", "ii", "iii", "IV", "V", "V7", "vi", "vii°"] as const;
@@ -323,6 +324,24 @@ export interface EnsureChordsOptions {
   preferInferredChords?: boolean;
 }
 
+/**
+ * Keep file-provided chord slots only when each label coerces to a parseable Roman.
+ * Lead-sheet symbols ("C", "Am", "G7") are mapped into Romans; unusable labels force reinfer.
+ */
+export function sanitizeFileChordSlots(
+  chords: ChordSlot[],
+  key: ParsedScore["key"],
+): ChordSlot[] | null {
+  const normKey = normalizeKeyContext(key);
+  const out: ChordSlot[] = [];
+  for (const slot of chords) {
+    const roman = coerceChordRoman(slot.roman, normKey);
+    if (!roman) return null;
+    out.push({ ...slot, roman });
+  }
+  return out.length > 0 ? out : null;
+}
+
 /** Ensure ParsedScore has chords (use inferred if missing). Mood and genre affect inference. */
 export function ensureChords(
   parsed: ParsedScore,
@@ -330,6 +349,10 @@ export function ensureChords(
   genre?: Genre,
   opts?: EnsureChordsOptions,
 ): ParsedScore & { chords: ChordSlot[] } {
+  const keyBase =
+    mood !== undefined
+      ? normalizeKeyContext({ ...parsed.key, mode: mood })
+      : normalizeKeyContext(parsed.key);
   const hasFileChords = !!(parsed.chords && parsed.chords.length > 0);
   const modeConflict =
     mood !== undefined && parsed.key.mode !== mood;
@@ -339,16 +362,21 @@ export function ensureChords(
     modeConflict;
 
   if (!reinferFromMelody && hasFileChords) {
-    const maxSlots = resolveMaxChordSlots();
-    const chords =
-      parsed.chords!.length > maxSlots
-        ? downsampleChordSlotsToMax(parsed.chords!, maxSlots)
-        : parsed.chords!;
-    return { ...parsed, chords } as ParsedScore & { chords: ChordSlot[] };
+    const sanitized = sanitizeFileChordSlots(parsed.chords!, keyBase);
+    if (sanitized) {
+      const maxSlots = resolveMaxChordSlots();
+      const chords =
+        sanitized.length > maxSlots
+          ? downsampleChordSlotsToMax(sanitized, maxSlots)
+          : sanitized;
+      return { ...parsed, key: keyBase, chords } as ParsedScore & {
+        chords: ChordSlot[];
+      };
+    }
+    // Fall through: embedded labels were not usable as SATB Romans.
   }
 
-  const chords = inferChords(parsed, mood, genre);
-  const key =
-    mood !== undefined ? { ...parsed.key, mode: mood } : parsed.key;
-  return { ...parsed, key, chords };
+  const forInfer = { ...parsed, key: keyBase };
+  const chords = inferChords(forInfer, mood, genre);
+  return { ...parsed, key: keyBase, chords };
 }
