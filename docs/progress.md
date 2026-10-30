@@ -130,6 +130,19 @@ Reproduced with Mutopia Kinderszenen PDF via remote OMR: one **Piano** part, 276
 
 **`make test`:** run after this follow-up.
 
+### Verify — second small PDF (gate for push)
+
+Mutopia **Easter Morn** (`~/Desktop/harmonyforge-test-melody-2.pdf`) → remote OMR grant/convert/merge → `/tmp/hf-test-melody-2-omr.xml`.
+
+| Check | Result |
+|-------|--------|
+| OMR | 2 Voice parts · 140 notes · 32 mm · C major |
+| Cantus | 132 notes |
+| `generateSATB` direct | **OK** 43 slots (~5ms) |
+| `solveSatbWithRecovery` | **OK** 43 slots (~4ms) |
+
+**Git / Vercel:** `spatel54/main` @ `569db827` already up to date (`git push spatel54` → Everything up-to-date). Production deployment **READY** (`dpl_9nh68QmmQE2xMg3jgbEcnHnGM7A2`) → https://harmonyforge.vercel.app. No new code commit required for this gate.
+
 <a id="wl-hf-monogram-svg-2026-10-30"></a>
 
 ## Work log — HF monogram SVG (2026-10-30)
