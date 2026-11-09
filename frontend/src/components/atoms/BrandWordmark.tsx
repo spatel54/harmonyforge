@@ -42,7 +42,7 @@ export const BrandWordmark = React.forwardRef<HTMLElement, BrandWordmarkProps>(
         <LogoMark
           size={markSize}
           fitToText={fitToText}
-          className="hf-logo-wordmark-mark translate-y-[0.04em] -mr-[0.13em]"
+          className="hf-logo-wordmark-mark translate-y-[0.04em] -mr-[0.16em]"
         />
         <span aria-hidden="true">{WORDMARK_TAIL}</span>
       </Comp>
