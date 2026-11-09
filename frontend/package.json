@@ -20,6 +20,7 @@
     "@tonaljs/chord-detect": "^4.9.1",
     "@tonaljs/pitch-note": "^6.1.0",
     "@tonejs/midi": "^2.0.28",
+    "@vercel/analytics": "^2.0.1",
     "adm-zip": "^0.5.16",
     "clsx": "^2.1.1",
     "fast-xml-parser": "^5.4.2",
