@@ -1,27 +1,19 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import { LogoMark } from "@/components/atoms/LogoMark";
+import { BrandWordmark } from "@/components/atoms/BrandWordmark";
 
 export type LogoLockupProps = React.HTMLAttributes<HTMLDivElement>;
 
 /**
  * LogoLockup Atom
- * HF monogram mark (24px SVG) + "HarmonyForge" wordmark.
+ * Integrated wordmark: HF monogram as the leading “H” + “armonyForge”.
  * Used in DocumentHeader, SandboxHeader, and Team page header.
  */
 export const LogoLockup = React.forwardRef<HTMLDivElement, LogoLockupProps>(
   ({ className, ...props }, ref) => {
     return (
-      <div
-        ref={ref}
-        className={cn("flex items-center gap-[8px]", className)}
-        {...props}
-      >
-        <LogoMark size={24} />
-
-        <span className="hf-logo-wordmark font-brand text-[22px] font-normal leading-none">
-          HarmonyForge
-        </span>
+      <div ref={ref} className={cn("flex items-center", className)} {...props}>
+        <BrandWordmark className="text-[22px]" markSize={24} />
       </div>
     );
   },

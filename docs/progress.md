@@ -143,6 +143,34 @@ Mutopia **Easter Morn** (`~/Desktop/harmonyforge-test-melody-2.pdf`) → remote 
 
 **Git / Vercel:** `spatel54/main` @ `569db827` already up to date (`git push spatel54` → Everything up-to-date). Production deployment **READY** (`dpl_9nh68QmmQE2xMg3jgbEcnHnGM7A2`) → https://harmonyforge.vercel.app. No new code commit required for this gate.
 
+### Verify — production Generate Harmonies API (same day)
+
+Document’s post-preview path is `POST /api/generate-from-file` with OMR MusicXML (not the PDF again).
+
+| Score | Result |
+|-------|--------|
+| **Easter Morn** OMR XML | **200** · ~1.2s · 122KB SATB (`Voice`×2 + Alto/Tenor/Bass) · `/tmp/hf-test-melody-2-satb.xml` |
+| **Kinderszenen** OMR XML | **504** `FUNCTION_INVOCATION_TIMEOUT` at **300s** (route `maxDuration = 300`) |
+
+Local `solveSatbWithRecovery` for Kinderszenen was fast earlier; production timeout is on the full serverless generate path for that denser piano OMR.
+
+<a id="wl-brand-wordmark-letter-h-2026-11-09"></a>
+
+## Work log — Wordmark monogram as leading H (2026-11-09)
+
+### Reasoning
+Superman: logo should not sit separate from “HarmonyForge”; the monogram replaces the first letter.
+
+### Action
+- Added `BrandWordmark` (`[logo]armonyForge`, `aria-label="HarmonyForge"`).
+- `LogoLockup`, `BrandTitle`, `PlaygroundHeroBrand` use the integrated wordmark (hero no longer stacks a mark above the title).
+- `LogoMark` supports `fitToText` for cap-height sizing.
+
+### Progression
+Push `spatel54/main` → Vercel production after commit.
+
+---
+
 <a id="wl-hf-monogram-svg-2026-10-30"></a>
 
 ## Work log — HF monogram SVG (2026-10-30)

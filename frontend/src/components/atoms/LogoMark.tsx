@@ -12,6 +12,8 @@ export type LogoMarkProps = {
   className?: string;
   /** Kept for call-site compatibility; inline SVG needs no fetch priority. */
   priority?: boolean;
+  /** Size to surrounding font (leading letter in the BrandWordmark). */
+  fitToText?: boolean;
 };
 
 /** Intrinsic aspect from the monogram viewBox (width / height). */
@@ -22,7 +24,7 @@ const HF_LOGO_ASPECT = 845.255 / 723.173;
  * Fill tracks `--hf-text-primary` (Sonata dark / Nocturne light) so the mark
  * stays readable across theme switches.
  */
-export function LogoMark({ size = 32, className }: LogoMarkProps) {
+export function LogoMark({ size = 32, className, fitToText = false }: LogoMarkProps) {
   const width = size;
   const height = Math.round(size / HF_LOGO_ASPECT);
 
@@ -30,11 +32,15 @@ export function LogoMark({ size = 32, className }: LogoMarkProps) {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox={HF_LOGO_VIEWBOX}
-      width={width}
-      height={height}
+      width={fitToText ? undefined : width}
+      height={fitToText ? undefined : height}
       preserveAspectRatio="xMidYMid meet"
       aria-hidden
-      className={cn("hf-logo-mark shrink-0", className)}
+      className={cn(
+        "hf-logo-mark shrink-0",
+        fitToText && "h-[0.92em] w-auto",
+        className,
+      )}
     >
       <g transform={HF_LOGO_TRANSFORM} stroke="none">
         <path d={HF_LOGO_PATH_D} />
