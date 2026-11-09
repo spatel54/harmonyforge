@@ -34,7 +34,7 @@ export const BrandWordmark = React.forwardRef<HTMLElement, BrandWordmarkProps>(
         ref={ref as React.Ref<HTMLHeadingElement & HTMLSpanElement>}
         aria-label={PRODUCT_NAME}
         className={cn(
-          "hf-logo-wordmark inline-flex items-center gap-[0.01em] font-brand font-normal leading-none",
+          "hf-logo-wordmark inline-flex items-center gap-0 font-brand font-normal leading-none",
           className,
         )}
         {...props}
@@ -42,7 +42,7 @@ export const BrandWordmark = React.forwardRef<HTMLElement, BrandWordmarkProps>(
         <LogoMark
           size={markSize}
           fitToText={fitToText}
-          className="hf-logo-wordmark-mark translate-y-[0.04em]"
+          className="hf-logo-wordmark-mark translate-y-[0.04em] -mr-[0.08em]"
         />
         <span aria-hidden="true">{WORDMARK_TAIL}</span>
       </Comp>
