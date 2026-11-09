@@ -13,6 +13,7 @@ import { StudyConsentGate } from "@/components/study/StudyConsentGate";
 import { NonBlockingFontshareLink } from "@/components/atoms/NonBlockingFontshareLink";
 import { CoachmarkOverlayLazy } from "@/components/organisms/CoachmarkOverlayLazy";
 import { HfToaster } from "@/components/atoms/HfToaster";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const instrumentSerif = Instrument_Serif({
@@ -63,6 +64,7 @@ export default function RootLayout({
             </StudyConsentGate>
           </StudySessionProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
